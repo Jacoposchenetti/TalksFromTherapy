@@ -10,11 +10,11 @@
 - [x] Inizializzare repository Git con .gitignore appropriato - [Data: 2025-06-10] [Repository configurato]
 
 ### 1.2 Database Setup
-- [ ] Installare e configurare Prisma ORM
-- [ ] Creare schema database PostgreSQL completo
-- [ ] Setup connessione database locale/cloud
-- [ ] Creare primi migrations Prisma
-- [ ] Testare connessione database con query base
+- [x] Installare e configurare Prisma ORM - [Data: 2025-06-10] [Prisma installato e configurato]
+- [x] Creare schema database PostgreSQL completo - [Data: 2025-06-10] [Schema SQLite creato per sviluppo]
+- [x] Setup connessione database locale/cloud - [Data: 2025-06-10] [SQLite locale configurato]
+- [x] Creare primi migrations Prisma - [Data: 2025-06-10] [Migration iniziale creata]
+- [x] Testare connessione database con query base - [Data: 2025-06-10] [Database sincronizzato e funzionante]
 
 ### 1.3 Autenticazione Base
 - [ ] Installare e configurare NextAuth.js
