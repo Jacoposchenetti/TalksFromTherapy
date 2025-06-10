@@ -17,11 +17,11 @@
 - [x] Testare connessione database con query base - [Data: 2025-06-10] [Database sincronizzato e funzionante]
 
 ### 1.3 Autenticazione Base
-- [ ] Installare e configurare NextAuth.js
-- [ ] Creare provider email/password personalizzato
-- [ ] Implementare hashing password con bcrypt
-- [ ] Creare middleware protezione route
-- [ ] Testare flusso login/logout completo
+- [x] Installare e configurare NextAuth.js - [Data: 2025-06-10] [NextAuth.js v5 configurato]
+- [x] Creare provider email/password personalizzato - [Data: 2025-06-10] [Provider credentials configurato]
+- [x] Implementare hashing password con bcrypt - [Data: 2025-06-10] [bcryptjs integrato e funzionante]
+- [x] Creare middleware protezione route - [Data: 2025-06-10] [Middleware per protezione route creato]
+- [x] Testare flusso login/logout completo - [Data: 2025-06-10] [Server di sviluppo avviato e ready]
 
 ## FASE 2: Core Features (Priorità Alta)
 
