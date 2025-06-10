@@ -1,0 +1,149 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Schema principale
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String    // hashed with bcrypt
+  name            String
+  licenseNumber   String?   // numero ordine professionale
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  patients        Patient[]
+  sessions        Session[]
+
+  @@map("users")
+}
+
+model Patient {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  initials     String    // solo iniziali per privacy
+  dateOfBirth  DateTime?
+  notes        String?
+  isActive     Boolean   @default(true) // soft delete
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+  analyses     Analysis[]
+
+  @@index([userId])
+  @@map("patients")
+}
+
+model Session {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patientId     String
+  patient       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title         String
+  audioUrl      String?       // URL del file audio
+  audioFileName String?
+  audioFileSize Int?          // dimensione file in bytes
+  transcript    String?       // Trascrizione completa
+  sessionDate   DateTime
+  duration      Int?          // durata in secondi
+  status        SessionStatus @default(UPLOADED)
+  errorMessage  String?       // messaggio di errore se status = ERROR
+  isActive      Boolean       @default(true) // soft delete
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  analyses      Analysis[]
+
+  @@index([userId])
+  @@index([patientId])
+  @@index([sessionDate])
+  @@index([status])
+  @@map("sessions")
+}
+
+model Analysis {
+  id               String    @id @default(cuid())
+  sessionId        String    @unique
+  session          Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  patientId        String
+  patient          Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  sentimentScore   Float?    // -1 to 1
+  emotions         Json?     // array di emozioni rilevate
+  keyTopics        Json?     // array di topic principali
+  therapeuticGoals Json?     // obiettivi terapeutici identificati
+  progressNotes    String?   // note automatiche su progressi
+  summary          String?   // riassunto della sessione
+  confidenceScore  Float?    // confidenza dell'analisi (0-1)
+  processingTime   Int?      // tempo di processing in ms
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([patientId])
+  @@index([createdAt])
+  @@map("analyses")
+}
+
+// Tabella per tracking dei job di trascrizione
+model TranscriptionJob {
+  id          String                @id @default(cuid())
+  sessionId   String                @unique
+  jobId       String?               // ID del job esterno (es. OpenAI)
+  status      TranscriptionStatus   @default(PENDING)
+  provider    String                @default("openai") // openai, assemblyai, azure, etc.
+  startedAt   DateTime              @default(now())
+  completedAt DateTime?
+  errorMessage String?
+  retryCount  Int                   @default(0)
+  metadata    Json?                 // metadati specifici del provider
+
+  @@index([status])
+  @@index([startedAt])
+  @@map("transcription_jobs")
+}
+
+// Tabella per audit log delle operazioni sensibili
+model AuditLog {
+  id        String           @id @default(cuid())
+  userId    String?
+  action    String           // CREATE, UPDATE, DELETE, LOGIN, etc.
+  resource  String           // USER, PATIENT, SESSION, etc.
+  resourceId String?
+  oldValues Json?
+  newValues Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+enum SessionStatus {
+  UPLOADED
+  TRANSCRIBING
+  TRANSCRIBED
+  ANALYZING
+  ANALYZED
+  ERROR
+}
+
+enum TranscriptionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
