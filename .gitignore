@@ -39,3 +39,23 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local database
+*.db
+*.sqlite
+
+# uploads and temporary files
+/uploads
+/temp
+
+# audio files (these will be stored in cloud storage)
+*.mp3
+*.wav
+*.m4a
+*.flac
+
+# editor
+.vscode/settings.json
+
+# prisma
+prisma/.env

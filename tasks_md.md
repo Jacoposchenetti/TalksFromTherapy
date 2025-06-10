@@ -3,11 +3,11 @@
 ## FASE 1: Setup Base e Fondamenta (Priorità Alta)
 
 ### 1.1 Inizializzazione Progetto
-- [ ] Creare progetto Next.js 14 con TypeScript
-- [ ] Configurare Tailwind CSS e shadcn/ui
-- [ ] Setup ESLint, Prettier, e configurazioni sviluppo
-- [ ] Creare struttura directory secondo planning
-- [ ] Inizializzare repository Git con .gitignore appropriato
+- [x] Creare progetto Next.js 14 con TypeScript - [Data: 2025-06-10] [Setup completato con successo]
+- [x] Configurare Tailwind CSS e shadcn/ui - [Data: 2025-06-10] [Installati e configurati]
+- [x] Setup ESLint, Prettier, e configurazioni sviluppo - [Data: 2025-06-10] [Configurazioni completate]
+- [x] Creare struttura directory secondo planning - [Data: 2025-06-10] [Struttura creata]
+- [x] Inizializzare repository Git con .gitignore appropriato - [Data: 2025-06-10] [Repository configurato]
 
 ### 1.2 Database Setup
 - [ ] Installare e configurare Prisma ORM
