@@ -58,7 +58,7 @@ model Session {
   transcript    String?       // Trascrizione completa
   sessionDate   DateTime
   duration      Int?          // durata in secondi
-  status        SessionStatus @default(UPLOADED)
+  status        String        @default("UPLOADED") // UPLOADED, TRANSCRIBING, TRANSCRIBED, ANALYZING, ANALYZED, ERROR
   errorMessage  String?       // messaggio di errore se status = ERROR
   isActive      Boolean       @default(true) // soft delete
   createdAt     DateTime      @default(now())
@@ -79,9 +79,9 @@ model Analysis {
   patientId        String
   patient          Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
   sentimentScore   Float?    // -1 to 1
-  emotions         Json?     // array di emozioni rilevate
-  keyTopics        Json?     // array di topic principali
-  therapeuticGoals Json?     // obiettivi terapeutici identificati
+  emotions         String?   // JSON string di emozioni rilevate
+  keyTopics        String?   // JSON string di topic principali
+  therapeuticGoals String?   // JSON string obiettivi terapeutici identificati
   progressNotes    String?   // note automatiche su progressi
   summary          String?   // riassunto della sessione
   confidenceScore  Float?    // confidenza dell'analisi (0-1)
@@ -99,13 +99,13 @@ model TranscriptionJob {
   id          String                @id @default(cuid())
   sessionId   String                @unique
   jobId       String?               // ID del job esterno (es. OpenAI)
-  status      TranscriptionStatus   @default(PENDING)
+  status      String                @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
   provider    String                @default("openai") // openai, assemblyai, azure, etc.
   startedAt   DateTime              @default(now())
   completedAt DateTime?
   errorMessage String?
   retryCount  Int                   @default(0)
-  metadata    Json?                 // metadati specifici del provider
+  metadata    String?               // JSON string metadati specifici del provider
 
   @@index([status])
   @@index([startedAt])
@@ -119,8 +119,8 @@ model AuditLog {
   action    String           // CREATE, UPDATE, DELETE, LOGIN, etc.
   resource  String           // USER, PATIENT, SESSION, etc.
   resourceId String?
-  oldValues Json?
-  newValues Json?
+  oldValues String?          // JSON string
+  newValues String?          // JSON string
   ipAddress String?
   userAgent String?
   createdAt DateTime         @default(now())
@@ -132,18 +132,4 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-enum SessionStatus {
-  UPLOADED
-  TRANSCRIBING
-  TRANSCRIBED
-  ANALYZING
-  ANALYZED
-  ERROR
-}
 
-enum TranscriptionStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-}

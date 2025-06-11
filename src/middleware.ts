@@ -1,28 +1,36 @@
-import { auth } from "@/lib/auth"
+import { withAuth } from "next-auth/middleware"
 
-export default auth((req) => {
-  const { pathname } = req.nextUrl
-  
-  // Public routes che non richiedono autenticazione
-  const publicRoutes = ["/", "/login", "/register", "/api/auth"]
-  
-  // Controlla se la route è pubblica
-  const isPublicRoute = publicRoutes.some(route => 
-    pathname.startsWith(route)
-  )
-  
-  // Se l'utente non è autenticato e sta tentando di accedere a una route protetta
-  if (!req.auth && !isPublicRoute) {
-    const loginUrl = new URL("/login", req.url)
-    loginUrl.searchParams.set("callbackUrl", pathname)
-    return Response.redirect(loginUrl)
+export default withAuth(
+  function middleware(req) {
+    // Additional middleware logic can go here
+  },
+  {
+    callbacks: {
+      authorized: ({ token, req }) => {
+        const { pathname } = req.nextUrl
+        
+        // Public routes che non richiedono autenticazione
+        const publicRoutes = ["/", "/login", "/register"]
+        
+        // Controlla se la route è pubblica
+        const isPublicRoute = publicRoutes.some(route => 
+          pathname === route || pathname.startsWith(route + "/")
+        )
+        
+        // Se la route è pubblica, permettila sempre
+        if (isPublicRoute) {
+          return true
+        }
+        
+        // Per tutte le altre route, richiedi un token valido
+        return !!token
+      },
+    },
+    pages: {
+      signIn: "/login",
+    },
   }
-  
-  // Se l'utente è autenticato e sta tentando di accedere alle pagine di login/register
-  if (req.auth && (pathname === "/login" || pathname === "/register")) {
-    return Response.redirect(new URL("/dashboard", req.url))
-  }
-})
+)
 
 export const config = {
   matcher: [
