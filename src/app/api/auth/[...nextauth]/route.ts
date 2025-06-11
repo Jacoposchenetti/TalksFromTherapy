@@ -1,5 +1,5 @@
-import { handlers } from "@/lib/auth"
+import NextAuth from "@/lib/auth"
 
 export const runtime = 'nodejs'
 
-export const { GET, POST } = handlers
+export { NextAuth as GET, NextAuth as POST }

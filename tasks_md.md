@@ -26,9 +26,9 @@
 ## FASE 2: Core Features (Priorità Alta)
 
 ### 2.1 Sistema Autenticazione Completo
-- [ ] Creare pagina registrazione con validazione
-- [ ] Creare pagina login con gestione errori
-- [ ] Implementare validazione email formato/unicità
+- [x] Creare pagina registrazione con validazione - [Data: 2025-06-10] [Pagina registrazione creata con validazione completa]
+- [x] Creare pagina login con gestione errori - [Data: 2025-06-10] [Pagina login creata con gestione errori]
+- [x] Implementare validazione email formato/unicità - [Data: 2025-06-10] [Validazione implementata lato client e server]
 - [ ] Aggiungere reset password via email
 - [ ] Creare sistema refresh token JWT
 - [ ] Implementare logout sicuro con token cleanup
