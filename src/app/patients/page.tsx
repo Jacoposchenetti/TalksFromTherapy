@@ -11,11 +11,8 @@ import { Plus, ArrowLeft } from "lucide-react"
 
 interface Patient {
   id: string
-  firstName: string
-  lastName: string
+  initials: string
   dateOfBirth?: string
-  email?: string
-  phone?: string
   notes?: string
   createdAt: string
   updatedAt: string
@@ -37,13 +34,12 @@ export default function PatientsPage() {
     }
     fetchPatients()
   }, [session, status, router])
-
   const fetchPatients = async () => {
     try {
       const response = await fetch("/api/patients")
       if (response.ok) {
         const data = await response.json()
-        setPatients(data)
+        setPatients(data.patients || [])
       }
     } catch (error) {
       console.error("Error fetching patients:", error)
@@ -72,8 +68,7 @@ export default function PatientsPage() {
       })
       if (response.ok) {
         fetchPatients()
-      }
-    } catch (error) {
+      }    } catch (error) {
       console.error("Error deleting patient:", error)
     }
   }
@@ -124,8 +119,7 @@ export default function PatientsPage() {
                 }}
               />
             </CardContent>
-          </Card>
-        </div>
+          </Card>        </div>
       </div>
     )
   }
