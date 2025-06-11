@@ -5,7 +5,6 @@ import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock } from "lucide-react"
 
 interface Session {
@@ -19,16 +18,14 @@ interface Session {
   status: string
   patient: {
     id: string
-    firstName: string
-    lastName: string
+    initials: string
   }
   createdAt: string
 }
 
 interface Patient {
   id: string
-  firstName: string
-  lastName: string
+  initials: string
 }
 
 export default function SessionsPage() {
@@ -106,19 +103,18 @@ export default function SessionsPage() {
       setUploading(false)
     }
   }
-
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      UPLOADED: { label: "Caricato", variant: "secondary" as const },
-      TRANSCRIBING: { label: "Trascrivendo", variant: "default" as const },
-      TRANSCRIBED: { label: "Trascritto", variant: "default" as const },
-      ANALYZING: { label: "Analizzando", variant: "default" as const },
-      ANALYZED: { label: "Analizzato", variant: "default" as const },
-      ERROR: { label: "Errore", variant: "destructive" as const },
+      UPLOADED: { label: "Caricato", className: "bg-gray-100 text-gray-800" },
+      TRANSCRIBING: { label: "Trascrivendo", className: "bg-blue-100 text-blue-800" },
+      TRANSCRIBED: { label: "Trascritto", className: "bg-green-100 text-green-800" },
+      ANALYZING: { label: "Analizzando", className: "bg-yellow-100 text-yellow-800" },
+      ANALYZED: { label: "Analizzato", className: "bg-green-100 text-green-800" },
+      ERROR: { label: "Errore", className: "bg-red-100 text-red-800" },
     }
     
-    const config = statusConfig[status as keyof typeof statusConfig] || { label: status, variant: "secondary" as const }
-    return <Badge variant={config.variant}>{config.label}</Badge>
+    const config = statusConfig[status as keyof typeof statusConfig] || { label: status, className: "bg-gray-100 text-gray-800" }
+    return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${config.className}`}>{config.label}</span>
   }
 
   const formatDuration = (seconds?: number) => {
@@ -152,7 +148,7 @@ export default function SessionsPage() {
         )}
         <div>
           <h1 className="text-3xl font-bold">
-            {patient ? `Sessioni - ${patient.firstName} ${patient.lastName}` : "Sessioni"}
+            {patient ? `Sessioni - ${patient.initials}` : "Sessioni"}
           </h1>
           <p className="text-muted-foreground">
             Gestisci le sessioni terapeutiche e le trascrizioni
@@ -217,7 +213,7 @@ export default function SessionsPage() {
                     </CardTitle>
                     <CardDescription className="flex items-center gap-4 mt-2">
                       {!patientId && (
-                        <span>{session.patient.firstName} {session.patient.lastName}</span>
+                        <span>{session.patient.initials}</span>
                       )}
                       <span className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" />

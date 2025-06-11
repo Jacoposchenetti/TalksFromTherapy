@@ -8,11 +8,8 @@ import { Users, Calendar, FileText, Edit, Trash2, Eye } from "lucide-react"
 
 interface Patient {
   id: string
-  firstName: string
-  lastName: string
+  initials: string
   dateOfBirth?: string
-  email?: string
-  phone?: string
   notes?: string
   createdAt: string
   updatedAt: string
@@ -28,10 +25,8 @@ interface PatientListProps {
 export function PatientList({ patients, onEdit, onDelete, onViewSessions }: PatientListProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-
   const filteredPatients = patients.filter(patient =>
-    `${patient.firstName} ${patient.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    patient.initials.toLowerCase().includes(searchTerm.toLowerCase()) ||
     patient.notes?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
@@ -65,10 +60,9 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions }: Pati
   return (
     <div className="space-y-6">
       {/* Search Bar */}
-      <div className="flex gap-2">
-        <Input
+      <div className="flex gap-2">        <Input
           type="text"
-          placeholder="Cerca pazienti per nome, email o note..."
+          placeholder="Cerca pazienti per iniziali o note..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="flex-1"
@@ -116,9 +110,8 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions }: Pati
             <Card key={patient.id} className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-xl">
-                      {patient.firstName} {patient.lastName}
+                  <div className="flex-1">                    <CardTitle className="text-xl">
+                      {patient.initials}
                     </CardTitle>
                     <CardDescription className="flex items-center gap-4 mt-2">
                       {patient.dateOfBirth && (
@@ -129,12 +122,6 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions }: Pati
                             ({formatDate(patient.dateOfBirth)})
                           </span>
                         </span>
-                      )}
-                      {patient.email && (
-                        <span className="text-sm">{patient.email}</span>
-                      )}
-                      {patient.phone && (
-                        <span className="text-sm">{patient.phone}</span>
                       )}
                     </CardDescription>
                   </div>
