@@ -116,12 +116,42 @@ export default function SessionsPage() {
     const config = statusConfig[status as keyof typeof statusConfig] || { label: status, className: "bg-gray-100 text-gray-800" }
     return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${config.className}`}>{config.label}</span>
   }
-
   const formatDuration = (seconds?: number) => {
     if (!seconds) return "N/A"
     const minutes = Math.floor(seconds / 60)
     const remainingSeconds = seconds % 60
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
+  }
+  const handleStartTranscription = async (sessionId: string) => {
+    try {
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sessionId }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log("Trascrizione risultato:", result)
+        
+        // Ricarica le sessioni per vedere lo stato aggiornato
+        fetchSessions()
+        
+        // Se la trascrizione è completata immediatamente, mostra un messaggio
+        if (result.status === "TRANSCRIBED") {
+          alert("Trascrizione completata con successo!")
+        }
+      } else {
+        const error = await response.json()
+        console.error("Errore avvio trascrizione:", error)
+        alert("Errore durante l'avvio della trascrizione: " + (error.details || error.error))
+      }
+    } catch (error) {
+      console.error("Errore avvio trascrizione:", error)
+      alert("Errore durante l'avvio della trascrizione")
+    }
   }
 
   if (status === "loading" || loading) {
@@ -224,15 +254,43 @@ export default function SessionsPage() {
                         {formatDuration(session.duration)}
                       </span>
                     </CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                    {session.audioUrl && (
+                  </div>                  <div className="flex gap-2">                    {session.audioUrl && (
                       <Button variant="outline" size="sm">
                         <Play className="h-4 w-4 mr-1" />
                         Audio
                       </Button>
                     )}
-                    {session.transcript && (
+                    {session.status === "UPLOADED" && (
+                      <Button 
+                        variant="default" 
+                        size="sm"
+                        onClick={() => handleStartTranscription(session.id)}
+                      >
+                        <FileText className="h-4 w-4 mr-1" />
+                        Avvia Trascrizione
+                      </Button>
+                    )}
+                    {session.status === "TRANSCRIBING" && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        disabled
+                      >
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-1"></div>
+                        Trascrivendo...
+                      </Button>
+                    )}
+                    {session.status === "ERROR" && (
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={() => handleStartTranscription(session.id)}
+                      >
+                        <FileText className="h-4 w-4 mr-1" />
+                        Riprova Trascrizione
+                      </Button>
+                    )}
+                    {session.transcript && session.status === "TRANSCRIBED" && (
                       <Button variant="outline" size="sm">
                         <FileText className="h-4 w-4 mr-1" />
                         Trascrizione
