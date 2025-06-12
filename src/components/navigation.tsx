@@ -9,7 +9,8 @@ import {
   FileAudio, 
   LogOut, 
   Menu,
-  X
+  X,
+  Settings
 } from "lucide-react"
 import { useState } from "react"
 
@@ -25,6 +26,7 @@ export function Navigation() {
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Pazienti", href: "/patients", icon: Users },
     { name: "Sessioni", href: "/sessions", icon: FileAudio },
+    { name: "Debug", href: "/debug", icon: Settings },
   ]
 
   const handleLogout = async () => {

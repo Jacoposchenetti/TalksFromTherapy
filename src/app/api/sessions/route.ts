@@ -18,9 +18,7 @@ export async function GET(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    const { searchParams } = new URL(request.url)
+    }    const { searchParams } = new URL(request.url)
     const patientId = searchParams.get("patientId")
 
     const whereClause = {
@@ -35,8 +33,7 @@ export async function GET(request: NextRequest) {
         patient: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            initials: true,
           },
         },
       },
@@ -105,9 +102,7 @@ export async function POST(request: NextRequest) {
     
     const fileName = `${Date.now()}-${audioFile.name}`
     const filePath = join(uploadsDir, fileName)
-    await writeFile(filePath, buffer)
-
-    // Create session record
+    await writeFile(filePath, buffer)    // Create session record
     const newSession = await prisma.session.create({
       data: {
         userId: user.id,
@@ -123,8 +118,7 @@ export async function POST(request: NextRequest) {
         patient: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            initials: true,
           },
         },
       },
