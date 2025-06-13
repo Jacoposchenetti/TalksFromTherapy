@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, Calendar, FileText, Edit, Trash2, Eye } from "lucide-react"
+import { Users, Calendar, FileText, Edit, Trash2, Eye, BarChart3 } from "lucide-react"
 
 interface Patient {
   id: string
@@ -20,9 +20,10 @@ interface PatientListProps {
   onEdit: (patient: Patient) => void
   onDelete: (patientId: string) => void
   onViewSessions: (patientId: string) => void
+  onViewAnalysis: (patientId: string) => void
 }
 
-export function PatientList({ patients, onEdit, onDelete, onViewSessions }: PatientListProps) {
+export function PatientList({ patients, onEdit, onDelete, onViewSessions, onViewAnalysis }: PatientListProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const filteredPatients = patients.filter(patient =>
@@ -124,8 +125,7 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions }: Pati
                         </span>
                       )}
                     </CardDescription>
-                  </div>
-                  <div className="flex gap-2">
+                  </div>                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -133,6 +133,14 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions }: Pati
                     >
                       <Eye className="h-4 w-4 mr-1" />
                       Sessioni
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onViewAnalysis(patient.id)}
+                    >
+                      <BarChart3 className="h-4 w-4 mr-1" />
+                      Analisi
                     </Button>
                     <Button
                       variant="outline"

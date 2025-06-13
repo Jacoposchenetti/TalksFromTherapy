@@ -137,13 +137,12 @@ export default function PatientsPage() {
           <Plus className="mr-2 h-4 w-4" />
           Nuovo Paziente
         </Button>
-      </div>
-
-      <PatientList
+      </div>      <PatientList
         patients={patients}
         onEdit={handleEditPatient}
         onDelete={handleDeletePatient}
         onViewSessions={(patientId) => router.push(`/sessions?patientId=${patientId}`)}
+        onViewAnalysis={(patientId) => router.push(`/patients/${patientId}/analysis`)}
       />
     </div>
   )

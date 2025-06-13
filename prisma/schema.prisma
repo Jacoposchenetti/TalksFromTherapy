@@ -64,6 +64,7 @@ model Session {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   analyses      Analysis[]
+  note          SessionNote?  // Relazione opzionale con SessionNote
 
   @@index([userId])
   @@index([patientId])
@@ -130,6 +131,19 @@ model AuditLog {
   @@index([resource])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// Tabella per le note del terapeuta sulle sessioni
+model SessionNote {
+  id        String   @id @default(cuid())
+  sessionId String   @unique
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  content   String   // Contenuto della nota del terapeuta
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId])
+  @@map("session_notes")
 }
 
 
