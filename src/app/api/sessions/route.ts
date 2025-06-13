@@ -16,9 +16,10 @@ export async function GET(request: NextRequest) {
       where: { email: session.user.email },
     })
 
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }    const { searchParams } = new URL(request.url)
+    if (!user) {      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    const { searchParams } = new URL(request.url)
     const patientId = searchParams.get("patientId")
 
     const whereClause = {
