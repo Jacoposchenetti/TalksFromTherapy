@@ -21,18 +21,24 @@ export async function transcribeAudio(audioFilePath: string): Promise<string> {
     
     // Crea un stream del file audio
     const audioStream = createReadStream(audioFilePath)
-    
-    // Chiama l'API Whisper di OpenAI
+      // Chiama l'API Whisper di OpenAI
     const transcription = await openai.audio.transcriptions.create({
       file: audioStream,
       model: 'whisper-1',
       language: 'it', // Italiano
-      response_format: 'text',
-      temperature: 0.1, // Bassa temperatura per maggiore accuratezza
+      response_format: 'verbose_json', // Più dettagli nella risposta
+      temperature: 0.0, // Massima accuratezza
+      prompt: "Trascrivi accuratamente tutto il parlato in italiano. Ignora rumori di fondo, musiche o watermark."
     })
 
     console.log('Trascrizione completata con successo')
-    return transcription as string
+    console.log('Dettagli trascrizione:', {
+      text: transcription.text?.substring(0, 100) + '...',
+      language: transcription.language,
+      duration: transcription.duration
+    })
+    
+    return transcription.text || transcription as string
 
   } catch (error) {
     console.error('Errore durante la trascrizione:', error)
