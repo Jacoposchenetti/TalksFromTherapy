@@ -18,33 +18,16 @@ export function Navigation() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const pathname = usePathname()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
-  // Debug logging
-  console.log("Navigation - Session status:", status)
-  console.log("Navigation - Session data:", session)
-  console.log("Navigation - Current pathname:", pathname)
-
-  // Don't render navigation on auth pages
-  const isAuthPage = pathname?.startsWith('/login') || pathname?.startsWith('/register') || pathname === '/'
-  if (isAuthPage) {
-    console.log("Navigation - Hiding navigation on auth page")
-    return null
-  }
-
-  // Don't render navigation if not authenticated or still loading
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)  // Don't render navigation if not authenticated or still loading
   if (status === "loading") return null
   if (!session) {
-    console.log("Navigation - No session, redirecting to login")
     router.push('/login')
     return null
   }
-
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Pazienti", href: "/patients", icon: Users },
     { name: "Sessioni", href: "/sessions", icon: FileAudio },
-    { name: "Debug", href: "/debug", icon: Settings },
   ]
 
   const handleLogout = async () => {
