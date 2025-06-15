@@ -1,6 +1,6 @@
 "use client"
 
-import { useSession, signOut } from "next-auth/react"
+import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -41,13 +41,8 @@ export default function DashboardPage() {
           transcriptionsCount: sessions.filter((s: any) => s.transcript).length,
         })
       }
-    } catch (error) {
-      console.error("Error fetching stats:", error)
+    } catch (error) {      console.error("Error fetching stats:", error)
     }
-  }
-
-  const handleLogout = async () => {
-    await signOut({ callbackUrl: "/login" })
   }
 
   if (status === "loading") {
@@ -66,14 +61,10 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center justify-between">            <div>
               <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
               <p className="text-gray-600">Benvenuto, {session.user?.name}</p>
             </div>
-            <Button onClick={handleLogout} variant="outline">
-              Logout
-            </Button>
           </div>
         </div>        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push("/patients")}>
