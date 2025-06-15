@@ -26,9 +26,9 @@ export function PatientForm({ patient, onSave, onCancel }: PatientFormProps) {
   })
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
+    console.log('Form field changed:', name, value) // Debug log
     setFormData(prev => ({ ...prev, [name]: value }))
     // Clear error when user starts typing
     if (errors[name]) {
@@ -55,9 +55,12 @@ export function PatientForm({ patient, onSave, onCancel }: PatientFormProps) {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log('Form submit triggered') // Debug log
     e.preventDefault()
     
-    if (!validateForm()) return    setLoading(true)
+    if (!validateForm()) return
+    
+    setLoading(true)
     try {
       const url = patient ? `/api/patients/${patient.id}` : "/api/patients"
       const method = patient ? "PUT" : "POST"
@@ -96,7 +99,6 @@ export function PatientForm({ patient, onSave, onCancel }: PatientFormProps) {
           onChange={handleChange}
           placeholder="es. S.F. (per Sebastiano Franchini)"
           className={errors.initials ? "border-red-500" : ""}
-          maxLength={10}
         />
         {errors.initials && (
           <p className="text-sm text-red-500">{errors.initials}</p>
