@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2 } from "lucide-react"
+import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp } from "lucide-react"
 
 interface Session {
   id: string
@@ -114,12 +114,14 @@ export default function SessionsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const patientId = searchParams.get("patientId")
+  
   const [sessions, setSessions] = useState<Session[]>([])
   const [patient, setPatient] = useState<Patient | null>(null)
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [selectedPatientForUpload, setSelectedPatientForUpload] = useState<string>("")
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean
     sessionId: string
@@ -364,9 +366,8 @@ export default function SessionsPage() {
   }
 
   if (!session) return null
-
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto p-6 max-w-full overflow-hidden">
       <div className="flex items-center gap-4 mb-6">
         {patientId && (
           <Button
@@ -465,30 +466,29 @@ export default function SessionsPage() {
               </p>
             </CardContent>
           </Card>
-        ) : (
-          getFilteredSessions().map((session) => (
-            <Card key={session.id} className="hover:shadow-md transition-shadow">
+        ) : (          getFilteredSessions().map((session) => (
+            <Card key={session.id} className="hover:shadow-md transition-shadow w-full overflow-hidden">
               <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      {session.title}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="flex items-center gap-2 flex-wrap">
+                      <span className="truncate">{session.title}</span>
                       {getStatusBadge(session.status)}
                     </CardTitle>
-                    <CardDescription className="flex items-center gap-4 mt-2">
+                    <CardDescription className="flex items-center gap-4 mt-2 flex-wrap">
                       {!patientId && (
-                        <span>{session.patient.initials}</span>
+                        <span className="truncate">{session.patient.initials}</span>
                       )}
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1 flex-shrink-0">
                         <Calendar className="h-4 w-4" />
                         {new Date(session.sessionDate).toLocaleDateString()}
                       </span>
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1 flex-shrink-0">
                         <Clock className="h-4 w-4" />
                         {formatDuration(session.duration)}
                       </span>
                     </CardDescription>
-                  </div>                  <div className="flex gap-2">                    {session.audioUrl && (
+                  </div>                  <div className="flex gap-2 flex-wrap flex-shrink-0">{session.audioUrl && (
                       <Button variant="outline" size="sm">
                         <Play className="h-4 w-4 mr-1" />
                         Audio
@@ -559,11 +559,42 @@ export default function SessionsPage() {
                     </button>
                   </div>
                 </div>
-              </CardHeader>
-              {session.transcript && (
-                <CardContent>
-                  <div className="bg-muted p-4 rounded-lg">
-                    <p className="text-sm line-clamp-3">{session.transcript}</p>
+              </CardHeader>              {session.transcript && (
+                <CardContent className="pt-0">
+                  <div className="bg-muted p-4 rounded-lg w-full overflow-hidden">
+                    <div className="relative w-full">
+                      <p className={`text-sm whitespace-pre-wrap break-words w-full ${
+                        expandedSessions.has(session.id) ? '' : 'line-clamp-3'
+                      }`}>
+                        {session.transcript}
+                      </p>
+                      {session.transcript.length > 200 && (
+                        <button
+                          onClick={() => {
+                            const newExpanded = new Set(expandedSessions)
+                            if (expandedSessions.has(session.id)) {
+                              newExpanded.delete(session.id)
+                            } else {
+                              newExpanded.add(session.id)
+                            }
+                            setExpandedSessions(newExpanded)
+                          }}
+                          className="mt-2 flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                        >
+                          {expandedSessions.has(session.id) ? (
+                            <>
+                              <ChevronUp className="h-3 w-3" />
+                              Mostra meno
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-3 w-3" />
+                              Leggi tutto
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               )}
