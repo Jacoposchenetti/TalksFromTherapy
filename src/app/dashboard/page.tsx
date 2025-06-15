@@ -24,24 +24,41 @@ export default function DashboardPage() {
 
   const fetchStats = async () => {
     try {
+      console.log("Dashboard: Fetching stats...")
       const [patientsRes, sessionsRes] = await Promise.all([
         fetch("/api/patients"),
         fetch("/api/sessions"),
       ])
       
-      if (patientsRes.ok && sessionsRes.ok) {
-        const [patients, sessions] = await Promise.all([
+      console.log("Dashboard: Response status - patients:", patientsRes.status, "sessions:", sessionsRes.status)
+        if (patientsRes.ok && sessionsRes.ok) {
+        const [patientsData, sessions] = await Promise.all([
           patientsRes.json(),
           sessionsRes.json(),
         ])
         
-        setStats({
-          patientsCount: patients.length,
-          sessionsCount: sessions.length,
-          transcriptionsCount: sessions.filter((s: any) => s.transcript).length,
-        })
+        // L'API pazienti restituisce { patients: [...] }
+        const patients = patientsData.patients || []
+        
+        console.log("Dashboard: Data received - patients:", patients, "sessions:", sessions)
+        console.log("Dashboard: Patients length:", patients?.length, "Sessions length:", sessions?.length)
+        
+        const patientsCount = Array.isArray(patients) ? patients.length : 0
+        const sessionsCount = Array.isArray(sessions) ? sessions.length : 0
+        const transcriptionsCount = Array.isArray(sessions) ? sessions.filter((s: any) => s.transcript).length : 0
+        
+        const newStats = {
+          patientsCount: patientsCount,
+          sessionsCount: sessionsCount,
+          transcriptionsCount: transcriptionsCount,
+        }
+        
+        console.log("Dashboard: New stats:", newStats)
+        setStats(newStats)
+      } else {
+        console.error("Dashboard: API response not ok")
       }
-    } catch (error) {      console.error("Error fetching stats:", error)
+    } catch (error) {console.error("Error fetching stats:", error)
     }
   }
 
@@ -71,8 +88,7 @@ export default function DashboardPage() {
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pazienti</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
+            </CardHeader>            <CardContent>
               <div className="text-2xl font-bold">{stats.patientsCount}</div>
               <p className="text-xs text-muted-foreground">
                 {stats.patientsCount === 0 ? "Nessun paziente registrato" : "Pazienti registrati"}
