@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp } from "lucide-react"
+import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp, Download } from "lucide-react"
 import { DocumentParser } from "@/lib/document-parser"
 import { NotificationManager } from "@/lib/notification-manager"
 
@@ -113,6 +113,7 @@ function SessionsPageContent() {
     sessionId: '',
     sessionName: ''
   })
+  const [exportMenuOpen, setExportMenuOpen] = useState<string | null>(null) // sessionId or null
 
   useEffect(() => {
     if (status === "loading") return
@@ -134,9 +135,26 @@ function SessionsPageContent() {
         setLoading(false)
       }
     }
-    
-    loadData()
+      loadData()
   }, [session, status, router, patientId])
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuOpen) {
+        const target = event.target as Element
+        if (!target.closest('.relative')) {
+          setExportMenuOpen(null)
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [exportMenuOpen])
+
   const fetchSessions = async () => {
     try {
       const url = patientId ? `/api/sessions?patientId=${patientId}` : "/api/sessions"
@@ -475,13 +493,89 @@ function SessionsPageContent() {
       NotificationManager.showError("Errore durante l'eliminazione della sessione")
     }
   }
-
   const handleDeleteClick = (sessionId: string, sessionTitle: string) => {
     setDeleteModal({
       isOpen: true,
       sessionId,
-      sessionName: sessionTitle
-    })
+      sessionName: sessionTitle    })
+  }
+
+  const handleExportTranscript = async (sessionId: string, sessionTitle: string, format: 'txt' | 'pdf' | 'docx' = 'txt') => {
+    try {
+      setExportMenuOpen(null) // Chiude il menu
+      
+      // Show loading notification
+      if (format === 'pdf') {
+        NotificationManager.showInfo("Generazione PDF in corso...")
+      } else if (format === 'docx') {
+        NotificationManager.showInfo("Generazione DOCX in corso...")
+      } else {
+        NotificationManager.showInfo("Preparazione file TXT...")
+      }
+      
+      const response = await fetch(`/api/sessions/${sessionId}/export?format=${format}`)
+      
+      // Check if response is OK first
+      if (!response.ok) {
+        let errorMessage = 'Errore durante l\'export'
+        try {
+          const error = await response.json()
+          errorMessage = error.error || error.details || errorMessage
+        } catch {
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`
+        }
+        throw new Error(errorMessage)
+      }
+
+      // Check content type
+      const contentType = response.headers.get('Content-Type')
+      console.log(`Response Content-Type: ${contentType}`)
+        // Validate content type
+      if (format === 'pdf' && !contentType?.includes('application/pdf')) {
+        console.error(`Expected application/pdf but got: ${contentType}`)
+        const responseText = await response.text()
+        console.error('Response body:', responseText.substring(0, 500))
+        throw new Error(`Server ha restituito ${contentType} invece di PDF. Controlla i log del server.`)
+      }
+      
+      if (format === 'txt' && !contentType?.includes('text/plain')) {
+        console.error(`Expected text/plain but got: ${contentType}`)
+        throw new Error(`Server ha restituito ${contentType} invece di TXT.`)
+      }
+      
+      if (format === 'docx' && !contentType?.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document')) {
+        console.error(`Expected application/vnd.openxmlformats-officedocument.wordprocessingml.document but got: ${contentType}`)
+        throw new Error(`Server ha restituito ${contentType} invece di DOCX.`)
+      }
+      
+      // Download the file normally
+      const blob = await response.blob()
+      
+      if (blob.size === 0) {
+        throw new Error('File vuoto ricevuto dal server')
+      }
+      
+      console.log(`Downloaded ${format.toUpperCase()} file: ${blob.size} bytes`)
+      
+      // Create a temporary URL for the blob
+      const url = window.URL.createObjectURL(blob)
+      
+      // Create a temporary anchor element and trigger download
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `trascrizione_${sessionTitle.replace(/[^a-zA-Z0-9]/g, '_')}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      
+      // Clean up
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      NotificationManager.showSuccess(`Trascrizione esportata in ${format.toUpperCase()} con successo!`)
+    } catch (error) {
+      console.error("Errore export trascrizione:", error)
+      NotificationManager.showError(`Errore durante l'export della trascrizione in ${format.toUpperCase()}: ${(error as Error).message}`)
+    }
   }
 
   const handleTitleClick = (sessionId: string, currentTitle: string) => {
@@ -781,23 +875,9 @@ function SessionsPageContent() {
                         <span className="flex items-center gap-1 flex-shrink-0 text-sm text-blue-600">
                           <FileText className="h-4 w-4" />
                           {formatDocumentMetadata(session.documentMetadata)}
-                        </span>
-                      )}                    </CardDescription>
+                        </span>                      )}                    </CardDescription>
                   </div>
                   
-                  {/* Pulsante Delete in posizione prominente */}
-                  <div className="flex-shrink-0">
-                    <Button 
-                      variant="destructive" 
-                      size="sm"
-                      onClick={() => handleDeleteClick(session.id, session.title)}
-                      className="bg-red-600 hover:bg-red-700 text-white border-red-600"
-                      title="Elimina sessione"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-
                   <div className="flex gap-2 flex-wrap items-center justify-end min-w-0 overflow-visible">{session.audioUrl && (
                       <Button variant="outline" size="sm">
                         <Play className="h-4 w-4 mr-1" />
@@ -833,16 +913,106 @@ function SessionsPageContent() {
                         <FileText className="h-4 w-4 mr-1" />
                         Riprova Trascrizione
                       </Button>
+                    )}                    {session.transcript && session.status === "TRANSCRIBED" && (
+                      <>
+                        <Button variant="outline" size="sm">
+                          <FileText className="h-4 w-4 mr-1" />
+                          Trascrizione
+                        </Button>
+                        <div className="relative">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setExportMenuOpen(exportMenuOpen === session.id ? null : session.id)}
+                            className="text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300"
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            Export
+                            <ChevronDown className="h-3 w-3 ml-1" />
+                          </Button>
+                          {exportMenuOpen === session.id && (
+                            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 min-w-[120px]">                              <button
+                                onClick={() => handleExportTranscript(session.id, session.title, 'txt')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100"
+                              >
+                                <FileText className="h-4 w-4 mr-2 inline" />
+                                TXT
+                              </button>
+                              <button
+                                onClick={() => handleExportTranscript(session.id, session.title, 'pdf')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100"
+                              >
+                                <FileText className="h-4 w-4 mr-2 inline" />
+                                PDF
+                              </button>
+                              <button
+                                onClick={() => handleExportTranscript(session.id, session.title, 'docx')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                              >
+                                <FileText className="h-4 w-4 mr-2 inline" />
+                                DOCX
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}{session.status === "ANALYZED" && (
+                      <>
+                        <Button variant="outline" size="sm">
+                          <BarChart3 className="h-4 w-4 mr-1" />
+                          Analisi
+                        </Button>                        {session.transcript && (
+                          <div className="relative">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => setExportMenuOpen(exportMenuOpen === session.id ? null : session.id)}
+                              className="text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300"
+                            >
+                              <Download className="h-4 w-4 mr-1" />
+                              Export
+                              <ChevronDown className="h-3 w-3 ml-1" />
+                            </Button>
+                            {exportMenuOpen === session.id && (
+                              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 min-w-[120px]">
+                                <button
+                                  onClick={() => handleExportTranscript(session.id, session.title, 'txt')}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100"
+                                >
+                                  <FileText className="h-4 w-4 mr-2 inline" />
+                                  TXT
+                                </button>                                <button
+                                  onClick={() => handleExportTranscript(session.id, session.title, 'pdf')}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100"
+                                >
+                                  <FileText className="h-4 w-4 mr-2 inline" />
+                                  PDF
+                                </button>
+                                <button
+                                  onClick={() => handleExportTranscript(session.id, session.title, 'docx')}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                                >
+                                  <FileText className="h-4 w-4 mr-2 inline" />
+                                  DOCX
+                                </button>
+                              </div>
+                            )}
+                          </div>                        )}
+                      </>
                     )}
-                    {session.transcript && session.status === "TRANSCRIBED" && (
-                      <Button variant="outline" size="sm">
-                        <FileText className="h-4 w-4 mr-1" />
-                        Trascrizione
-                      </Button>                    )}                    {session.status === "ANALYZED" && (
-                      <Button variant="outline" size="sm">
-                        <BarChart3 className="h-4 w-4 mr-1" />
-                        Analisi
-                      </Button>                    )}
+                    
+                    {/* Pulsante Delete spostato a destra */}
+                    <div className="flex-shrink-0 ml-2">
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={() => handleDeleteClick(session.id, session.title)}
+                        className="bg-red-600 hover:bg-red-700 text-white border-red-600"
+                        title="Elimina sessione"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardHeader>              {session.transcript && (
