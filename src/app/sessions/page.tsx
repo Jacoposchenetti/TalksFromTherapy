@@ -650,8 +650,7 @@ function SessionsPageContent() {
           </Card>
         ) : (          getFilteredSessions().map((session) => (
             <Card key={session.id} className="hover:shadow-md transition-shadow w-full overflow-hidden">
-              <CardHeader>
-                <div className="flex items-start justify-between gap-4">
+              <CardHeader>                <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <CardTitle className="flex items-center gap-2 flex-wrap">
                       <span className="truncate">{session.title}</span>
@@ -664,7 +663,8 @@ function SessionsPageContent() {
                       <span className="flex items-center gap-1 flex-shrink-0">
                         <Calendar className="h-4 w-4" />
                         {new Date(session.sessionDate).toLocaleDateString()}
-                      </span>                      <span className="flex items-center gap-1 flex-shrink-0">
+                      </span>
+                      <span className="flex items-center gap-1 flex-shrink-0">
                         <Clock className="h-4 w-4" />
                         {formatDuration(session.duration)}
                       </span>
@@ -679,9 +679,11 @@ function SessionsPageContent() {
                           <FileText className="h-4 w-4" />
                           {formatDocumentMetadata(session.documentMetadata)}
                         </span>
-                      )}
-                    </CardDescription>
-                  </div>                  <div className="flex gap-2 flex-wrap flex-shrink-0">{session.audioUrl && (
+                      )}                    </CardDescription>
+                  </div>
+
+                  <div className="flex gap-2 flex-wrap flex-shrink-0">
+                    {session.audioUrl && (
                       <Button variant="outline" size="sm">
                         <Play className="h-4 w-4 mr-1" />
                         Audio
@@ -721,16 +723,18 @@ function SessionsPageContent() {
                       <Button variant="outline" size="sm">
                         <FileText className="h-4 w-4 mr-1" />
                         Trascrizione
-                      </Button>                    )}
-                    {session.status === "ANALYZED" && (
+                      </Button>                    )}                    {session.status === "ANALYZED" && (
                       <Button variant="outline" size="sm">
                         <BarChart3 className="h-4 w-4 mr-1" />
                         Analisi
                       </Button>
-                    )}                    <Button 
+                    )}
+                    {/* Delete button - positioned at the end (right) */}
+                    <Button 
                       variant="destructive" 
                       size="sm"
                       onClick={() => handleDeleteClick(session.id, session.title)}
+                      className="bg-red-600 hover:bg-red-700 text-white font-bold"
                     >
                       <Trash2 className="h-4 w-4 mr-1" />
                       Elimina
