@@ -1,21 +1,25 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp } from "lucide-react"
+import { DocumentParser } from "@/lib/document-parser"
+import { NotificationManager } from "@/lib/notification-manager"
 
 interface Session {
   id: string
   title: string
   audioUrl?: string
   audioFileName?: string
+  audioFileSize?: number
   transcript?: string
   sessionDate: string
   duration?: number
   status: string
+  documentMetadata?: string
   patient: {
     id: string
     initials: string
@@ -65,51 +69,27 @@ const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm, sessionName }: Confirm
             <p className="text-yellow-800 text-sm">
               ⚠️ Questa azione non può essere annullata. La sessione e tutti i dati associati verranno rimossi definitivamente.
             </p>
-          </div>
-        </div>        <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+          </div>        </div>
+
+        <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
           <button
             onClick={onClose}
-            style={{
-              backgroundColor: 'white',
-              color: '#374151',
-              border: '1px solid #d1d5db',
-              borderRadius: '8px',
-              padding: '8px 16px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}
+            className="bg-white text-gray-700 border border-gray-300 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors"
           >
             Annulla
           </button>
           <button
             onClick={onConfirm}
-            style={{
-              backgroundColor: '#dc2626',
-              color: 'white',
-              border: '1px solid #dc2626',
-              borderRadius: '8px',
-              padding: '8px 16px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+            className="bg-red-600 text-white border border-red-600 rounded-lg px-4 py-2 text-sm font-medium hover:bg-red-700 transition-colors"
           >
             Elimina
           </button>
         </div>
       </div>
-    </div>
-  )
+    </div>  )
 }
 
-export default function SessionsPage() {
+function SessionsPageContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -120,6 +100,7 @@ export default function SessionsPage() {
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [uploadingText, setUploadingText] = useState(false)
   const [selectedPatientForUpload, setSelectedPatientForUpload] = useState<string>("")
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
   const [deleteModal, setDeleteModal] = useState<{
@@ -131,6 +112,7 @@ export default function SessionsPage() {
     sessionId: '',
     sessionName: ''
   })
+
   useEffect(() => {
     if (status === "loading") return
     if (!session) {
@@ -138,12 +120,13 @@ export default function SessionsPage() {
       return
     }
     fetchSessions()
-    fetchPatients() // Always fetch patients for the dropdown
+    fetchPatients()
     if (patientId) {
       fetchPatient(patientId)
-      setSelectedPatientForUpload(patientId) // Pre-select patient if coming from patient page
+      setSelectedPatientForUpload(patientId)
     }
   }, [session, status, router, patientId])
+
   const fetchSessions = async () => {
     try {
       const url = patientId ? `/api/sessions?patientId=${patientId}` : "/api/sessions"
@@ -159,30 +142,27 @@ export default function SessionsPage() {
     }
   }
 
-  // Filter sessions based on selected patient (when not in patient-specific view)
   const getFilteredSessions = () => {
     if (patientId) {
-      // When in patient-specific view, show all sessions (already filtered by API)
       return sessions
     } else if (selectedPatientForUpload) {
-      // When patient is selected from dropdown, filter sessions
       return sessions.filter(session => session.patient.id === selectedPatientForUpload)
     } else {
-      // When no patient selected, show all sessions
       return sessions
     }
   }
+
   const fetchPatient = async (id: string) => {
     try {
       const response = await fetch(`/api/patients/${id}`)
       if (response.ok) {
         const data = await response.json()
         setPatient(data)
-      }    } catch (error) {
+      }
+    } catch (error) {
       console.error("Error fetching patient:", error)
     }
   }
-
   const fetchPatients = async () => {
     try {
       const response = await fetch("/api/patients")
@@ -200,14 +180,31 @@ export default function SessionsPage() {
       setPatients([])
     }
   }
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
+    // Validate file type
+    if (!file.type.startsWith('audio/')) {
+      NotificationManager.showWarning("Seleziona un file audio valido")
+      event.target.value = ""
+      return
+    }
+
+    // Validate file size (max 50MB for audio)
+    const maxSizeInBytes = 50 * 1024 * 1024 // 50MB
+    if (file.size > maxSizeInBytes) {
+      NotificationManager.showWarning("File troppo grande. Dimensione massima: 50MB")
+      event.target.value = ""
+      return
+    }
+
     // Use selected patient or current patientId
     const targetPatientId = selectedPatientForUpload || patientId
     if (!targetPatientId) {
-      alert("Seleziona un paziente prima di caricare il file audio")
+      NotificationManager.showWarning("Seleziona un paziente prima di caricare il file audio")
+      event.target.value = ""
       return
     }
 
@@ -222,33 +219,153 @@ export default function SessionsPage() {
         method: "POST",
         body: formData,
       })
-      
+
       if (response.ok) {
         fetchSessions()
-        // Reset file input
         event.target.value = ""
+        NotificationManager.showSuccess("File audio caricato con successo!")
       } else {
-        alert("Errore durante il caricamento del file")
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error || "Errore durante il caricamento del file audio"
+        NotificationManager.showError(errorMessage)
       }
     } catch (error) {
       console.error("Error uploading session:", error)
-      alert("Errore durante il caricamento del file")
+      NotificationManager.showError("Errore durante il caricamento del file audio")
     } finally {
       setUploading(false)
     }
   }
 
+  const handleTextFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file format
+    const fileName = file.name.toLowerCase()
+    const supportedFormats = DocumentParser.getSupportedFormats()
+    const fileExtension = fileName.split('.').pop()
+    
+    if (!fileExtension || !supportedFormats.includes(fileExtension)) {
+      NotificationManager.showWarning(`Formato file non supportato. Usa: ${supportedFormats.map(f => f.toUpperCase()).join(', ')}`)
+      event.target.value = ""
+      return
+    }
+
+    // Validate file size (max 10MB)
+    const maxSizeInBytes = 10 * 1024 * 1024 // 10MB
+    if (file.size > maxSizeInBytes) {
+      NotificationManager.showWarning("File troppo grande. Dimensione massima: 10MB")
+      event.target.value = ""
+      return
+    }
+
+    // Use selected patient or current patientId
+    const targetPatientId = selectedPatientForUpload || patientId
+    if (!targetPatientId) {
+      NotificationManager.showWarning("Seleziona un paziente prima di caricare il file di testo")
+      event.target.value = ""
+      return
+    }
+
+    setUploadingText(true)
+
+    try {
+      // Parse il documento usando il parser appropriato
+      const parsedDocument = await DocumentParser.parseFile(file)
+      
+      if (!parsedDocument.text || parsedDocument.text.trim().length === 0) {
+        throw new Error("Il documento sembra essere vuoto o non è stato possibile estrarre il testo")
+      }
+      
+      // Crea una sessione con il testo già trascritto
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          patientId: targetPatientId,
+          title: `Sessione Testo ${new Date().toLocaleDateString()} (${parsedDocument.metadata?.format?.toUpperCase()})`,
+          transcript: parsedDocument.text,
+          status: "TRANSCRIBED",
+          metadata: parsedDocument.metadata
+        }),
+      })
+      
+      if (response.ok) {
+        fetchSessions()
+        event.target.value = ""
+        
+        const wordCount = parsedDocument.metadata?.wordCount || 0
+        const pages = parsedDocument.metadata?.pages
+        let successMessage = "File di testo caricato con successo!"
+        if (wordCount > 0) {
+          successMessage += ` (${wordCount} parole`
+          if (pages) successMessage += `, ${pages} pagine`
+          successMessage += ")"
+        }
+        
+        NotificationManager.showSuccess(successMessage)
+      } else {
+        const error = await response.json()
+        const errorMessage = "Errore durante il caricamento del file: " + (error.error || "Errore sconosciuto")
+        NotificationManager.showError(errorMessage)
+      }
+    } catch (error) {
+      console.error("Error uploading text file:", error)
+      const errorMessage = error instanceof Error ? error.message : "Errore durante la lettura del file"
+      NotificationManager.showError(errorMessage)
+    } finally {
+      setUploadingText(false)
+    }
+  }
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      UPLOADED: { label: "Caricato", className: "bg-gray-100 text-gray-800" },
-      TRANSCRIBING: { label: "Trascrivendo", className: "bg-blue-100 text-blue-800" },
-      TRANSCRIBED: { label: "Trascritto", className: "bg-green-100 text-green-800" },
-      ANALYZING: { label: "Analizzando", className: "bg-yellow-100 text-yellow-800" },
-      ANALYZED: { label: "Analizzato", className: "bg-green-100 text-green-800" },
-      ERROR: { label: "Errore", className: "bg-red-100 text-red-800" },
+      UPLOADED: { 
+        label: "Caricato", 
+        className: "bg-gray-100 text-gray-800",
+        icon: "📁"
+      },
+      TRANSCRIBING: { 
+        label: "Trascrivendo", 
+        className: "bg-blue-100 text-blue-800",
+        icon: "⏳"
+      },
+      TRANSCRIBED: { 
+        label: "Trascritto", 
+        className: "bg-green-100 text-green-800",
+        icon: "✅"
+      },
+      ANALYZING: { 
+        label: "Analizzando", 
+        className: "bg-yellow-100 text-yellow-800",
+        icon: "🔍"
+      },
+      ANALYZED: { 
+        label: "Analizzato", 
+        className: "bg-green-100 text-green-800",
+        icon: "📊"
+      },
+      ERROR: { 
+        label: "Errore", 
+        className: "bg-red-100 text-red-800",
+        icon: "❌"
+      },
     }
-      const config = statusConfig[status as keyof typeof statusConfig] || { label: status, className: "bg-gray-100 text-gray-800" }
-    return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${config.className}`}>{config.label}</span>
+    
+    const config = statusConfig[status as keyof typeof statusConfig] || { 
+      label: status, 
+      className: "bg-gray-100 text-gray-800",
+      icon: "❓"
+    }
+    
+    return (
+      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${config.className}`}>
+        <span className="mr-1">{config.icon}</span>
+        {config.label}
+      </span>
+    )
   }
 
   const formatDuration = (seconds?: number) => {
@@ -258,6 +375,38 @@ export default function SessionsPage() {
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
   }
 
+  const formatDocumentMetadata = (documentMetadata?: string) => {
+    if (!documentMetadata) return null
+    
+    try {
+      const metadata = JSON.parse(documentMetadata)
+      const parts = []
+      
+      if (metadata.format) {
+        parts.push(metadata.format.toUpperCase())
+      }
+      
+      if (metadata.wordCount) {
+        parts.push(`${metadata.wordCount} parole`)
+      }
+      
+      if (metadata.pages) {
+        parts.push(`${metadata.pages} pagine`)
+      }
+      
+      return parts.join(' • ')
+    } catch {
+      return null
+    }
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
   const handleStartTranscription = async (sessionId: string) => {
     try {
       const response = await fetch("/api/transcribe", {
@@ -277,18 +426,19 @@ export default function SessionsPage() {
         
         // Se la trascrizione è completata immediatamente, mostra un messaggio
         if (result.status === "TRANSCRIBED") {
-          alert("Trascrizione completata con successo!")
+          NotificationManager.showSuccess("Trascrizione completata con successo!")
         }
       } else {
         const error = await response.json()
         console.error("Errore avvio trascrizione:", error)
-        alert("Errore durante l'avvio della trascrizione: " + (error.details || error.error))
+        NotificationManager.showError("Errore durante l'avvio della trascrizione: " + (error.details || error.error))
       }
     } catch (error) {
       console.error("Errore avvio trascrizione:", error)
-      alert("Errore durante l'avvio della trascrizione")
+      NotificationManager.showError("Errore durante l'avvio della trascrizione")
     }
   }
+
   const handleDeleteSession = async (sessionId: string, sessionTitle: string) => {
     const confirmed = confirm(`Sei sicuro di voler eliminare la sessione "${sessionTitle}"? Questa azione non può essere annullata.`)
     
@@ -302,15 +452,15 @@ export default function SessionsPage() {
       if (response.ok) {
         // Ricarica le sessioni per rimuovere quella eliminata
         fetchSessions()
-        alert("Sessione eliminata con successo!")
+        NotificationManager.showSuccess("Sessione eliminata con successo!")
       } else {
         const error = await response.json()
         console.error("Errore eliminazione sessione:", error)
-        alert("Errore durante l'eliminazione della sessione: " + (error.error || "Errore sconosciuto"))
+        NotificationManager.showError("Errore durante l'eliminazione della sessione: " + (error.error || "Errore sconosciuto"))
       }
     } catch (error) {
       console.error("Errore eliminazione sessione:", error)
-      alert("Errore durante l'eliminazione della sessione")
+      NotificationManager.showError("Errore durante l'eliminazione della sessione")
     }
   }
 
@@ -331,15 +481,15 @@ export default function SessionsPage() {
       if (response.ok) {
         // Ricarica le sessioni per rimuovere quella eliminata
         fetchSessions()
-        alert("Sessione eliminata con successo!")
+        NotificationManager.showSuccess("Sessione eliminata con successo!")
       } else {
         const error = await response.json()
         console.error("Errore eliminazione sessione:", error)
-        alert("Errore durante l'eliminazione della sessione: " + (error.error || "Errore sconosciuto"))
+        NotificationManager.showError("Errore durante l'eliminazione della sessione: " + (error.error || "Errore sconosciuto"))
       }
     } catch (error) {
       console.error("Errore eliminazione sessione:", error)
-      alert("Errore durante l'eliminazione della sessione")
+      NotificationManager.showError("Errore durante l'eliminazione della sessione")
     } finally {
       setDeleteModal({
         isOpen: false,
@@ -392,9 +542,8 @@ export default function SessionsPage() {
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
             Carica Nuova Sessione
-          </CardTitle>
-          <CardDescription>
-            Carica un file audio per iniziare la trascrizione automatica
+          </CardTitle>          <CardDescription>
+            Carica un file audio per iniziare la trascrizione automatica o un file di testo già trascritto
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -424,28 +573,61 @@ export default function SessionsPage() {
                 </select>
               </div>
             )}
-            
-            {/* File input */}
-            <div className="flex items-center gap-4">
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={handleFileUpload}
-                disabled={uploading || (!patientId && !selectedPatientForUpload)}
-                className="flex-1"
-              />
-              {uploading && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                  Caricamento...
+              {/* File inputs */}
+            <div className="space-y-4">              {/* Audio file input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Carica File Audio
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleFileUpload}
+                    disabled={uploading || uploadingText || (!patientId && !selectedPatientForUpload)}
+                    className="flex-1"
+                  />
+                  {uploading && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                      Caricamento audio...
+                    </div>
+                  )}
                 </div>
-              )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Formati supportati: MP3, WAV, M4A, OGG • Dimensione massima: 50MB
+                </p>
+              </div>
+
+              {/* Text file input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Carica File di Testo
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="file"
+                    accept={DocumentParser.getAcceptString()}
+                    onChange={handleTextFileUpload}
+                    disabled={uploading || uploadingText || (!patientId && !selectedPatientForUpload)}
+                    className="flex-1"
+                  />
+                  {uploadingText && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                      Elaborazione documento...
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Formati supportati: {DocumentParser.getSupportedFormats().map(f => f.toUpperCase()).join(', ')} • Dimensione massima: 10MB
+                </p>
+              </div>
             </div>
-            
-            {/* Helper text */}
+              {/* Helper text */}
             {!patientId && !selectedPatientForUpload && (
               <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                ⚠️ Seleziona un paziente prima di caricare il file audio
+                ⚠️ Seleziona un paziente prima di caricare file audio o di testo
               </p>
             )}
           </div>
@@ -482,11 +664,22 @@ export default function SessionsPage() {
                       <span className="flex items-center gap-1 flex-shrink-0">
                         <Calendar className="h-4 w-4" />
                         {new Date(session.sessionDate).toLocaleDateString()}
-                      </span>
-                      <span className="flex items-center gap-1 flex-shrink-0">
+                      </span>                      <span className="flex items-center gap-1 flex-shrink-0">
                         <Clock className="h-4 w-4" />
                         {formatDuration(session.duration)}
                       </span>
+                      {session.audioFileSize && (
+                        <span className="flex items-center gap-1 flex-shrink-0 text-sm text-gray-600">
+                          <FileText className="h-4 w-4" />
+                          {formatFileSize(session.audioFileSize)}
+                        </span>
+                      )}
+                      {session.documentMetadata && (
+                        <span className="flex items-center gap-1 flex-shrink-0 text-sm text-blue-600">
+                          <FileText className="h-4 w-4" />
+                          {formatDocumentMetadata(session.documentMetadata)}
+                        </span>
+                      )}
                     </CardDescription>
                   </div>                  <div className="flex gap-2 flex-wrap flex-shrink-0">{session.audioUrl && (
                       <Button variant="outline" size="sm">
@@ -534,29 +727,14 @@ export default function SessionsPage() {
                         <BarChart3 className="h-4 w-4 mr-1" />
                         Analisi
                       </Button>
-                    )}
-                    <button
+                    )}                    <Button 
+                      variant="destructive" 
+                      size="sm"
                       onClick={() => handleDeleteClick(session.id, session.title)}
-                      style={{
-                        backgroundColor: '#dc2626',
-                        color: 'white',
-                        border: '1px solid #dc2626',
-                        borderRadius: '6px',
-                        padding: '8px 12px',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
                     >
-                      <Trash2 style={{ width: '16px', height: '16px' }} />
+                      <Trash2 className="h-4 w-4 mr-1" />
                       Elimina
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </CardHeader>              {session.transcript && (
@@ -608,7 +786,18 @@ export default function SessionsPage() {
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
         sessionName={deleteModal.sessionName}
-      />
-    </div>
+      />    </div>
+  )
+}
+
+export default function SessionsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    }>
+      <SessionsPageContent />
+    </Suspense>
   )
 }

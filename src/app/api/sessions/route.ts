@@ -68,6 +68,56 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
+    const contentType = request.headers.get("content-type")
+      // Handle JSON requests (text file uploads)
+    if (contentType?.includes("application/json")) {
+      const body = await request.json()
+      const { patientId, title, transcript, status, metadata } = body
+
+      if (!patientId || !title || !transcript) {
+        return NextResponse.json(
+          { error: "Missing required fields" },
+          { status: 400 }
+        )
+      }
+
+      // Verify patient belongs to user
+      const patient = await prisma.patient.findFirst({
+        where: {
+          id: patientId,
+          userId: user.id,
+          isActive: true,
+        },
+      })
+
+      if (!patient) {
+        return NextResponse.json({ error: "Patient not found" }, { status: 404 })
+      }
+
+      // Create session record with text transcript
+      const newSession = await prisma.session.create({
+        data: {          userId: user.id,
+          patientId,
+          title,
+          transcript,
+          sessionDate: new Date(),
+          status: status || "TRANSCRIBED",
+          documentMetadata: metadata ? JSON.stringify(metadata) : null,
+        },
+        include: {
+          patient: {
+            select: {
+              id: true,
+              initials: true,
+            },
+          },
+        },
+      })
+
+      return NextResponse.json(newSession, { status: 201 })
+    }
+
+    // Handle FormData requests (audio file uploads)
     const formData = await request.formData()
     const audioFile = formData.get("audio") as File
     const patientId = formData.get("patientId") as string
@@ -103,7 +153,9 @@ export async function POST(request: NextRequest) {
     
     const fileName = `${Date.now()}-${audioFile.name}`
     const filePath = join(uploadsDir, fileName)
-    await writeFile(filePath, buffer)    // Create session record
+    await writeFile(filePath, buffer)
+
+    // Create session record
     const newSession = await prisma.session.create({
       data: {
         userId: user.id,
@@ -124,9 +176,6 @@ export async function POST(request: NextRequest) {
         },
       },
     })
-
-    // TODO: Trigger transcription job here
-    // This would typically be done with a background job queue
 
     return NextResponse.json(newSession, { status: 201 })
   } catch (error) {
