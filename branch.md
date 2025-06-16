@@ -16,6 +16,7 @@ git config --local user.email "andre@example.com"
 - **Database**: SQLite locale (non committato)
 - **Configurazione**: `.env` locale (non committato)
 
+
 ## 📁 File da NON committare
 - `.env` (configurazione locale)
 - `*.db` `*.sqlite` (database locale)
