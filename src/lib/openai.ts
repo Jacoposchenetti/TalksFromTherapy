@@ -15,13 +15,12 @@ export async function transcribeAudio(audioFilePath: string): Promise<string> {
   try {
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === '***REMOVED***your-openai-api-key-here') {
       throw new Error('OPENAI_API_KEY non configurata o non valida')
-    }
-
-    console.log(`Avvio trascrizione per file: ${audioFilePath}`)
+    }    console.log(`Avvio trascrizione per file: ${audioFilePath}`)
     
     // Crea un stream del file audio
     const audioStream = createReadStream(audioFilePath)
-      // Chiama l'API Whisper di OpenAI
+    
+    // Chiama l'API Whisper di OpenAI
     const transcription = await openai.audio.transcriptions.create({
       file: audioStream,
       model: 'whisper-1',
@@ -38,7 +37,7 @@ export async function transcribeAudio(audioFilePath: string): Promise<string> {
       duration: transcription.duration
     })
     
-    return transcription.text || transcription as string
+    return transcription.text || String(transcription)
 
   } catch (error) {
     console.error('Errore durante la trascrizione:', error)

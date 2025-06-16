@@ -46,25 +46,26 @@ model Patient {
 }
 
 model Session {
-  id            String        @id @default(cuid())
-  userId        String
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  patientId     String
-  patient       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  title         String
-  audioUrl      String?       // URL del file audio
-  audioFileName String?
-  audioFileSize Int?          // dimensione file in bytes
-  transcript    String?       // Trascrizione completa
-  sessionDate   DateTime
-  duration      Int?          // durata in secondi
-  status        String        @default("UPLOADED") // UPLOADED, TRANSCRIBING, TRANSCRIBED, ANALYZING, ANALYZED, ERROR
-  errorMessage  String?       // messaggio di errore se status = ERROR
-  isActive      Boolean       @default(true) // soft delete
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  analyses      Analysis[]
-  note          SessionNote?  // Relazione opzionale con SessionNote
+  id               String        @id @default(cuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patientId        String
+  patient          Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title            String
+  audioUrl         String?       // URL del file audio
+  audioFileName    String?
+  audioFileSize    Int?          // dimensione file in bytes
+  transcript       String?       // Trascrizione completa
+  sessionDate      DateTime
+  duration         Int?          // durata in secondi
+  status           String        @default("UPLOADED") // UPLOADED, TRANSCRIBING, TRANSCRIBED, ANALYZING, ANALYZED, ERROR
+  errorMessage     String?       // messaggio di errore se status = ERROR
+  documentMetadata String?       // JSON metadati per documenti di testo (pagine, parole, formato)
+  isActive         Boolean       @default(true) // soft delete
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  analyses         Analysis[]
+  note             SessionNote?  // Relazione opzionale con SessionNote
 
   @@index([userId])
   @@index([patientId])
