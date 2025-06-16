@@ -153,13 +153,16 @@ function SessionsPageContent() {
       return sessions
     }
   }
-
   const fetchPatient = async (id: string) => {
     try {
+      console.log(`Fetching patient with ID: ${id}`)
       const response = await fetch(`/api/patients/${id}`)
       if (response.ok) {
         const data = await response.json()
+        console.log('Patient data received:', data)
         setPatient(data)
+      } else {
+        console.error('Failed to fetch patient:', response.status, response.statusText)
       }
     } catch (error) {
       console.error("Error fetching patient:", error)
@@ -208,13 +211,16 @@ function SessionsPageContent() {
       NotificationManager.showWarning("Seleziona un paziente prima di caricare il file audio")
       event.target.value = ""
       return
-    }
-
-    setUploading(true)
+    }    setUploading(true)
+    
+    // Trova il nome del paziente per il titolo
+    const selectedPatient = patients.find(p => p.id === targetPatientId)
+    const patientName = selectedPatient?.initials || "Paziente"
+    
     const formData = new FormData()
     formData.append("audio", file)
     formData.append("patientId", targetPatientId)
-    formData.append("title", `Sessione ${new Date().toLocaleDateString()}`)
+    formData.append("title", `Sessione ${patientName} - ${new Date().toLocaleDateString()}`)
 
     try {
       const response = await fetch("/api/sessions", {
@@ -277,8 +283,11 @@ function SessionsPageContent() {
       const parsedDocument = await DocumentParser.parseFile(file)
       
       if (!parsedDocument.text || parsedDocument.text.trim().length === 0) {
-        throw new Error("Il documento sembra essere vuoto o non è stato possibile estrarre il testo")
-      }
+        throw new Error("Il documento sembra essere vuoto o non è stato possibile estrarre il testo")      }
+      
+      // Trova il nome del paziente per il titolo
+      const selectedPatient = patients.find(p => p.id === targetPatientId)
+      const patientName = selectedPatient?.initials || "Paziente"
       
       // Crea una sessione con il testo già trascritto
       const response = await fetch("/api/sessions", {
@@ -288,7 +297,7 @@ function SessionsPageContent() {
         },
         body: JSON.stringify({
           patientId: targetPatientId,
-          title: `Sessione Testo ${new Date().toLocaleDateString()} (${parsedDocument.metadata?.format?.toUpperCase()})`,
+          title: `Sessione ${patientName} - ${new Date().toLocaleDateString()} (${parsedDocument.metadata?.format?.toUpperCase()})`,
           transcript: parsedDocument.text,
           status: "TRANSCRIBED",
           metadata: parsedDocument.metadata
@@ -574,10 +583,18 @@ function SessionsPageContent() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Torna ai Pazienti
           </Button>
-        )}
-        <div>
+        )}        <div>
           <h1 className="text-3xl font-bold">
-            {patient ? `Sessioni - ${patient.initials}` : "Sessioni"}
+            {(() => {
+              if (patient) {
+                return `Sessioni - ${patient.initials}`
+              } else if (patientId && patients.length > 0) {
+                const foundPatient = patients.find(p => p.id === patientId)
+                return foundPatient ? `Sessioni - ${foundPatient.initials}` : "Sessioni"
+              } else {
+                return "Sessioni"
+              }
+            })()}
           </h1>
           <p className="text-muted-foreground">
             Gestisci le sessioni terapeutiche e le trascrizioni
