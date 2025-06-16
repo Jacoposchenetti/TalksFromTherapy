@@ -108,8 +108,7 @@ function SessionsPageContent() {
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean
     sessionId: string
-    sessionName: string
-  }>({
+    sessionName: string  }>({
     isOpen: false,
     sessionId: '',
     sessionName: ''
@@ -121,14 +120,27 @@ function SessionsPageContent() {
       router.push("/login")
       return
     }
-    fetchSessions()
-    fetchPatients()
-    if (patientId) {
-      fetchPatient(patientId)
-      setSelectedPatientForUpload(patientId)
+    console.log('useEffect triggered with patientId:', patientId)
+    
+    const loadData = async () => {
+      try {
+        await Promise.all([
+          fetchSessions(),
+          fetchPatients()
+        ])
+        
+        if (patientId) {
+          console.log('Fetching patient for ID:', patientId)
+          await fetchPatient(patientId)
+          setSelectedPatientForUpload(patientId)
+        }
+      } finally {
+        setLoading(false)
+      }
     }
+    
+    loadData()
   }, [session, status, router, patientId])
-
   const fetchSessions = async () => {
     try {
       const url = patientId ? `/api/sessions?patientId=${patientId}` : "/api/sessions"
@@ -139,8 +151,6 @@ function SessionsPageContent() {
       }
     } catch (error) {
       console.error("Error fetching sessions:", error)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -163,18 +173,21 @@ function SessionsPageContent() {
         setPatient(data)
       } else {
         console.error('Failed to fetch patient:', response.status, response.statusText)
-      }
-    } catch (error) {
+      }    } catch (error) {
       console.error("Error fetching patient:", error)
     }
   }
+
   const fetchPatients = async () => {
     try {
+      console.log('Fetching patients...')
       const response = await fetch("/api/patients")
       if (response.ok) {
         const data = await response.json()
+        console.log('Patients response:', data)
         // API returns { patients: [...] }, so we need data.patients
         const patientsArray = data.patients || []
+        console.log('Patients array:', patientsArray)
         setPatients(Array.isArray(patientsArray) ? patientsArray : [])
       } else {
         console.error("Failed to fetch patients:", response.statusText)
@@ -586,11 +599,25 @@ function SessionsPageContent() {
         )}        <div>
           <h1 className="text-3xl font-bold">
             {(() => {
-              if (patient) {
+              // Se stiamo ancora caricando, mostra solo "Sessioni"
+              if (loading) {
+                return "Sessioni"
+              }
+              
+              console.log('Title render debug:', { 
+                patient, 
+                patientId, 
+                patientsLength: patients.length,
+                patients: patients.map(p => ({ id: p.id, initials: p.initials })),
+                loading
+              })
+              
+              if (patient && patient.initials) {
                 return `Sessioni - ${patient.initials}`
               } else if (patientId && patients.length > 0) {
                 const foundPatient = patients.find(p => p.id === patientId)
-                return foundPatient ? `Sessioni - ${foundPatient.initials}` : "Sessioni"
+                console.log('Found patient:', foundPatient)
+                return foundPatient && foundPatient.initials ? `Sessioni - ${foundPatient.initials}` : "Sessioni"
               } else {
                 return "Sessioni"
               }
