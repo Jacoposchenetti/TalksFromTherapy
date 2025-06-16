@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp } from "lucide-react"
 import { DocumentParser } from "@/lib/document-parser"
 import { NotificationManager } from "@/lib/notification-manager"
@@ -94,8 +95,7 @@ function SessionsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const patientId = searchParams.get("patientId")
-  
-  const [sessions, setSessions] = useState<Session[]>([])
+    const [sessions, setSessions] = useState<Session[]>([])
   const [patient, setPatient] = useState<Patient | null>(null)
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
@@ -103,6 +103,8 @@ function SessionsPageContent() {
   const [uploadingText, setUploadingText] = useState(false)
   const [selectedPatientForUpload, setSelectedPatientForUpload] = useState<string>("")
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState<string>("")
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean
     sessionId: string
@@ -472,30 +474,70 @@ function SessionsPageContent() {
     })
   }
 
-  const handleDeleteConfirm = async () => {
+  const handleTitleClick = (sessionId: string, currentTitle: string) => {
+    setEditingSessionId(sessionId)
+    setEditingTitle(currentTitle)
+  }
+
+  const handleTitleSubmit = async (sessionId: string) => {
+    if (!editingTitle.trim()) {
+      NotificationManager.showWarning("Il titolo non può essere vuoto")
+      handleTitleCancel()
+      return
+    }
+
     try {
-      const response = await fetch(`/api/sessions/${deleteModal.sessionId}`, {
-        method: "DELETE",
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: editingTitle.trim()
+        }),
       })
 
-      if (response.ok) {
-        // Ricarica le sessioni per rimuovere quella eliminata
-        fetchSessions()
-        NotificationManager.showSuccess("Sessione eliminata con successo!")
-      } else {
+      if (!response.ok) {
         const error = await response.json()
-        console.error("Errore eliminazione sessione:", error)
-        NotificationManager.showError("Errore durante l'eliminazione della sessione: " + (error.error || "Errore sconosciuto"))
+        throw new Error(error.error || "Errore durante l'aggiornamento")
       }
+
+      const updatedSession = await response.json()
+
+      // Aggiorna la sessione nella lista
+      setSessions(prevSessions =>
+        prevSessions.map(session =>
+          session.id === sessionId
+            ? { ...session, title: updatedSession.title }
+            : session
+        )
+      )
+
+      setEditingSessionId(null)
+      setEditingTitle("")
+      NotificationManager.showSuccess("Titolo aggiornato con successo")
     } catch (error) {
-      console.error("Errore eliminazione sessione:", error)
-      NotificationManager.showError("Errore durante l'eliminazione della sessione")
-    } finally {
-      setDeleteModal({
-        isOpen: false,
-        sessionId: '',
-        sessionName: ''
-      })
+      console.error("Errore aggiornamento titolo:", error)
+      if (error instanceof Error) {
+        NotificationManager.showError("Errore durante l'aggiornamento del titolo: " + error.message)
+      } else {
+        NotificationManager.showError("Errore durante l'aggiornamento del titolo")
+      }
+    }
+  }
+
+  const handleTitleCancel = () => {
+    setEditingSessionId(null)
+    setEditingTitle("")
+  }
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent, sessionId: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleTitleSubmit(sessionId)
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      handleTitleCancel()
     }
   }
 
@@ -505,6 +547,11 @@ function SessionsPageContent() {
       sessionId: '',
       sessionName: ''
     })
+  }
+
+  const handleDeleteConfirm = async () => {
+    await handleDeleteSession(deleteModal.sessionId, deleteModal.sessionName)
+    handleDeleteCancel()
   }
 
   if (status === "loading" || loading) {
@@ -652,9 +699,43 @@ function SessionsPageContent() {
             <Card key={session.id} className="hover:shadow-md transition-shadow w-full overflow-hidden">
               <CardHeader>
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <CardTitle className="flex items-center gap-2 flex-wrap">
-                      <span className="truncate">{session.title}</span>
+                  <div className="flex-1 min-w-0">                    <CardTitle className="flex items-center gap-2 flex-wrap">
+                      {editingSessionId === session.id ? (
+                        <div className="flex items-center gap-2 flex-1">
+                          <Input
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onKeyDown={(e) => handleTitleKeyDown(e, session.id)}
+                            onBlur={() => handleTitleSubmit(session.id)}
+                            className="text-lg font-semibold"
+                            autoFocus
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleTitleSubmit(session.id)}
+                            className="text-green-600 hover:text-green-700"
+                          >
+                            ✓
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={handleTitleCancel}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            ✕
+                          </Button>
+                        </div>
+                      ) : (
+                        <span 
+                          className="truncate cursor-pointer hover:text-blue-600 transition-colors"
+                          onClick={() => handleTitleClick(session.id, session.title)}
+                          title="Clicca per modificare il titolo"
+                        >
+                          {session.title}
+                        </span>
+                      )}
                       {getStatusBadge(session.status)}
                     </CardTitle>
                     <CardDescription className="flex items-center gap-4 mt-2 flex-wrap">
