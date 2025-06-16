@@ -116,11 +116,9 @@ function SessionsPageContent() {
 
   useEffect(() => {
     if (status === "loading") return
-    if (!session) {
-      router.push("/login")
+    if (!session) {      router.push("/login")
       return
     }
-    console.log('useEffect triggered with patientId:', patientId)
     
     const loadData = async () => {
       try {
@@ -128,9 +126,7 @@ function SessionsPageContent() {
           fetchSessions(),
           fetchPatients()
         ])
-        
-        if (patientId) {
-          console.log('Fetching patient for ID:', patientId)
+          if (patientId) {
           await fetchPatient(patientId)
           setSelectedPatientForUpload(patientId)
         }
@@ -160,16 +156,14 @@ function SessionsPageContent() {
     } else if (selectedPatientForUpload) {
       return sessions.filter(session => session.patient.id === selectedPatientForUpload)
     } else {
-      return sessions
-    }
+      return sessions    }
   }
+
   const fetchPatient = async (id: string) => {
     try {
-      console.log(`Fetching patient with ID: ${id}`)
       const response = await fetch(`/api/patients/${id}`)
       if (response.ok) {
         const data = await response.json()
-        console.log('Patient data received:', data)
         setPatient(data)
       } else {
         console.error('Failed to fetch patient:', response.status, response.statusText)
@@ -182,12 +176,9 @@ function SessionsPageContent() {
     try {
       console.log('Fetching patients...')
       const response = await fetch("/api/patients")
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Patients response:', data)
+      if (response.ok) {        const data = await response.json()
         // API returns { patients: [...] }, so we need data.patients
         const patientsArray = data.patients || []
-        console.log('Patients array:', patientsArray)
         setPatients(Array.isArray(patientsArray) ? patientsArray : [])
       } else {
         console.error("Failed to fetch patients:", response.statusText)
@@ -442,10 +433,7 @@ function SessionsPageContent() {
       })
 
       if (response.ok) {
-        const result = await response.json()
-        console.log("Trascrizione risultato:", result)
-        
-        // Ricarica le sessioni per vedere lo stato aggiornato
+        const result = await response.json()        // Ricarica le sessioni per vedere lo stato aggiornato
         fetchSessions()
         
         // Se la trascrizione è completata immediatamente, mostra un messaggio
@@ -598,25 +586,15 @@ function SessionsPageContent() {
           </Button>
         )}        <div>
           <h1 className="text-3xl font-bold">
-            {(() => {
-              // Se stiamo ancora caricando, mostra solo "Sessioni"
+            {(() => {              // Se stiamo ancora caricando, mostra solo "Sessioni"
               if (loading) {
                 return "Sessioni"
               }
-              
-              console.log('Title render debug:', { 
-                patient, 
-                patientId, 
-                patientsLength: patients.length,
-                patients: patients.map(p => ({ id: p.id, initials: p.initials })),
-                loading
-              })
               
               if (patient && patient.initials) {
                 return `Sessioni - ${patient.initials}`
               } else if (patientId && patients.length > 0) {
                 const foundPatient = patients.find(p => p.id === patientId)
-                console.log('Found patient:', foundPatient)
                 return foundPatient && foundPatient.initials ? `Sessioni - ${foundPatient.initials}` : "Sessioni"
               } else {
                 return "Sessioni"
@@ -738,11 +716,10 @@ function SessionsPageContent() {
                 }
               </p>
             </CardContent>
-          </Card>
-        ) : (          getFilteredSessions().map((session) => (
-            <Card key={session.id} className="hover:shadow-md transition-shadow w-full overflow-hidden">
-              <CardHeader>
-                <div className="flex items-start justify-between gap-4">
+          </Card>        ) : (          getFilteredSessions().map((session) => (
+            <Card key={session.id} className="hover:shadow-md transition-shadow w-full overflow-visible">
+              <CardHeader className="overflow-visible">
+                <div className="flex items-start justify-between gap-4 overflow-visible">
                   <div className="flex-1 min-w-0">                    <CardTitle className="flex items-center gap-2 flex-wrap">
                       {editingSessionId === session.id ? (
                         <div className="flex items-center gap-2 flex-1">
@@ -804,9 +781,23 @@ function SessionsPageContent() {
                           <FileText className="h-4 w-4" />
                           {formatDocumentMetadata(session.documentMetadata)}
                         </span>
-                      )}
-                    </CardDescription>
-                  </div>                  <div className="flex gap-2 flex-wrap flex-shrink-0">{session.audioUrl && (
+                      )}                    </CardDescription>
+                  </div>
+                  
+                  {/* Pulsante Delete in posizione prominente */}
+                  <div className="flex-shrink-0">
+                    <Button 
+                      variant="destructive" 
+                      size="sm"
+                      onClick={() => handleDeleteClick(session.id, session.title)}
+                      className="bg-red-600 hover:bg-red-700 text-white border-red-600"
+                      title="Elimina sessione"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="flex gap-2 flex-wrap items-center justify-end min-w-0 overflow-visible">{session.audioUrl && (
                       <Button variant="outline" size="sm">
                         <Play className="h-4 w-4 mr-1" />
                         Audio
@@ -851,15 +842,7 @@ function SessionsPageContent() {
                       <Button variant="outline" size="sm">
                         <BarChart3 className="h-4 w-4 mr-1" />
                         Analisi
-                      </Button>
-                    )}                    <Button 
-                      variant="destructive" 
-                      size="sm"
-                      onClick={() => handleDeleteClick(session.id, session.title)}
-                    >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Elimina
-                    </Button>
+                      </Button>                    )}
                   </div>
                 </div>
               </CardHeader>              {session.transcript && (
