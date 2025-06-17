@@ -131,22 +131,45 @@ export async function PATCH(
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    const sessionId = params.id
+    }    const sessionId = params.id
     const body = await request.json()
-    const { title } = body
+    const { title, transcript } = body
 
-    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+    // Validate input - either title or transcript (or both) should be provided
+    if (!title && !transcript) {
       return NextResponse.json({ 
-        error: "Title is required and must be a non-empty string" 
+        error: "Either title or transcript must be provided" 
       }, { status: 400 })
     }
 
-    if (title.trim().length > 255) {
-      return NextResponse.json({ 
-        error: "Title must be less than 255 characters" 
-      }, { status: 400 })
+    // Validate title if provided
+    if (title !== undefined) {
+      if (typeof title !== 'string' || title.trim().length === 0) {
+        return NextResponse.json({ 
+          error: "Title must be a non-empty string" 
+        }, { status: 400 })
+      }
+
+      if (title.trim().length > 255) {
+        return NextResponse.json({ 
+          error: "Title must be less than 255 characters" 
+        }, { status: 400 })
+      }
+    }
+
+    // Validate transcript if provided
+    if (transcript !== undefined) {
+      if (typeof transcript !== 'string') {
+        return NextResponse.json({ 
+          error: "Transcript must be a string" 
+        }, { status: 400 })
+      }
+
+      if (transcript.trim().length === 0) {
+        return NextResponse.json({ 
+          error: "Transcript cannot be empty" 
+        }, { status: 400 })
+      }
     }
 
     // Verify session exists and user owns it
@@ -160,15 +183,20 @@ export async function PATCH(
 
     if (!existingSession) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
+    }    // Update the session with provided fields
+    const updateData: any = { updatedAt: new Date() }
+    
+    if (title !== undefined) {
+      updateData.title = title.trim()
+    }
+    
+    if (transcript !== undefined) {
+      updateData.transcript = transcript.trim()
     }
 
-    // Update the session title
     const updatedSession = await prisma.session.update({
       where: { id: sessionId },
-      data: { 
-        title: title.trim(),
-        updatedAt: new Date()
-      },
+      data: updateData,
       include: {
         patient: {
           select: {
