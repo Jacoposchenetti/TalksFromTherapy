@@ -114,6 +114,9 @@ function SessionsPageContent() {
     sessionName: ''
   })
   const [exportMenuOpen, setExportMenuOpen] = useState<string | null>(null) // sessionId or null
+  const [editingTranscriptId, setEditingTranscriptId] = useState<string | null>(null) // sessionId being edited
+  const [editingTranscriptText, setEditingTranscriptText] = useState<string>("")
+  const [savingTranscript, setSavingTranscript] = useState(false)
 
   useEffect(() => {
     if (status === "loading") return
@@ -658,6 +661,124 @@ function SessionsPageContent() {
     handleDeleteCancel()
   }
 
+  const handleTranscriptEdit = (sessionId: string, currentText: string) => {
+    setEditingTranscriptId(sessionId)
+    setEditingTranscriptText(currentText)
+  }
+
+  const handleTranscriptSave = async (sessionId: string) => {
+    if (savingTranscript) return
+
+    setSavingTranscript(true)
+
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          transcript: editingTranscriptText.trim(),
+          status: "TRANSCRIBED"
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Errore durante il salvataggio della trascrizione")
+      }
+
+      // Aggiorna la sessione nella lista
+      setSessions(prevSessions =>
+        prevSessions.map(session =>
+          session.id === sessionId
+            ? { ...session, transcript: editingTranscriptText.trim(), status: "TRANSCRIBED" }
+            : session
+        )
+      )
+
+      setEditingTranscriptId(null)
+      setEditingTranscriptText("")
+      NotificationManager.showSuccess("Trascrizione salvata con successo")
+    } catch (error) {
+      console.error("Errore salvataggio trascrizione:", error)
+      if (error instanceof Error) {
+        NotificationManager.showError("Errore durante il salvataggio della trascrizione: " + error.message)
+      } else {
+        NotificationManager.showError("Errore durante il salvataggio della trascrizione")
+      }
+    } finally {
+      setSavingTranscript(false)
+    }
+  }
+
+  // Funzioni per editing trascrizione
+  const handleTranscriptClick = (sessionId: string, currentTranscript: string) => {
+    setEditingTranscriptId(sessionId)
+    setEditingTranscriptText(currentTranscript)
+  }
+
+  const handleTranscriptSubmit = async (sessionId: string) => {
+    if (!editingTranscriptText.trim()) {
+      NotificationManager.showWarning("La trascrizione non può essere vuota")
+      handleTranscriptCancel()
+      return
+    }
+
+    setSavingTranscript(true)
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          transcript: editingTranscriptText.trim(),
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Errore durante l'aggiornamento della trascrizione")
+      }
+
+      // Aggiorna la sessione locale
+      setSessions(prevSessions =>
+        prevSessions.map(session =>
+          session.id === sessionId
+            ? { ...session, transcript: editingTranscriptText.trim() }
+            : session
+        )
+      )
+
+      setEditingTranscriptId(null)
+      setEditingTranscriptText("")
+      NotificationManager.showSuccess("Trascrizione aggiornata con successo")
+    } catch (error) {
+      console.error("Errore aggiornamento trascrizione:", error)
+      if (error instanceof Error) {
+        NotificationManager.showError("Errore durante l'aggiornamento della trascrizione: " + error.message)
+      } else {
+        NotificationManager.showError("Errore durante l'aggiornamento della trascrizione")
+      }
+    } finally {
+      setSavingTranscript(false)
+    }
+  }
+
+  const handleTranscriptCancel = () => {
+    setEditingTranscriptId(null)
+    setEditingTranscriptText("")
+  }
+
+  const handleTranscriptKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      handleTranscriptCancel()
+    }
+    // Non gestiamo Enter qui perché vogliamo permettere newline nel testo
+  }
+
   if (status === "loading" || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -1019,14 +1140,64 @@ function SessionsPageContent() {
                 <CardContent className="pt-0">
                   <div className="bg-muted p-4 rounded-lg w-full overflow-hidden">
                     <div className="relative w-full">
-                      <p className={`text-sm whitespace-pre-wrap break-words w-full ${
-                        expandedSessions.has(session.id) ? '' : 'line-clamp-3'
-                      }`}>
-                        {session.transcript}
-                      </p>
-                      {session.transcript.length > 200 && (
+                      {editingTranscriptId === session.id ? (
+                        // Modalità editing
+                        <div className="w-full">
+                          <textarea
+                            value={editingTranscriptText}
+                            onChange={(e) => setEditingTranscriptText(e.target.value)}
+                            onKeyDown={handleTranscriptKeyDown}
+                            className="w-full min-h-[200px] p-3 text-sm border border-gray-300 rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Modifica la trascrizione..."
+                            autoFocus
+                          />
+                          <div className="flex justify-end gap-2 mt-3">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleTranscriptCancel}
+                              disabled={savingTranscript}
+                            >
+                              Annulla
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleTranscriptSubmit(session.id)}
+                              disabled={savingTranscript || !editingTranscriptText.trim()}
+                            >
+                              {savingTranscript ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                  Salvando...
+                                </>
+                              ) : (
+                                "Salva"
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        // Modalità visualizzazione
+                        <div 
+                          className="cursor-pointer hover:bg-gray-50 rounded p-2 -m-2 transition-colors group"                          onClick={() => handleTranscriptClick(session.id, session.transcript || "")}
+                          title="Clicca per modificare la trascrizione"
+                        >
+                          <p className={`text-sm whitespace-pre-wrap break-words w-full ${
+                            expandedSessions.has(session.id) ? '' : 'line-clamp-3'
+                          }`}>
+                            {session.transcript}
+                          </p>
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity mt-2">
+                            <span className="text-xs text-gray-500 italic">✏️ Clicca per modificare</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {session.transcript.length > 200 && editingTranscriptId !== session.id && (
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation() // Previene il trigger dell'editing
                             const newExpanded = new Set(expandedSessions)
                             if (expandedSessions.has(session.id)) {
                               newExpanded.delete(session.id)
