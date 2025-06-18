@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "python-service": "cd python-service && start.bat",
+    "dev-full": "concurrently \"npm run dev\" \"npm run python-service\""
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
@@ -39,6 +41,7 @@
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "concurrently": "^9.1.2",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.18",
     "eslint-config-prettier": "^10.1.5",
