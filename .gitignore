@@ -63,4 +63,4 @@ prisma/.env
 /src/generated/prisma
 
 # virtual environments
-python-service/venv
+/python-service/venv
