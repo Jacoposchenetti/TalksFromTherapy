@@ -64,3 +64,6 @@ prisma/.env
 
 # virtual environments
 /python-service/venv
+*.dll
+*.lib
+__pycache__/
