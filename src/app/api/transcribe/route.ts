@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log(`🔍 Ricerca sessione con ID: ${sessionId}`)
+    console.log(`👤 User ID: ${session.user.id}`)
+
     // Verifica che la sessione esista e appartenga all'utente
     const sessionRecord = await prisma.session.findFirst({
       where: {
@@ -38,18 +41,34 @@ export async function POST(request: NextRequest) {
     })
 
     if (!sessionRecord) {
+      console.log(`❌ Sessione non trovata`)
       return NextResponse.json(
         { error: "Sessione non trovata" },
         { status: 404 }
       )
     }
 
+    console.log(`✅ Sessione trovata:`, {
+      id: sessionRecord.id,
+      title: sessionRecord.title,
+      status: sessionRecord.status,
+      audioFileName: sessionRecord.audioFileName,
+      userId: sessionRecord.userId
+    })
+
     if (sessionRecord.status !== "UPLOADED") {
+      console.log(`⚠️ Stato sessione attuale: "${sessionRecord.status}" (expected: "UPLOADED")`)
       return NextResponse.json(
-        { error: "La sessione deve essere in stato UPLOADED per avviare la trascrizione" },
+        { 
+          error: `La sessione deve essere in stato UPLOADED per avviare la trascrizione. Stato attuale: ${sessionRecord.status}`,
+          currentStatus: sessionRecord.status,
+          sessionId: sessionRecord.id
+        },
         { status: 400 }
       )
-    }    if (!sessionRecord.audioFileName) {
+    }
+
+    if (!sessionRecord.audioFileName) {
       return NextResponse.json(
         { error: "Nessun file audio trovato per questa sessione" },
         { status: 400 }
@@ -57,8 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Aggiorna lo stato a TRANSCRIBING
-    await prisma.session.update({
-      where: { id: sessionId },
+    await prisma.session.update({      where: { id: sessionId },
       data: { 
         status: "TRANSCRIBING",
         updatedAt: new Date()
@@ -69,10 +87,29 @@ export async function POST(request: NextRequest) {
       // Costruisce il percorso completo del file audio
       const audioFilePath = join(process.cwd(), "uploads", "audio", sessionRecord.audioFileName)
       
-      console.log(`Avvio trascrizione per file: ${audioFilePath}`)
+      console.log(`🚀 Avvio trascrizione REALE per file: ${audioFilePath}`)
+      
+      // Verifica che il file esista
+      const fs = require('fs')
+      if (!fs.existsSync(audioFilePath)) {
+        throw new Error(`File audio non trovato: ${audioFilePath}`)
+      }
+      
+      // Ottieni informazioni sul file
+      const fileStats = fs.statSync(audioFilePath)
+      console.log(`📁 Dimensione file: ${fileStats.size} bytes (${(fileStats.size / 1024 / 1024).toFixed(2)} MB)`)
       
       // Utilizza OpenAI Whisper per la trascrizione reale
       const transcript = await transcribeAudio(audioFilePath)
+      
+      console.log(`📝 Trascrizione ricevuta: "${transcript}"`)
+      console.log(`📏 Lunghezza trascrizione: ${transcript.length} caratteri`)
+      
+      // Verifica se la trascrizione sembra valida
+      if (transcript.length < 10 || transcript.includes("Sottotitoli e revisione a cura di")) {
+        console.warn(`⚠️ Trascrizione sospetta: "${transcript}"`)
+        console.warn(`💡 Potrebbe essere un watermark, file vuoto o audio di bassa qualità`)
+      }
       
       // Aggiorna la sessione con la trascrizione completata
       await prisma.session.update({
@@ -84,17 +121,19 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      console.log(`Trascrizione completata per sessione ${sessionId}`)
+      console.log(`✅ Trascrizione REALE completata per sessione ${sessionId}`)
 
       return NextResponse.json({
         message: "Trascrizione completata con successo",
         sessionId,
         status: "TRANSCRIBED",
-        transcript: transcript
+        transcript: transcript,
+        fileSize: fileStats.size,
+        filePath: audioFilePath
       })
 
     } catch (error) {
-      console.error("Errore durante la trascrizione:", error)
+      console.error("❌ Errore durante la trascrizione:", error)
       
       // In caso di errore, aggiorna lo stato a ERROR
       await prisma.session.update({
@@ -113,7 +152,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error("Errore durante l'avvio trascrizione:", error)
+    console.error("❌ Errore durante l'avvio trascrizione:", error)
     return NextResponse.json(
       { error: "Errore interno del server" },
       { status: 500 }

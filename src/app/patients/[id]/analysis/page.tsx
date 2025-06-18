@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit } from "lucide-react"
+import TopicAnalysisComponent from "@/components/analysis/topic-analysis"
 
 interface Session {
   id: string
@@ -36,16 +37,15 @@ export default function PatientAnalysisPage() {
   const router = useRouter()
   const params = useParams()
   const patientId = params.id as string
-    const [patient, setPatient] = useState<Patient | null>(null)
+  
+  const [patient, setPatient] = useState<Patient | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
   const [selectedSession, setSelectedSession] = useState<Session | null>(null)
-  const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [editingNote, setEditingNote] = useState(false)
-  const [selectAll, setSelectAll] = useState(false)
 
   useEffect(() => {
     if (status === "loading") return
@@ -165,36 +165,10 @@ export default function PatientAnalysisPage() {
     } finally {
       setSavingNote(false)
     }  }
-
-  // Handle select all checkbox
-  const handleSelectAllChange = (checked: boolean) => {
-    setSelectAll(checked)
-    if (checked) {
-      // Select all sessions
-      const allSessionIds = new Set(sessions.map(s => s.id))
-      setSelectedSessions(allSessionIds)
-    } else {
-      // Deselect all sessions
-      setSelectedSessions(new Set())
-    }
-  }
-
-  // Handle individual session selection
+  // Handle session selection
   const handleSessionSelect = (session: Session) => {
     setSelectedSession(session)
     fetchSessionNote(session.id)
-    
-    // Toggle this session in the selected sessions set
-    const newSelectedSessions = new Set(selectedSessions)
-    if (newSelectedSessions.has(session.id)) {
-      newSelectedSessions.delete(session.id)
-    } else {
-      newSelectedSessions.add(session.id)
-    }
-    setSelectedSessions(newSelectedSessions)
-    
-    // Update select all checkbox state
-    setSelectAll(newSelectedSessions.size === sessions.length)
   }
 
   if (loading) {
@@ -286,18 +260,8 @@ export default function PatientAnalysisPage() {
                     <FileText className="h-5 w-5" />
                     Sessioni e Trascrizioni
                   </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">                  <div className="space-y-1">
-                    <div className="p-4 border-b bg-gray-50">                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={selectAll}
-                          onChange={(e) => handleSelectAllChange(e.target.checked)}
-                          className="rounded w-4 h-4" 
-                        />
-                        <span className="text-sm font-medium">Selezione tutto</span>
-                      </label>
-                    </div>
+                </CardHeader>                <CardContent className="p-0">
+                  <div className="space-y-1">
                     {sessions.map((session, index) => (
                       <div key={session.id} className="border-b last:border-b-0">
                         <button
@@ -305,23 +269,15 @@ export default function PatientAnalysisPage() {
                           className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${
                             selectedSession?.id === session.id ? "bg-blue-50 border-r-2 border-blue-500" : ""
                           }`}
-                        >                          <div className="flex items-center space-x-2">                            <input 
-                              type="checkbox" 
-                              checked={selectedSessions.has(session.id)}
-                              onChange={(e) => {
-                                e.stopPropagation()
-                                handleSessionSelect(session)
-                              }}
-                              className="rounded w-4 h-4" 
-                            />
-                            <div>
-                              <div className="font-medium text-sm">
-                                {session.title}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {new Date(session.createdAt).toLocaleDateString('it-IT')}
-                              </div>
-                            </div>
+                        >
+                          <div className="font-medium text-sm">
+                            {session.title}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(session.createdAt).toLocaleDateString('it-IT')}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            Status: {session.status}
                           </div>
                         </button>
                       </div>
@@ -333,59 +289,41 @@ export default function PatientAnalysisPage() {
 
             {/* Main Analysis Area */}
             <div className="col-span-9">
-              <div className="grid grid-cols-2 gap-6 h-full">
-                {/* Top Left - Transcription */}                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">
-                      Trascrizione - {selectedSessions.size > 1 ? `${selectedSessions.size} Sessioni` : 
-                                    selectedSession ? `Sessione ${sessions.findIndex(s => s.id === selectedSession.id) + 1}` : 
-                                    'Nessuna Sessione'}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {selectedSessions.size > 0 ? (
-                      <div className="h-48 overflow-y-auto bg-gray-50 p-4 rounded text-sm space-y-4">
-                        {sessions
-                          .filter(session => selectedSessions.has(session.id))
-                          .map((session, index) => (
-                            <div key={session.id} className="border-b pb-3 last:border-b-0">
-                              <div className="font-semibold text-blue-600 mb-2">
-                                {session.title} - {new Date(session.createdAt).toLocaleDateString('it-IT')}
-                              </div>                              <div className="text-gray-700">
-                                {session.transcript || (
-                                  <span className="text-gray-400 italic">
-                                    Trascrizione non disponibile (Status: {session.status})
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    ) : (
-                      <div className="h-48 flex items-center justify-center text-gray-500">
-                        Seleziona una o più sessioni per visualizzare le trascrizioni
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Top Right - Topic Modelling */}
+              <div className="grid grid-cols-2 gap-6 h-full">                {/* Top Left - Transcription */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-sm">
-                      Topic Modelling - Sessione {selectedSession ? sessions.findIndex(s => s.id === selectedSession.id) + 1 : 1}
+                      Trascrizione - {selectedSession ? 
+                        `${selectedSession.title}` : 
+                        'Nessuna Sessione Selezionata'}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-48 flex items-center justify-center text-gray-400">
-                      <div className="text-center">
-                        <BarChart3 className="h-8 w-8 mx-auto mb-2" />
-                        <p className="text-sm">Info grafica</p>
-                        <p className="text-xs">Topic Modelling verrà implementato</p>
+                    {selectedSession ? (
+                      <div className="h-48 overflow-y-auto bg-gray-50 p-4 rounded text-sm">
+                        {selectedSession.transcript || (
+                          <span className="text-gray-400 italic">
+                            Trascrizione non disponibile (Status: {selectedSession.status})
+                          </span>
+                        )}
                       </div>
-                    </div>
+                    ) : (
+                      <div className="h-48 flex items-center justify-center text-gray-500">
+                        Seleziona una sessione per visualizzare la trascrizione
+                      </div>
+                    )}
                   </CardContent>
-                </Card>
+                </Card>{/* Top Right - Topic Analysis */}
+                <TopicAnalysisComponent 
+                  selectedSession={selectedSession ? {
+                    id: selectedSession.id,
+                    title: selectedSession.title,
+                    transcript: selectedSession.transcript || ""
+                  } : null}
+                  onAnalysisComplete={(result) => {
+                    console.log('Topic analysis completed:', result)
+                  }}
+                />
 
                 {/* Bottom Left - Sentiment Analysis */}
                 <Card>
