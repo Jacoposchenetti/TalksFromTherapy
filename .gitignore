@@ -62,8 +62,41 @@ prisma/.env
 
 /src/generated/prisma
 
-# virtual environments
-/python-service/venv
+# Python virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+/python-service/venv/
+/python-service/env/
+/python-service/.venv/
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 *.dll
 *.lib
-__pycache__/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
