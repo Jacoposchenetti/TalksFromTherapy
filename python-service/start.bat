@@ -1,7 +1,7 @@
 @echo off
-REM Startup script for BERTopic Python service on Windows
+REM Startup script for Topic Analysis Python service on Windows
 
-echo 🐍 Starting BERTopic Analysis Service...
+echo 🐍 Starting Topic Analysis Service (TF-IDF + NMF)...
 
 REM Check if Python is available
 python --version >nul 2>&1
@@ -28,9 +28,9 @@ REM Install requirements
 echo 📥 Installing requirements...
 pip install -r requirements.txt
 
-REM Start the service
-echo 🚀 Starting BERTopic service on http://localhost:8000
-echo 📊 Service will be available for topic modeling analysis
+# Start the service
+echo 🚀 Starting Topic Analysis service on http://localhost:8001
+echo 📊 Service will be available for single-document analysis
 echo ⏹️  Press Ctrl+C to stop the service
 echo.
 

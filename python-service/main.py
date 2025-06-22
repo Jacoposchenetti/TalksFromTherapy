@@ -61,26 +61,10 @@ class DocumentAnalysisService:
             # Altri
             'tutto', 'tutti', 'tutta', 'tutte', 'altro', 'altri', 'altra', 'altre', 'ogni', 'alcuni', 'alcune', 'qualche',
             'stesso', 'stessa', 'stessi', 'stesse', 'proprio', 'propria', 'propri', 'proprie', 'tale', 'tali',
-            'così', 'abbastanza', 'proprio', 'davvero', 'veramente', 'davvero'        ]
+            'così', 'abbastanza', 'proprio', 'davvero', 'veramente', 'davvero'
+        ]
     
-        # Normalizza le keywords
-        normalized_keywords = [kw.lower().strip() for kw in keywords]
-        
-        # Cerca match con le categorie
-        for category_words, theme_name in theme_mappings.items():
-            # Conta quante keywords matchano con questa categoria
-            matches = sum(1 for kw in normalized_keywords if kw in category_words)
-            if matches >= 1:  # Se almeno 1 keyword matcha
-                return theme_name
-        
-        # Se non trova match, crea nome dalle prime 2 parole più significative
-        if len(keywords) >= 2:
-            return f"{keywords[0].title()} e {keywords[1].title()}"
-        elif len(keywords) == 1:
-            return f"Tema: {keywords[0].title()}"
-        else:
-            return "Contenuto Generale"
-      def extract_keywords_tfidf(self, text, max_features=15):
+    def extract_keywords_tfidf(self, text, max_features=15):
         try:
             # Pre-processamento del testo
             words = text.lower().split()
@@ -110,7 +94,8 @@ class DocumentAnalysisService:
             ]
             
             return sorted(keywords_with_scores, key=lambda x: x['score'], reverse=True)
-              except Exception as e:
+            
+        except Exception as e:
             print(f"Error in keyword extraction: {e}")
             return [{"keyword": "analisi", "score": 0.5}]
     
@@ -157,7 +142,9 @@ class DocumentAnalysisService:
                     word = feature_names[i]
                     weight = topic[i]
                     if weight > 0.1:  # Solo parole con peso significativo
-                        top_words.append(word)                if len(top_words) > 0:
+                        top_words.append(word)
+                
+                if len(top_words) > 0:
                     topics.append({
                         "theme": f"Tema {topic_idx + 1}",
                         "keywords": top_words[:5],  # Massimo 5 parole per tema
