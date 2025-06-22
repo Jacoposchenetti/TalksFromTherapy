@@ -71,7 +71,7 @@ ENV/
 /python-service/venv/
 /python-service/env/
 /python-service/.venv/
-
+\.env.local
 # Python compiled files
 __pycache__/
 *.py[cod]

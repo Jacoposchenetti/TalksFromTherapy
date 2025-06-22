@@ -1,6 +1,0 @@
-{
-  "texts": ["Questo è un testo di esempio per testare il topic modeling. Il paziente parla di ansia e stress lavorativo."],
-  "session_ids": ["test_session_1"],
-  "min_topic_size": 2,
-  "language": "italian"
-}
