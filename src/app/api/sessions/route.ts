@@ -17,9 +17,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!user) {      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    const { searchParams } = new URL(request.url)
+    }    const { searchParams } = new URL(request.url)
     const patientId = searchParams.get("patientId")
 
     const whereClause = {
@@ -30,7 +28,22 @@ export async function GET(request: NextRequest) {
 
     const sessions = await prisma.session.findMany({
       where: whereClause,
-      include: {
+      select: {
+        id: true,
+        userId: true,
+        patientId: true,
+        title: true,
+        audioUrl: true,
+        audioFileName: true,
+        audioFileSize: true,
+        transcript: true,
+        sessionDate: true,
+        duration: true,
+        status: true,        errorMessage: true,
+        documentMetadata: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
         patient: {
           select: {
             id: true,
@@ -92,19 +105,32 @@ export async function POST(request: NextRequest) {
 
       if (!patient) {
         return NextResponse.json({ error: "Patient not found" }, { status: 404 })
-      }
-
-      // Create session record with text transcript
+      }      // Create session record with text transcript
       const newSession = await prisma.session.create({
-        data: {          userId: user.id,
+        data: {
+          userId: user.id,
           patientId,
           title,
-          transcript,
-          sessionDate: new Date(),
+          transcript,          sessionDate: new Date(),
           status: status || "TRANSCRIBED",
           documentMetadata: metadata ? JSON.stringify(metadata) : null,
         },
-        include: {
+        select: {
+          id: true,
+          userId: true,
+          patientId: true,
+          title: true,
+          audioUrl: true,
+          audioFileName: true,
+          audioFileSize: true,
+          transcript: true,
+          sessionDate: true,
+          duration: true,          status: true,
+          errorMessage: true,
+          documentMetadata: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
           patient: {
             select: {
               id: true,
@@ -153,9 +179,7 @@ export async function POST(request: NextRequest) {
     
     const fileName = `${Date.now()}-${audioFile.name}`
     const filePath = join(uploadsDir, fileName)
-    await writeFile(filePath, buffer)
-
-    // Create session record
+    await writeFile(filePath, buffer)    // Create session record
     const newSession = await prisma.session.create({
       data: {
         userId: user.id,
@@ -167,7 +191,22 @@ export async function POST(request: NextRequest) {
         sessionDate: new Date(),
         status: "UPLOADED",
       },
-      include: {
+      select: {
+        id: true,
+        userId: true,
+        patientId: true,
+        title: true,
+        audioUrl: true,
+        audioFileName: true,
+        audioFileSize: true,
+        transcript: true,
+        sessionDate: true,
+        duration: true,
+        status: true,        errorMessage: true,
+        documentMetadata: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
         patient: {
           select: {
             id: true,

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp, Download } from "lucide-react"
 import { DocumentParser } from "@/lib/document-parser"
 import { NotificationManager } from "@/lib/notification-manager"
+import { useAudioPlayer } from "@/hooks/useAudioPlayer"
 
 interface Session {
   id: string
@@ -117,6 +118,8 @@ function SessionsPageContent() {
   const [editingTranscriptId, setEditingTranscriptId] = useState<string | null>(null) // sessionId being edited
   const [editingTranscriptText, setEditingTranscriptText] = useState<string>("")
   const [savingTranscript, setSavingTranscript] = useState(false)
+  // Audio player state
+  const { playSession, currentSession, isPlaying } = useAudioPlayer()
 
   useEffect(() => {
     if (status === "loading") return
@@ -998,11 +1001,15 @@ function SessionsPageContent() {
                           {formatDocumentMetadata(session.documentMetadata)}
                         </span>                      )}                    </CardDescription>
                   </div>
-                  
-                  <div className="flex gap-2 flex-wrap items-center justify-end min-w-0 overflow-visible">{session.audioUrl && (
-                      <Button variant="outline" size="sm">
+                    <div className="flex gap-2 flex-wrap items-center justify-end min-w-0 overflow-visible">{session.audioUrl && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => playSession(session)}
+                        className={currentSession?.id === session.id && isPlaying ? "bg-blue-50 border-blue-300 text-blue-700" : ""}
+                      >
                         <Play className="h-4 w-4 mr-1" />
-                        Audio
+                        {currentSession?.id === session.id && isPlaying ? 'Playing' : 'Audio'}
                       </Button>
                     )}
                     {session.status === "UPLOADED" && (
