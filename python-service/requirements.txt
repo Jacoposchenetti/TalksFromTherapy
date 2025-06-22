@@ -13,5 +13,3 @@ umap-learn==0.5.4
 plotly==5.17.0
 python-multipart==0.0.6
 pydantic==2.5.0
-spacy==3.7.2
-textblob==0.17.1

@@ -32,14 +32,14 @@ export async function GET(
         dateOfBirth: true,
         notes: true,
         createdAt: true,
-        updatedAt: true,        sessions: {
+        updatedAt: true,
+        sessions: {
           select: {
             id: true,
             title: true,
             sessionDate: true,
             duration: true,
             status: true,
-            transcript: true,
             createdAt: true
           },
           where: {
@@ -54,7 +54,8 @@ export async function GET(
             sessions: true,
             analyses: true
           }
-        }      }
+        }
+      }
     })
 
     if (!patient) {
@@ -64,23 +65,7 @@ export async function GET(
       )
     }
 
-    // Transform the response to match frontend expectations
-    const transformedPatient = {
-      id: patient.id,
-      name: patient.initials, // Map initials to name for frontend
-      dateOfBirth: patient.dateOfBirth,
-      email: null, // Not stored in current schema
-      phone: null, // Not stored in current schema
-      sessions: patient.sessions.map(session => ({
-        id: session.id,
-        sessionDate: session.sessionDate,
-        transcript: session.transcript,
-        notes: null, // Notes are in separate SessionNote table
-        status: session.status.toLowerCase() // Convert to lowercase for frontend
-      }))
-    }
-
-    return NextResponse.json({ patient: transformedPatient })
+    return NextResponse.json({ patient })
 
   } catch (error) {
     console.error("Errore durante il recupero paziente:", error)

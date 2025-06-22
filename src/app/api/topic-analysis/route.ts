@@ -45,7 +45,7 @@ interface BertopicResponse {
   }
 }
 
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8001'
+const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000'
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,23 +65,31 @@ export async function POST(request: NextRequest) {
         { error: "Nessuna sessione selezionata" },
         { status: 400 }
       )
-    }
-
-    // Fetch sessions and their transcripts
+    }    // Fetch sessions and their transcripts
     const sessions = await prisma.session.findMany({
       where: {
         id: { in: sessionIds },
         userId: session.user.id,
-        transcript: { not: null },
-        status: 'TRANSCRIBED'
+        transcript: { not: null }
+        // Removed status filter to allow any status as long as transcript exists
       },
       select: {
         id: true,
         title: true,
         transcript: true,
+        status: true, // Added status to debug
         createdAt: true
       }
     })
+
+    console.log('🔍 Sessions found:', sessions.length)
+    console.log('📋 Sessions details:', sessions.map(s => ({ 
+      id: s.id, 
+      title: s.title, 
+      status: s.status,
+      hasTranscript: !!s.transcript,
+      transcriptLength: s.transcript?.length || 0
+    })))
 
     if (sessions.length === 0) {
       return NextResponse.json(
