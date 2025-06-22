@@ -4,6 +4,8 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { Navigation } from "@/components/navigation";
 import { ConditionalNavigation } from "@/components/conditional-navigation";
+import { AudioPlayerProvider } from "@/hooks/useAudioPlayer";
+import { AudioPlayer } from "@/components/AudioPlayer";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,12 +21,14 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
-    <html lang="it">
+  return (    <html lang="it">
       <body className={inter.className}>
         <AuthProvider>
-          <ConditionalNavigation />
-          {children}
+          <AudioPlayerProvider>
+            <ConditionalNavigation />
+            {children}
+            <AudioPlayer />
+          </AudioPlayerProvider>
         </AuthProvider>
       </body>
     </html>
