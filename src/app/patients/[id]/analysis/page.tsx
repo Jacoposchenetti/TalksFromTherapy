@@ -37,15 +37,15 @@ export default function PatientAnalysisPage() {
   const router = useRouter()
   const params = useParams()
   const patientId = params.id as string
-  
-  const [patient, setPatient] = useState<Patient | null>(null)
+    const [patient, setPatient] = useState<Patient | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
-  const [selectedSession, setSelectedSession] = useState<Session | null>(null)
+  const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [editingNote, setEditingNote] = useState(false)
+  const [activeSessionForNote, setActiveSessionForNote] = useState<Session | null>(null)
 
   useEffect(() => {
     if (status === "loading") return
@@ -109,10 +109,9 @@ export default function PatientAnalysisPage() {
           return hasTranscription
         }) || []
         */
-        
-        // Auto-select first session if available (using all sessions for now)
+          // Auto-select first session if available (using all sessions for now)
         if (sessionsData && sessionsData.length > 0) {
-          setSelectedSession(sessionsData[0])
+          setActiveSessionForNote(sessionsData[0])
           fetchSessionNote(sessionsData[0].id)
         }
       } else {
@@ -139,13 +138,12 @@ export default function PatientAnalysisPage() {
       setNote("")
     }
   }
-
   const handleSaveNote = async () => {
-    if (!selectedSession) return
+    if (!activeSessionForNote) return
     
     setSavingNote(true)
     try {
-      const response = await fetch(`/api/sessions/${selectedSession.id}/note`, {
+      const response = await fetch(`/api/sessions/${activeSessionForNote.id}/note`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -158,17 +156,52 @@ export default function PatientAnalysisPage() {
         alert("Nota salvata con successo!")
       } else {
         alert("Errore durante il salvataggio della nota")
-      }
-    } catch (error) {
+      }    } catch (error) {
       console.error("Error saving note:", error)
       alert("Errore durante il salvataggio della nota")
     } finally {
       setSavingNote(false)
-    }  }
-  // Handle session selection
-  const handleSessionSelect = (session: Session) => {
-    setSelectedSession(session)
+    }
+  }
+
+  // Handle session selection for checkboxes
+  const handleSessionToggle = (sessionId: string) => {
+    const newSelected = new Set(selectedSessions)
+    if (newSelected.has(sessionId)) {
+      newSelected.delete(sessionId)
+    } else {
+      newSelected.add(sessionId)
+    }
+    setSelectedSessions(newSelected)
+  }
+
+  // Handle select all checkbox
+  const handleSelectAll = () => {
+    if (selectedSessions.size === sessions.length) {
+      setSelectedSessions(new Set())
+    } else {
+      setSelectedSessions(new Set(sessions.map(s => s.id)))
+    }
+  }
+
+  // Handle session selection for notes
+  const handleSessionSelectForNote = (session: Session) => {
+    setActiveSessionForNote(session)
     fetchSessionNote(session.id)
+  }
+
+  // Get selected sessions data
+  const getSelectedSessionsData = () => {
+    return sessions.filter(s => selectedSessions.has(s.id))
+  }
+
+  // Get combined transcript
+  const getCombinedTranscript = () => {
+    const selectedSessionsData = getSelectedSessionsData()
+    return selectedSessionsData
+      .map(session => session.transcript || "")
+      .filter(transcript => transcript.trim().length > 0)
+      .join("\n\n--- SESSIONE SUCCESSIVA ---\n\n")
   }
 
   if (loading) {
@@ -251,8 +284,7 @@ export default function PatientAnalysisPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-12 gap-6 h-[calc(100vh-12rem)]">
-            {/* Sidebar - Sessions List */}
+          <div className="grid grid-cols-12 gap-6 h-[calc(100vh-12rem)]">            {/* Sidebar - Sessions List */}
             <div className="col-span-3">
               <Card className="h-full">
                 <CardHeader>
@@ -260,26 +292,48 @@ export default function PatientAnalysisPage() {
                     <FileText className="h-5 w-5" />
                     Sessioni e Trascrizioni
                   </CardTitle>
-                </CardHeader>                <CardContent className="p-0">
+                  <div className="flex items-center gap-2 pt-2">
+                    <input
+                      type="checkbox"
+                      id="select-all"
+                      checked={selectedSessions.size === sessions.length && sessions.length > 0}
+                      onChange={handleSelectAll}
+                      className="rounded border-gray-300"
+                    />
+                    <label htmlFor="select-all" className="text-sm text-gray-600">
+                      Seleziona tutto
+                    </label>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
                   <div className="space-y-1">
                     {sessions.map((session, index) => (
                       <div key={session.id} className="border-b last:border-b-0">
-                        <button
-                          onClick={() => handleSessionSelect(session)}
-                          className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${
-                            selectedSession?.id === session.id ? "bg-blue-50 border-r-2 border-blue-500" : ""
-                          }`}
-                        >
-                          <div className="font-medium text-sm">
-                            {session.title}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {new Date(session.createdAt).toLocaleDateString('it-IT')}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            Status: {session.status}
-                          </div>
-                        </button>
+                        <div className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
+                          <input
+                            type="checkbox"
+                            id={`session-${session.id}`}
+                            checked={selectedSessions.has(session.id)}
+                            onChange={() => handleSessionToggle(session.id)}
+                            className="rounded border-gray-300"
+                          />
+                          <button
+                            onClick={() => handleSessionSelectForNote(session)}
+                            className={`flex-1 text-left ${
+                              activeSessionForNote?.id === session.id ? "bg-blue-50 border-r-2 border-blue-500" : ""
+                            }`}
+                          >
+                            <div className="font-medium text-sm">
+                              {session.title}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(session.createdAt).toLocaleDateString('it-IT')}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              Status: {session.status}
+                            </div>
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -293,43 +347,53 @@ export default function PatientAnalysisPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-sm">
-                      Trascrizione - {selectedSession ? 
-                        `${selectedSession.title}` : 
+                      Trascrizione - {selectedSessions.size > 0 ? 
+                        `${selectedSessions.size} sessioni selezionate` : 
                         'Nessuna Sessione Selezionata'}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {selectedSession ? (
-                      <div className="h-48 overflow-y-auto bg-gray-50 p-4 rounded text-sm">
-                        {selectedSession.transcript || (
-                          <span className="text-gray-400 italic">
-                            Trascrizione non disponibile (Status: {selectedSession.status})
-                          </span>
-                        )}
+                    {selectedSessions.size > 0 ? (
+                      <div className="h-48 overflow-y-auto bg-gray-50 p-4 rounded text-sm space-y-4">
+                        {getSelectedSessionsData().map((session, index) => (
+                          <div key={session.id} className="border-b pb-3 last:border-b-0">
+                            <div className="font-semibold text-blue-700 mb-2">
+                              {session.title} - {new Date(session.createdAt).toLocaleDateString('it-IT')}
+                            </div>
+                            <div className="text-gray-700">
+                              {session.transcript || (
+                                <span className="text-gray-400 italic">
+                                  Trascrizione non disponibile (Status: {session.status})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <div className="h-48 flex items-center justify-center text-gray-500">
-                        Seleziona una sessione per visualizzare la trascrizione
+                        Seleziona una o più sessioni per visualizzare le trascrizioni
                       </div>
                     )}
                   </CardContent>
                 </Card>{/* Top Right - Topic Analysis */}
                 <TopicAnalysisComponent 
-                  selectedSession={selectedSession ? {
-                    id: selectedSession.id,
-                    title: selectedSession.title,
-                    transcript: selectedSession.transcript || ""
-                  } : null}
+                  selectedSessions={getSelectedSessionsData().map(session => ({
+                    id: session.id,
+                    title: session.title,
+                    transcript: session.transcript || ""
+                  }))}
+                  combinedTranscript={getCombinedTranscript()}
                   onAnalysisComplete={(result) => {
                     console.log('Topic analysis completed:', result)
                   }}
-                />
-
-                {/* Bottom Left - Sentiment Analysis */}
+                />                {/* Bottom Left - Sentiment Analysis */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-sm">
-                      Sentiment Analysis - Sessione {selectedSession ? sessions.findIndex(s => s.id === selectedSession.id) + 1 : 1}
+                      Sentiment Analysis - {selectedSessions.size > 0 ? 
+                        `${selectedSessions.size} sessioni selezionate` : 
+                        'Nessuna sessione selezionata'}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -347,13 +411,16 @@ export default function PatientAnalysisPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-sm flex items-center justify-between">
-                      Note - Sessione {selectedSession ? sessions.findIndex(s => s.id === selectedSession.id) + 1 : 1}
+                      Note - {activeSessionForNote ? 
+                        `${activeSessionForNote.title}` : 
+                        'Seleziona una sessione'}
                       <div className="flex gap-2">
                         {!editingNote ? (
                           <Button 
                             size="sm" 
                             variant="outline"
                             onClick={() => setEditingNote(true)}
+                            disabled={!activeSessionForNote}
                           >
                             <Edit className="h-3 w-3 mr-1" />
                             Modifica
@@ -370,7 +437,7 @@ export default function PatientAnalysisPage() {
                         )}
                       </div>
                     </CardTitle>
-                  </CardHeader>                  <CardContent>
+                  </CardHeader><CardContent>
                     {editingNote ? (
                       <div className="space-y-3">
                         <textarea
@@ -382,10 +449,9 @@ export default function PatientAnalysisPage() {
                         <div className="flex gap-2 justify-end">
                           <Button 
                             size="sm" 
-                            variant="outline"
-                            onClick={() => {
+                            variant="outline"                            onClick={() => {
                               setEditingNote(false)
-                              fetchSessionNote(selectedSession?.id || "")
+                              fetchSessionNote(activeSessionForNote?.id || "")
                             }}
                           >
                             Annulla
