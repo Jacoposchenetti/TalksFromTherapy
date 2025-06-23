@@ -101,23 +101,26 @@ export default function TopicAnalysisComponent({
       'bg-orange-100 text-orange-800',
       'bg-red-100 text-red-800',
       'bg-yellow-100 text-yellow-800',
-      'bg-pink-100 text-pink-800',
-      'bg-indigo-100 text-indigo-800'
+      'bg-pink-100 text-pink-800',      'bg-indigo-100 text-indigo-800'
     ]
     return colors[topicId % colors.length]
   }
+
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <div className="h-full">
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
           <BarChart3 className="h-5 w-5" />
-          Analisi Tematiche
-        </CardTitle>
-        <CardDescription>
-          Analisi automatica dei temi principali nella trascrizione selezionata
-        </CardDescription>
-      </CardHeader>
-      <CardContent>        {!analysisResult && !isAnalyzing && !error && (
+          Topic Modelling
+        </h3>
+        <p className="text-sm text-gray-600">
+          {selectedSessions && selectedSessions.length > 0 ? 
+            `Analisi tematica di ${selectedSessions.length} ${selectedSessions.length === 1 ? 'sessione' : 'sessioni'}` :
+            'Seleziona una o più sessioni per l\'analisi'
+          }
+        </p>
+      </div>
+      <div className="h-[420px] overflow-y-auto">        {!analysisResult && !isAnalyzing && !error && (
           <div className="flex flex-col items-center justify-center h-48 text-center">
             <BarChart3 className="h-12 w-12 text-gray-400 mb-4" />
             <p className="text-gray-600 mb-4">
@@ -249,14 +252,13 @@ export default function TopicAnalysisComponent({
               <p>
                 {selectedSessions && selectedSessions.length > 0 && (
                   selectedSessions.length === 1 ? 
-                    `Sessione analizzata: ${selectedSessions[0].title}` :
-                    `Analisi combinata di ${selectedSessions.length} sessioni: ${selectedSessions.map(s => s.title).join(', ')}`
+                    `Sessione analizzata: ${selectedSessions[0].title}` :                    `Analisi combinata di ${selectedSessions.length} sessioni: ${selectedSessions.map(s => s.title).join(', ')}`
                 )}
               </p>
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
