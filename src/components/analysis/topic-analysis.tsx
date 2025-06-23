@@ -26,26 +26,27 @@ interface SingleDocumentAnalysisResult {
 }
 
 interface TopicAnalysisComponentProps {
-  selectedSession: {
+  selectedSessions?: {
     id: string
     title: string
     transcript: string
-  } | null
+  }[]
+  combinedTranscript?: string
   onAnalysisComplete?: (result: SingleDocumentAnalysisResult) => void
 }
 
 export default function TopicAnalysisComponent({ 
-  selectedSession, 
+  selectedSessions = [], 
+  combinedTranscript = "",
   onAnalysisComplete 
 }: TopicAnalysisComponentProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<SingleDocumentAnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expandedTopics, setExpandedTopics] = useState<Set<number>>(new Set())
-
   const runTopicAnalysis = async () => {
-    if (!selectedSession || !selectedSession.transcript) {
-      setError("Seleziona una sessione con trascrizione per l'analisi")
+    if (!selectedSessions || selectedSessions.length === 0 || !combinedTranscript) {
+      setError("Seleziona una o più sessioni con trascrizione per l'analisi")
       return
     }
 
@@ -60,8 +61,8 @@ export default function TopicAnalysisComponent({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          session_id: selectedSession.id,
-          transcript: selectedSession.transcript
+          session_id: selectedSessions.length === 1 ? selectedSessions[0].id : `combined_${selectedSessions.map(s => s.id).join('_')}`,
+          transcript: combinedTranscript
         }),
       })
 
@@ -116,33 +117,30 @@ export default function TopicAnalysisComponent({
           Analisi automatica dei temi principali nella trascrizione selezionata
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        {!analysisResult && !isAnalyzing && !error && (
+      <CardContent>        {!analysisResult && !isAnalyzing && !error && (
           <div className="flex flex-col items-center justify-center h-48 text-center">
             <BarChart3 className="h-12 w-12 text-gray-400 mb-4" />
             <p className="text-gray-600 mb-4">
-              {selectedSession ? 
-                "Clicca su 'Analizza Sessione' per estrarre i temi principali" :
-                "Seleziona una sessione per iniziare l'analisi"
+              {selectedSessions && selectedSessions.length > 0 ? 
+                "Clicca su 'Analizza Sessioni' per estrarre i temi principali" :
+                "Seleziona una o più sessioni per iniziare l'analisi"
               }
             </p>
             <Button 
               onClick={runTopicAnalysis}
-              disabled={!selectedSession || !selectedSession.transcript}
+              disabled={!selectedSessions || selectedSessions.length === 0 || !combinedTranscript}
               className="flex items-center gap-2"
             >
               <BarChart3 className="h-4 w-4" />
-              Analizza Sessione
+              Analizza Sessioni
             </Button>
           </div>
-        )}
-
-        {isAnalyzing && (
+        )}        {isAnalyzing && (
           <div className="flex flex-col items-center justify-center h-48 text-center">
             <Loader2 className="h-12 w-12 text-blue-500 animate-spin mb-4" />
             <p className="text-gray-600 mb-2">Analisi in corso...</p>
             <p className="text-sm text-gray-500">
-              Sto analizzando la sessione: {selectedSession?.title}
+              Sto analizzando {selectedSessions?.length} {selectedSessions?.length === 1 ? 'sessione' : 'sessioni'}
             </p>
           </div>
         )}
@@ -243,15 +241,17 @@ export default function TopicAnalysisComponent({
                   </CardContent>
                 </Card>
               ))}
-            </div>
-
-            {/* Analysis Info */}
+            </div>            {/* Analysis Info */}
             <div className="text-xs text-gray-500 border-t pt-4">
               <p>
                 Analisi completata il {new Date(analysisResult.analysis_timestamp).toLocaleString('it-IT')}
               </p>
               <p>
-                Sessione analizzata: {selectedSession?.title}
+                {selectedSessions && selectedSessions.length > 0 && (
+                  selectedSessions.length === 1 ? 
+                    `Sessione analizzata: ${selectedSessions[0].title}` :
+                    `Analisi combinata di ${selectedSessions.length} sessioni: ${selectedSessions.map(s => s.title).join(', ')}`
+                )}
               </p>
             </div>
           </div>
