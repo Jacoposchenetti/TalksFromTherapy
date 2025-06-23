@@ -61,3 +61,42 @@ next-env.d.ts
 prisma/.env
 
 /src/generated/prisma
+
+# Python virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+/python-service/venv/
+/python-service/env/
+/python-service/.venv/
+\.env.local
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.dll
+*.lib
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST

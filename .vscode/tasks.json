@@ -10,6 +10,23 @@
 			"problemMatcher": [
 				"$tsc"
 			]
+		},
+		{
+			"label": "Start Python Service",
+			"type": "shell",
+			"command": "python-service\\start.bat",
+			"group": "build",
+			"isBackground": true,
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new"
+			},
+			"problemMatcher": []
 		}
 	]
 }
