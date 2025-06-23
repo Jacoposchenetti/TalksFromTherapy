@@ -5,7 +5,8 @@ import { useSession } from "next-auth/react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit } from "lucide-react"
+import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react"
+import TopicAnalysisComponent from "@/components/analysis/topic-analysis"
 
 interface Session {
   id: string
@@ -36,16 +37,16 @@ export default function PatientAnalysisPage() {
   const router = useRouter()
   const params = useParams()
   const patientId = params.id as string
-    const [patient, setPatient] = useState<Patient | null>(null)
+  const [patient, setPatient] = useState<Patient | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
-  const [selectedSession, setSelectedSession] = useState<Session | null>(null)
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [editingNote, setEditingNote] = useState(false)
-  const [selectAll, setSelectAll] = useState(false)
+  const [activeSessionForNote, setActiveSessionForNote] = useState<Session | null>(null)
+  const [currentSlide, setCurrentSlide] = useState(0) // 0: Trascrizioni, 1: Topic Modelling, 2: Sentiment Analysis
 
   useEffect(() => {
     if (status === "loading") return
@@ -109,10 +110,9 @@ export default function PatientAnalysisPage() {
           return hasTranscription
         }) || []
         */
-        
-        // Auto-select first session if available (using all sessions for now)
+          // Auto-select first session if available (using all sessions for now)
         if (sessionsData && sessionsData.length > 0) {
-          setSelectedSession(sessionsData[0])
+          setActiveSessionForNote(sessionsData[0])
           fetchSessionNote(sessionsData[0].id)
         }
       } else {
@@ -139,13 +139,12 @@ export default function PatientAnalysisPage() {
       setNote("")
     }
   }
-
   const handleSaveNote = async () => {
-    if (!selectedSession) return
+    if (!activeSessionForNote) return
     
     setSavingNote(true)
     try {
-      const response = await fetch(`/api/sessions/${selectedSession.id}/note`, {
+      const response = await fetch(`/api/sessions/${activeSessionForNote.id}/note`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -158,43 +157,70 @@ export default function PatientAnalysisPage() {
         alert("Nota salvata con successo!")
       } else {
         alert("Errore durante il salvataggio della nota")
-      }
-    } catch (error) {
+      }    } catch (error) {
       console.error("Error saving note:", error)
       alert("Errore durante il salvataggio della nota")
     } finally {
       setSavingNote(false)
-    }  }
-
-  // Handle select all checkbox
-  const handleSelectAllChange = (checked: boolean) => {
-    setSelectAll(checked)
-    if (checked) {
-      // Select all sessions
-      const allSessionIds = new Set(sessions.map(s => s.id))
-      setSelectedSessions(allSessionIds)
-    } else {
-      // Deselect all sessions
-      setSelectedSessions(new Set())
     }
   }
 
-  // Handle individual session selection
-  const handleSessionSelect = (session: Session) => {
-    setSelectedSession(session)
-    fetchSessionNote(session.id)
-    
-    // Toggle this session in the selected sessions set
-    const newSelectedSessions = new Set(selectedSessions)
-    if (newSelectedSessions.has(session.id)) {
-      newSelectedSessions.delete(session.id)
+  // Handle session selection for checkboxes
+  const handleSessionToggle = (sessionId: string) => {
+    const newSelected = new Set(selectedSessions)
+    if (newSelected.has(sessionId)) {
+      newSelected.delete(sessionId)
     } else {
-      newSelectedSessions.add(session.id)
+      newSelected.add(sessionId)
     }
-    setSelectedSessions(newSelectedSessions)
-    
-    // Update select all checkbox state
-    setSelectAll(newSelectedSessions.size === sessions.length)
+    setSelectedSessions(newSelected)
+  }
+
+  // Handle select all checkbox
+  const handleSelectAll = () => {
+    if (selectedSessions.size === sessions.length) {
+      setSelectedSessions(new Set())
+    } else {
+      setSelectedSessions(new Set(sessions.map(s => s.id)))
+    }
+  }
+
+  // Handle session selection for notes
+  const handleSessionSelectForNote = (session: Session) => {
+    setActiveSessionForNote(session)
+    fetchSessionNote(session.id)
+  }
+
+  // Get selected sessions data
+  const getSelectedSessionsData = () => {
+    return sessions.filter(s => selectedSessions.has(s.id))
+  }
+  // Get combined transcript
+  const getCombinedTranscript = () => {
+    const selectedSessionsData = getSelectedSessionsData()
+    return selectedSessionsData
+      .map(session => session.transcript || "")
+      .filter(transcript => transcript.trim().length > 0)
+      .join("\n\n--- SESSIONE SUCCESSIVA ---\n\n")
+  }
+
+  // Slide navigation
+  const slides = [
+    { title: "Trascrizioni", icon: FileText },
+    { title: "Topic Modelling", icon: BarChart3 },
+    { title: "Sentiment Analysis", icon: Heart }
+  ]
+
+  const nextSlide = () => {
+    setCurrentSlide((prev) => (prev + 1) % slides.length)
+  }
+
+  const prevSlide = () => {
+    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length)
+  }
+
+  const goToSlide = (index: number) => {
+    setCurrentSlide(index)
   }
 
   if (loading) {
@@ -277,217 +303,310 @@ export default function PatientAnalysisPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-12 gap-6 h-[calc(100vh-12rem)]">
-            {/* Sidebar - Sessions List */}
-            <div className="col-span-3">
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Sessioni e Trascrizioni
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">                  <div className="space-y-1">
-                    <div className="p-4 border-b bg-gray-50">                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={selectAll}
-                          onChange={(e) => handleSelectAllChange(e.target.checked)}
-                          className="rounded w-4 h-4" 
-                        />
-                        <span className="text-sm font-medium">Selezione tutto</span>
+          <div className="space-y-8">
+            {/* Main Analysis Area with Slides */}
+            <div className="grid grid-cols-12 gap-6">
+              {/* Sidebar - Sessions List */}
+              <div className="col-span-3">
+                <Card className="h-[600px]">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Sessioni e Trascrizioni
+                    </CardTitle>
+                    <div className="flex items-center gap-2 pt-2">
+                      <input
+                        type="checkbox"
+                        id="select-all"
+                        checked={selectedSessions.size === sessions.length && sessions.length > 0}
+                        onChange={handleSelectAll}
+                        className="rounded border-gray-300"
+                      />
+                      <label htmlFor="select-all" className="text-sm text-gray-600">
+                        Seleziona tutto
                       </label>
                     </div>
-                    {sessions.map((session, index) => (
-                      <div key={session.id} className="border-b last:border-b-0">
-                        <button
-                          onClick={() => handleSessionSelect(session)}
-                          className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${
-                            selectedSession?.id === session.id ? "bg-blue-50 border-r-2 border-blue-500" : ""
-                          }`}
-                        >                          <div className="flex items-center space-x-2">                            <input 
-                              type="checkbox" 
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="space-y-1 max-h-[450px] overflow-y-auto">
+                      {sessions.map((session, index) => (
+                        <div key={session.id} className="border-b last:border-b-0">
+                          <div className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
+                            <input
+                              type="checkbox"
+                              id={`session-${session.id}`}
                               checked={selectedSessions.has(session.id)}
-                              onChange={(e) => {
-                                e.stopPropagation()
-                                handleSessionSelect(session)
-                              }}
-                              className="rounded w-4 h-4" 
+                              onChange={() => handleSessionToggle(session.id)}
+                              className="rounded border-gray-300"
                             />
-                            <div>
+                            <button
+                              onClick={() => handleSessionSelectForNote(session)}
+                              className={`flex-1 text-left ${
+                                activeSessionForNote?.id === session.id ? "bg-blue-50 border-r-2 border-blue-500" : ""
+                              }`}
+                            >
                               <div className="font-medium text-sm">
                                 {session.title}
                               </div>
                               <div className="text-xs text-gray-500">
                                 {new Date(session.createdAt).toLocaleDateString('it-IT')}
                               </div>
+                              <div className="text-xs text-gray-400">
+                                Status: {session.status}
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Main Sliding Analysis Panel */}
+              <div className="col-span-9">
+                <Card className="h-[600px]">
+                  <CardHeader className="pb-4">
+                    {/* Slide Navigation */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        {slides.map((slide, index) => {
+                          const Icon = slide.icon
+                          return (
+                            <button
+                              key={index}
+                              onClick={() => goToSlide(index)}
+                              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                                currentSlide === index
+                                  ? "bg-blue-100 text-blue-700 font-medium"
+                                  : "text-gray-600 hover:bg-gray-100"
+                              }`}
+                            >
+                              <Icon className="h-4 w-4" />
+                              {slide.title}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={prevSlide}
+                          className="h-8 w-8 p-0"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={nextSlide}
+                          className="h-8 w-8 p-0"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  
+                  <CardContent className="h-[500px] overflow-hidden">
+                    <div className="h-full">
+                      {/* Slide 0: Trascrizioni */}
+                      {currentSlide === 0 && (
+                        <div className="h-full">
+                          <div className="mb-4">
+                            <h3 className="text-lg font-semibold">
+                              Trascrizioni - {selectedSessions.size > 0 ? 
+                                `${selectedSessions.size} sessioni selezionate` : 
+                                'Nessuna Sessione Selezionata'}
+                            </h3>
+                          </div>
+                          <div className="h-[420px] overflow-y-auto bg-gray-50 p-4 rounded text-sm space-y-4">
+                            {selectedSessions.size > 0 ? (
+                              getSelectedSessionsData().map((session, index) => (
+                                <div key={session.id} className="border-b pb-3 last:border-b-0">
+                                  <div className="font-semibold text-blue-700 mb-2">
+                                    {session.title} - {new Date(session.createdAt).toLocaleDateString('it-IT')}
+                                  </div>
+                                  <div className="text-gray-700">
+                                    {session.transcript || (
+                                      <span className="text-gray-400 italic">
+                                        Trascrizione non disponibile (Status: {session.status})
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="h-full flex items-center justify-center text-gray-500">
+                                Seleziona una o più sessioni per visualizzare le trascrizioni
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Slide 1: Topic Modelling */}
+                      {currentSlide === 1 && (
+                        <div className="h-full">
+                          <TopicAnalysisComponent 
+                            selectedSessions={getSelectedSessionsData().map(session => ({
+                              id: session.id,
+                              title: session.title,
+                              transcript: session.transcript || ""
+                            }))}
+                            combinedTranscript={getCombinedTranscript()}
+                            onAnalysisComplete={(result) => {
+                              console.log('Topic analysis completed:', result)
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Slide 2: Sentiment Analysis */}
+                      {currentSlide === 2 && (
+                        <div className="h-full">
+                          <div className="mb-4">
+                            <h3 className="text-lg font-semibold">
+                              Sentiment Analysis - {selectedSessions.size > 0 ? 
+                                `${selectedSessions.size} sessioni selezionate` : 
+                                'Nessuna sessione selezionata'}
+                            </h3>
+                          </div>
+                          <div className="h-[420px] flex items-center justify-center text-gray-400">
+                            <div className="text-center">
+                              <Heart className="h-16 w-16 mx-auto mb-4" />
+                              <p className="text-lg mb-2">Sentiment Analysis</p>
+                              <p className="text-sm">
+                                Analisi delle emozioni per sessione - Coming Soon
+                              </p>
+                              <p className="text-xs mt-2 text-gray-500">
+                                Calcolo Z-score per 8 emozioni fondamentali
+                              </p>
                             </div>
                           </div>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Main Analysis Area */}
-            <div className="col-span-9">
-              <div className="grid grid-cols-2 gap-6 h-full">
-                {/* Top Left - Transcription */}                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">
-                      Trascrizione - {selectedSessions.size > 1 ? `${selectedSessions.size} Sessioni` : 
-                                    selectedSession ? `Sessione ${sessions.findIndex(s => s.id === selectedSession.id) + 1}` : 
-                                    'Nessuna Sessione'}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {selectedSessions.size > 0 ? (
-                      <div className="h-48 overflow-y-auto bg-gray-50 p-4 rounded text-sm space-y-4">
-                        {sessions
-                          .filter(session => selectedSessions.has(session.id))
-                          .map((session, index) => (
-                            <div key={session.id} className="border-b pb-3 last:border-b-0">
-                              <div className="font-semibold text-blue-600 mb-2">
-                                {session.title} - {new Date(session.createdAt).toLocaleDateString('it-IT')}
-                              </div>                              <div className="text-gray-700">
-                                {session.transcript || (
-                                  <span className="text-gray-400 italic">
-                                    Trascrizione non disponibile (Status: {session.status})
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    ) : (
-                      <div className="h-48 flex items-center justify-center text-gray-500">
-                        Seleziona una o più sessioni per visualizzare le trascrizioni
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Top Right - Topic Modelling */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">
-                      Topic Modelling - Sessione {selectedSession ? sessions.findIndex(s => s.id === selectedSession.id) + 1 : 1}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-48 flex items-center justify-center text-gray-400">
-                      <div className="text-center">
-                        <BarChart3 className="h-8 w-8 mx-auto mb-2" />
-                        <p className="text-sm">Info grafica</p>
-                        <p className="text-xs">Topic Modelling verrà implementato</p>
-                      </div>
+                        </div>
+                      )}
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Bottom Left - Sentiment Analysis */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">
-                      Sentiment Analysis - Sessione {selectedSession ? sessions.findIndex(s => s.id === selectedSession.id) + 1 : 1}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-48 flex items-center justify-center text-gray-400">
-                      <div className="text-center">
-                        <Heart className="h-8 w-8 mx-auto mb-2" />
-                        <p className="text-sm">Info grafica</p>
-                        <p className="text-xs">Sentiment Analysis verrà implementato</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Bottom Right - Notes */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm flex items-center justify-between">
-                      Note - Sessione {selectedSession ? sessions.findIndex(s => s.id === selectedSession.id) + 1 : 1}
-                      <div className="flex gap-2">
-                        {!editingNote ? (
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => setEditingNote(true)}
-                          >
-                            <Edit className="h-3 w-3 mr-1" />
-                            Modifica
-                          </Button>
-                        ) : (
-                          <Button 
-                            size="sm" 
-                            onClick={handleSaveNote}
-                            disabled={savingNote}
-                          >
-                            <Save className="h-3 w-3 mr-1" />
-                            Salva
-                          </Button>
-                        )}
-                      </div>
-                    </CardTitle>
-                  </CardHeader>                  <CardContent>
-                    {editingNote ? (
-                      <div className="space-y-3">
-                        <textarea
-                          value={note}
-                          onChange={(e) => setNote(e.target.value)}
-                          placeholder="Qui il terapeuta può scrivere note personali e appunti liberamente"
-                          className="w-full h-44 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                        <div className="flex gap-2 justify-end">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => {
-                              setEditingNote(false)
-                              fetchSessionNote(selectedSession?.id || "")
-                            }}
-                          >
-                            Annulla
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            onClick={handleSaveNote}
-                            disabled={savingNote}
-                          >
-                            <Save className="h-3 w-3 mr-1" />
-                            {savingNote ? "Salvando..." : "Salva"}
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="h-44 overflow-y-auto bg-gray-50 p-3 rounded text-sm">
-                          {note || (
-                            <span className="text-gray-500 italic">
-                              Qui il terapeuta può scrivere note personali e appunti liberamente
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex justify-end">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => setEditingNote(true)}
-                          >
-                            <Edit className="h-3 w-3 mr-1" />
-                            Modifica
-                          </Button>
-                        </div>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               </div>
             </div>
-          </div>
+
+            {/* Historical Sentiment Trends */}
+            <Card className="h-[400px]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Storico Sentiment - Andamento Emozioni nel Tempo
+                </CardTitle>
+                <CardDescription>
+                  Evoluzione delle 8 emozioni fondamentali attraverso le sessioni di terapia
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="h-[300px]">
+                <div className="h-full flex items-center justify-center text-gray-400">
+                  <div className="text-center">
+                    <TrendingUp className="h-16 w-16 mx-auto mb-4" />
+                    <p className="text-lg mb-2">Grafico Storico Sentiment</p>
+                    <p className="text-sm">
+                      Serie temporale delle emozioni - Coming Soon
+                    </p>
+                    <p className="text-xs mt-2 text-gray-500">
+                      Visualizzazione Z-score delle 8 emozioni nel corso delle sessioni
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Notes Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5" />
+                    Note Terapeutiche - {activeSessionForNote ? 
+                      `${activeSessionForNote.title}` : 
+                      'Seleziona una sessione'}
+                  </div>
+                  <div className="flex gap-2">
+                    {!editingNote ? (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => setEditingNote(true)}
+                        disabled={!activeSessionForNote}
+                      >
+                        <Edit className="h-3 w-3 mr-1" />
+                        Modifica
+                      </Button>
+                    ) : (
+                      <Button 
+                        size="sm" 
+                        onClick={handleSaveNote}
+                        disabled={savingNote}
+                      >
+                        <Save className="h-3 w-3 mr-1" />
+                        Salva
+                      </Button>
+                    )}
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {editingNote ? (
+                  <div className="space-y-3">
+                    <textarea
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Qui il terapeuta può scrivere note personali e appunti liberamente"
+                      className="w-full h-32 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => {
+                          setEditingNote(false)
+                          fetchSessionNote(activeSessionForNote?.id || "")
+                        }}
+                      >
+                        Annulla
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        onClick={handleSaveNote}
+                        disabled={savingNote}
+                      >
+                        <Save className="h-3 w-3 mr-1" />
+                        {savingNote ? "Salvando..." : "Salva"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="h-32 overflow-y-auto bg-gray-50 p-3 rounded text-sm">
+                      {note || (
+                        <span className="text-gray-500 italic">
+                          Qui il terapeuta può scrivere note personali e appunti liberamente
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex justify-end">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => setEditingNote(true)}
+                        disabled={!activeSessionForNote}
+                      >
+                        <Edit className="h-3 w-3 mr-1" />
+                        Modifica
+                      </Button>
+                    </div>
+                  </div>                )}
+              </CardContent>
+            </Card>          </div>
         )}
       </div>
     </div>
