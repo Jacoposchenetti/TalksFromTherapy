@@ -61,6 +61,7 @@ class SingleDocumentResponse(BaseModel):
     analysis_timestamp: str
     network_data: NetworkData
     topic_similarities: Dict[str, float]
+    total_available_words: int = 0  # Numero totale di parole disponibili per il network
 
 class DocumentAnalysisService:
     def __init__(self):
@@ -365,14 +366,18 @@ class DocumentAnalysisService:
                 if cooc_score >= 1:  # Soglia molto bassa per più connessioni
                     edges.append(NetworkEdge(
                         source=f"word_{word1}",
-                        target=f"word_{word2}",
-                        weight=float(min(cooc_score / 5, 1.0)),  # Normalizzazione più permissiva
+                        target=f"word_{word2}",                        weight=float(min(cooc_score / 5, 1.0)),  # Normalizzazione più permissiva
                         type="cooccurrence"
                     ))
                     edge_count += 1
         
         print(f"Creati {len(nodes)} nodi e {edge_count} edges")
-        return NetworkData(nodes=nodes, edges=edges)
+        
+        # Calcola il totale di parole disponibili (topic words + candidate words)
+        total_available = len(topic_words) + len([w for w in word_scores.keys() if w not in topic_words])
+        print(f"DEBUG: Parole totali disponibili: {total_available}")
+        
+        return NetworkData(nodes=nodes, edges=edges), total_available
 
 analysis_service = DocumentAnalysisService()
 
@@ -430,16 +435,14 @@ async def single_document_analysis(request: SingleDocumentRequest):
         nmf_model.fit(tfidf_matrix)
           # Calcola similarità tra topic
         topic_similarities = analysis_service.calculate_topic_similarities(topics_data, tfidf_matrix, nmf_model)
-        
-        # Crea network data
+          # Crea network data
         print(f"=== CHIAMATA create_network_data ===")
         print(f"DEBUG: Passando max_words={request.max_words} a create_network_data")
-        network_data = analysis_service.create_network_data(topics_data, cooccurrence, topic_similarities, max_words=request.max_words)
-        print(f"DEBUG: create_network_data ha restituito {len(network_data.nodes)} nodi")
+        network_data, total_available_words = analysis_service.create_network_data(topics_data, cooccurrence, topic_similarities, max_words=request.max_words)
+        print(f"DEBUG: create_network_data ha restituito {len(network_data.nodes)} nodi su {total_available_words} disponibili")
         print(f"=== ===")
         
-        
-        # Prepara topics per response
+          # Prepara topics per response
         topics = []
         for i, topic_data in enumerate(topics_data):
             # Calcola centralità come numero di connessioni
@@ -463,7 +466,8 @@ async def single_document_analysis(request: SingleDocumentRequest):
             summary=summary,
             analysis_timestamp=datetime.now().isoformat(),
             network_data=network_data,
-            topic_similarities=topic_similarities
+            topic_similarities=topic_similarities,
+            total_available_words=total_available_words
         )
         
     except Exception as e:

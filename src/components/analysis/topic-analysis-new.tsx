@@ -50,6 +50,7 @@ interface SingleDocumentAnalysisResult {
   analysis_timestamp: string
   network_data: NetworkData
   topic_similarities: Record<string, number>
+  total_available_words?: number // Numero totale di parole disponibili
 }
 
 interface TopicAnalysisComponentProps {
@@ -72,7 +73,7 @@ export default function TopicAnalysisComponent({
   const [error, setError] = useState<string | null>(null)
   const [expandedTopics, setExpandedTopics] = useState<Set<number>>(new Set())
   const [viewMode, setViewMode] = useState<'list' | 'network'>('list')
-  const [maxWords, setMaxWords] = useState<number>(100)
+  const [wordPercentage, setWordPercentage] = useState<number>(30) // Percentuale invece di numero assoluto
 
   const runTopicAnalysis = async () => {
     if (!selectedSessions || selectedSessions.length === 0 || !combinedTranscript) {
@@ -84,9 +85,14 @@ export default function TopicAnalysisComponent({
     setError(null)
     setAnalysisResult(null)
 
-    console.log('DEBUG: Starting analysis with maxWords:', maxWords)
+    console.log('DEBUG: Starting analysis with wordPercentage:', wordPercentage)
 
     try {
+      // Calcola il numero di parole basato sulla percentuale (minimo 20, massimo basato su disponibili)
+      const maxWords = analysisResult?.total_available_words 
+        ? Math.max(20, Math.round((analysisResult.total_available_words * wordPercentage) / 100))
+        : Math.max(20, Math.round((300 * wordPercentage) / 100)) // Fallback se non abbiamo il totale
+
       const requestBody = {
         session_id: selectedSessions.length === 1 ? selectedSessions[0].id : `combined_${selectedSessions.map(s => s.id).join('_')}`,
         transcript: combinedTranscript,
@@ -94,7 +100,7 @@ export default function TopicAnalysisComponent({
         timestamp: Date.now() // Aggiungi timestamp per evitare cache
       }
       
-      console.log('DEBUG: Request body:', requestBody)
+      console.log('DEBUG: Request body:', requestBody, 'calculated maxWords:', maxWords)
 
       const response = await fetch('/api/single-session-analysis', {
         method: 'POST',
@@ -155,33 +161,44 @@ export default function TopicAnalysisComponent({
             'Seleziona una o più sessioni per l\'analisi'
           }
         </p>
-      </div>      {/* Network Words Control - Always Visible */}
-      <div className="mb-4 p-4 bg-blue-100 border-2 border-blue-300 rounded-lg shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <label className="text-base font-bold text-blue-900">
-            🎛️ Controllo Parole Network: <span className="text-blue-600">{maxWords}</span>
+      </div>      {/* Network Words Control - Compact */}
+      <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg"> {/* Ridotto padding */}
+        <div className="flex items-center justify-between mb-2"> {/* Ridotto margin */}
+          <label className="text-sm font-semibold text-blue-900"> {/* Ridotto font size */}
+            🎛️ Parole Network: <span className="text-blue-600">{wordPercentage}%</span>
+            {analysisResult?.total_available_words && (
+              <span className="text-xs text-blue-700 ml-1">
+                ({Math.max(20, Math.round((analysisResult.total_available_words * wordPercentage) / 100))} di {analysisResult.total_available_words})
+              </span>
+            )}
           </label>
-          <span className="text-sm text-blue-700 bg-blue-200 px-3 py-1 rounded-full">
-            Da più a meno significative
-          </span>
-        </div><input
-          type="range"
-          min="20"
-          max="300"
-          step="10"
-          value={maxWords}
-          onChange={(e) => setMaxWords(parseInt(e.target.value))}
-          className="w-full h-4 bg-gradient-to-r from-blue-500 to-blue-200 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300"
-        />        <div className="flex justify-between text-sm text-blue-700 mt-3 font-medium">
-          <span>📍 20 (Essenziali)</span>
-          <span>⚖️ 160 (Bilanciato)</span>
-          <span>📊 300 (Completo)</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={runTopicAnalysis}
+            className="text-xs px-3 py-1" // Ridotto dimensioni
+            disabled={isAnalyzing}
+          >
+            {isAnalyzing ? 'Aggiorno...' : 'Aggiorna'}
+          </Button>
         </div>
-        {analysisResult && (
-          <div className="mt-3 p-2 bg-blue-50 rounded text-sm text-blue-800 border border-blue-200">
-            📊 Network attuale: <strong>{analysisResult.network_data.nodes.length} parole</strong>, <strong>{analysisResult.network_data.edges.length} connessioni</strong>
-          </div>
-        )}      </div>
+
+        <input
+          type="range"
+          min="10"
+          max="100"
+          step="5"
+          value={wordPercentage}
+          onChange={(e) => setWordPercentage(parseInt(e.target.value))}
+          className="w-full h-2 bg-gradient-to-r from-blue-500 to-blue-200 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-300" // Ridotto height e ring
+        />
+
+        <div className="flex justify-between text-xs text-blue-700 mt-1 font-medium"> {/* Ridotto font e margin */}
+          <span>📍 10% (Essenziali)</span>
+          <span>⚖️ 50% (Bilanciato)</span>
+          <span>📊 100% (Completo)</span>
+        </div>
+      </div>
       
       <div className="flex-1 min-h-0 overflow-y-auto"> {/* Rimosso h-[320px] fisso per utilizzare tutto lo spazio disponibile */}{!analysisResult && !isAnalyzing && !error && (
           <div className="flex flex-col items-center justify-center h-48 text-center">
@@ -252,25 +269,23 @@ export default function TopicAnalysisComponent({
               </div>
             </div>            {/* Network View */}
             {viewMode === 'network' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
+              <div className="space-y-3">                <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-gray-600">
                     Network con {analysisResult.network_data.nodes.length} parole
+                    {analysisResult.total_available_words && (
+                      <span className="text-xs text-gray-500 ml-1">
+                        ({Math.round((analysisResult.network_data.nodes.length / analysisResult.total_available_words) * 100)}% del totale)
+                      </span>
+                    )}
                   </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={runTopicAnalysis}
-                    className="text-xs"
-                  >
-                    Aggiorna ({maxWords} parole)
-                  </Button>
-                </div>                <div className="min-h-[600px] border rounded-lg bg-gray-50 overflow-hidden"> {/* Aumentato a min-h-[600px] e aggiunto overflow-hidden */}
+                </div>
+
+                <div className="min-h-[650px] border rounded-lg bg-gray-50 overflow-hidden"> {/* Aumentato spazio */}
                   <NetworkTopicVisualization
-                    key={`network-${maxWords}-${analysisResult.network_data.nodes.length}`} // Forza re-render quando cambiano dati
+                    key={`network-${wordPercentage}-${analysisResult.network_data.nodes.length}`} // Usa percentuale per il key
                     networkData={analysisResult.network_data}
                     width={800}
-                    height={590} // Aumentato per usare tutto lo spazio
+                    height={640} // Aumentato per usare tutto lo spazio
                   />
                 </div>
               </div>
