@@ -1,15 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import NMF
-from sklearn.metrics.pairwise import cosine_similarity
 from datetime import datetime
-import re
-from collections import Counter, defaultdict
-import itertools
+from collections import defaultdict
 
 app = FastAPI(title="Single Document Analysis Service", version="1.0.0")
 
@@ -31,8 +28,6 @@ class Topic(BaseModel):
     topic_id: int
     keywords: List[str]
     description: str = ""
-    weight: float = 0.0
-    centrality: float = 0.0
 
 class NetworkNode(BaseModel):
     id: str
@@ -60,8 +55,8 @@ class SingleDocumentResponse(BaseModel):
     summary: str
     analysis_timestamp: str
     network_data: NetworkData
-    topic_similarities: Dict[str, float]
-    total_available_words: int = 0  # Numero totale di parole disponibili per il network
+    topic_similarities: dict = {}
+    total_available_words: int = 0  # Numero totale di parole disponibili
 
 class DocumentAnalysisService:
     def __init__(self):
@@ -86,37 +81,41 @@ class DocumentAnalysisService:
             # Verbi ausiliari e comuni
             'essere', 'avere', 'fare', 'dire', 'andare', 'venire', 'stare', 'dare', 'sapere', 'dovere', 'potere', 'volere',
             'sono', 'sei', 'è', 'siamo', 'siete', 'erano', 'ero', 'eri', 'eravamo', 'eravate', 'è', 'ha', 'hai', 'hanno', 'ho',
-            'faccio', 'fai', 'fa', 'facciamo', 'fate', 'fanno', 'vado', 'vai', 'va', 'andiamo', 'andate', 'vanno',            # Altri
+            'faccio', 'fai', 'fa', 'facciamo', 'fate', 'fanno', 'vado', 'vai', 'va', 'andiamo', 'andate', 'vanno',
+            # Altri
             'tutto', 'tutti', 'tutta', 'tutte', 'altro', 'altri', 'altra', 'altre', 'ogni', 'alcuni', 'alcune', 'qualche',
             'stesso', 'stessa', 'stessi', 'stesse', 'proprio', 'propria', 'propri', 'proprie', 'tale', 'tali',
             'così', 'abbastanza', 'proprio', 'davvero', 'veramente', 'davvero'
         ]
     
-    def extract_keywords_tfidf(self, text, max_features=15):
-        try:            # Pre-processamento del testo
+    def extract_keywords_tfidf(self, text, max_features=20):
+        try:
+            # Pre-processamento robusto del testo
             words = text.lower().split()
-            # Filtra parole troppo corte e numeri
+            # Filtra parole significative (almeno 3 caratteri)
             filtered_words = [w for w in words if len(w) >= 3 and not w.isdigit() and w.isalpha()]
             filtered_text = ' '.join(filtered_words)
             
+            # Configurazione robusta per analisi di qualità
             vectorizer = TfidfVectorizer(
                 max_features=max_features,
                 stop_words=self.italian_stopwords,
                 lowercase=True,
-                ngram_range=(1, 2),  # Include bigrammi per concetti composti
+                ngram_range=(1, 2),  # Include bigrammi per concetti più complessi
                 min_df=1,
-                max_df=0.6,  # Aumentato per includere più parole
-                token_pattern=r'\b[a-zA-ZàèéìòùÀÈÉÌÒÙ]{2,}\b'  # Ridotto a 2 caratteri per più parole
+                max_df=0.7,  # Esclude parole troppo comuni
+                token_pattern=r'\b[a-zA-ZàèéìòùÀÈÉÌÒÙ]{3,}\b'  # Solo parole significative
             )
             
             tfidf_matrix = vectorizer.fit_transform([filtered_text])
             feature_names = vectorizer.get_feature_names_out()
             tfidf_scores = tfidf_matrix.toarray()[0]
-              # Filtra solo parole con score significativo
+            
+            # Filtra solo parole con score significativo per qualità
             keywords_with_scores = [
                 {"keyword": feature_names[i], "score": float(tfidf_scores[i])}
                 for i in range(len(feature_names)) 
-                if tfidf_scores[i] > 0.05  # Soglia ridotta per più parole
+                if tfidf_scores[i] > 0.05  # Soglia per rilevanza
             ]
             
             return sorted(keywords_with_scores, key=lambda x: x['score'], reverse=True)
@@ -126,258 +125,188 @@ class DocumentAnalysisService:
             return [{"keyword": "analisi", "score": 0.5}]
     
     def extract_topics_nmf(self, text, n_topics=3):
-        # Dividi in frasi più intelligentemente
+        # Analisi robusta su frasi significative
         sentences = []
         for s in text.replace('!', '.').replace('?', '.').split('.'):
             s = s.strip()
-            if len(s) > 30:  # Frasi più significative
+            if len(s) > 20:  # Solo frasi con contenuto significativo
                 sentences.append(s)
         
         if len(sentences) < 2:
             # Se ci sono poche frasi, usa l'intero testo
-            sentences = [text]            
+            sentences = [text]
+            
         try:
+            # Configurazione robusta per analisi di qualità
             vectorizer = TfidfVectorizer(
-                max_features=100,  # Aumentato per più parole
+                max_features=100,  # Più features per analisi robusta
                 stop_words=self.italian_stopwords,
                 lowercase=True,
                 min_df=1,
-                max_df=0.8,  # Più permissivo
-                token_pattern=r'\b[a-zA-ZàèéìòùÀÈÉÌÒÙ]{2,}\b'  # Parole da 2 caratteri
+                max_df=0.8,  # Bilanciato per catturare pattern significativi
+                token_pattern=r'\b[a-zA-ZàèéìòùÀÈÉÌÒÙ]{3,}\b'  # Solo parole di almeno 3 caratteri
             )
             
             tfidf_matrix = vectorizer.fit_transform(sentences)
             
-            # Adatta il numero di topic al contenuto disponibile
-            effective_topics = min(n_topics, len(sentences), tfidf_matrix.shape[1] // 3)
+            # Calcola numero ottimale di topic
+            effective_topics = min(n_topics, len(sentences), tfidf_matrix.shape[1] // 4)
             if effective_topics < 1:
                 effective_topics = 1
                 
-            nmf = NMF(n_components=effective_topics, random_state=42, max_iter=100)
+            nmf = NMF(n_components=effective_topics, random_state=42, max_iter=200)
             nmf.fit(tfidf_matrix)
             feature_names = vectorizer.get_feature_names_out()
             
             topics = []
             for topic_idx, topic in enumerate(nmf.components_):
-                # Prendi solo parole con peso significativo
-                significant_words_idx = topic.argsort()[-8:][::-1]
+                # Seleziona le parole più significative
+                significant_words_idx = topic.argsort()[-10:][::-1]
                 top_words = []
-                word_weights = []
                 
                 for i in significant_words_idx:
                     word = feature_names[i]
                     weight = topic[i]
-                    if weight > 0.05:  # Soglia ridotta per più parole
+                    if weight > 0.05:  # Solo parole con peso significativo
                         top_words.append(word)
-                        word_weights.append(float(weight))
                 
                 if len(top_words) > 0:
-                    # Calcola peso del topic come media dei pesi delle parole
-                    topic_weight = np.mean(word_weights)
                     topics.append({
                         "theme": f"Tema {topic_idx + 1}",
-                        "keywords": top_words[:8],  # Aumentato a 8 parole per tema
-                        "topic_id": topic_idx,
-                        "weight": topic_weight,
-                        "word_weights": word_weights[:8]
+                        "keywords": top_words[:8],  # Fino a 8 parole per tema
+                        "topic_id": topic_idx
                     })
             
-            return topics if topics else [{"theme": "Contenuto Generale", "keywords": ["contenuto"], "topic_id": 0, "weight": 0.5, "word_weights": [0.5]}]
+            return topics if topics else [{"theme": "Contenuto Generale", "keywords": ["contenuto"], "topic_id": 0}]
             
         except Exception as e:
             print(f"Error in topic extraction: {e}")
-            return [{"theme": "Contenuto Generale", "keywords": ["contenuto"], "topic_id": 0, "weight": 0.5, "word_weights": [0.5]}]
+            return [{"theme": "Contenuto Generale", "keywords": ["contenuto"], "topic_id": 0}]
 
     def calculate_cooccurrence_matrix(self, text, window_size=8):
-        """Calcola matrice di co-occorrenza delle parole - versione espansa"""
-        # Pulizia più aggressiva del testo
+        """Calcola matrice di co-occorrenza robusta delle parole"""        # Pulizia robusta del testo
         import re
-        
-        # Rimuovi punteggiatura ma mantieni lettere accentate
         text_clean = re.sub(r'[^\w\sàèéìòùÀÈÉÌÒÙ]', ' ', text.lower())
         words = text_clean.split()
         
-        # Filtro meno restrittivo - parole da 2+ caratteri
+        # Filtro rigoroso per parole significative
         filtered_words = []
         for w in words:
             w = w.strip()
-            if (len(w) >= 2 and 
+            if (len(w) >= 3 and 
                 not w.isdigit() and 
                 w.isalpha() and 
-                w not in self.italian_stopwords and
-                not w in ['sono', 'essere', 'avere', 'fare', 'dire', 'andare', 'potere', 'dovere', 'volere']):  # Stopwords aggiuntive
+                w not in self.italian_stopwords):
                 filtered_words.append(w)
         
         print(f"Parole filtrate per co-occorrenza: {len(filtered_words)} da {len(words)} originali")
         
         cooccurrence = defaultdict(lambda: defaultdict(int))
         
-        # Finestra più ampia per catturare più relazioni
+        # Finestra di co-occorrenza più ampia per catturare relazioni semantiche
         for i, word in enumerate(filtered_words):
             for j in range(max(0, i - window_size), min(len(filtered_words), i + window_size + 1)):
                 if i != j:
                     cooccurrence[word][filtered_words[j]] += 1
         
-        # Mostra statistiche
         print(f"Matrice co-occorrenza: {len(cooccurrence)} parole uniche")
         return cooccurrence
-
-    def calculate_topic_similarities(self, topics_data, tfidf_matrix, nmf_model):
-        """Calcola similarità tra topic usando cosine similarity"""
-        if len(topics_data) < 2:
-            return {}
-        
-        similarities = {}
-        topic_vectors = nmf_model.components_
-        
-        for i, j in itertools.combinations(range(len(topics_data)), 2):
-            similarity = cosine_similarity([topic_vectors[i]], [topic_vectors[j]])[0][0]
-            similarities[f"topic_{i+1}_topic_{j+1}"] = float(similarity)
-        return similarities
     
-    def create_network_data(self, topics_data, cooccurrence, topic_similarities, max_words=100):
-        """Crea dati per la visualizzazione network - solo parole, no nodi tema artificiali"""
-        print(f"DEBUG: create_network_data chiamata con max_words={max_words}")
-        
+    def create_network_data(self, topics_data, cooccurrence, max_words=100):
+        """Crea dati per la visualizzazione network con limite rigoroso"""
         nodes = []
         edges = []
-        
         topic_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
         
-        # Raccogli TUTTE le parole significative dal testo originale
-        all_words = set()
-        word_to_cluster = {}
-        word_weights = {}
+        print(f"DEBUG: Inizio create_network_data con max_words={max_words}")
         
-        # Parole dai topic (con cluster assegnato) - SEMPRE incluse
-        topic_words = set()
+        # 1. Raccogli TUTTE le parole candidate con i loro punteggi
+        word_scores = {}
+        word_to_cluster = {}
+        
+        # Topic words hanno priorità massima
         for i, topic in enumerate(topics_data):
             for j, keyword in enumerate(topic["keywords"]):
-                all_words.add(keyword)
-                topic_words.add(keyword)
-                word_to_cluster[keyword] = i
-                # Peso dalla posizione nel topic (primi pesi maggiori)
-                weight = topic.get("word_weights", [1.0] * len(topic["keywords"]))[j]
-                word_weights[keyword] = weight
+                if keyword not in word_scores:
+                    word_scores[keyword] = 1000 - j  # Priorità alta per topic words
+                    word_to_cluster[keyword] = i
         
-        # Calcola scores per tutte le parole da co-occorrenza
-        word_scores = {}
-        for word1, cooc_dict in cooccurrence.items():
-            if len(word1) >= 3 and word1.isalpha():  # Parole da 3+ caratteri per qualità
+        print(f"DEBUG: Topic words raccolte: {len(word_scores)}")
+        
+        # Aggiungi parole dalla co-occorrenza
+        cooc_count = 0
+        for word, cooc_dict in cooccurrence.items():
+            if len(word) >= 3 and word.isalpha():
                 total_cooc = sum(cooc_dict.values())
-                topic_correlation = 0
-                
-                # Calcola correlazione con topic words
-                for i, topic in enumerate(topics_data):
-                    correlation = sum(cooc_dict.get(kw, 0) for kw in topic["keywords"])
-                    topic_correlation = max(topic_correlation, correlation)
-                
-                # Score combinato: co-occorrenza totale + correlazione topic
-                score = total_cooc + (topic_correlation * 2)
-                word_scores[word1] = score
-                
-                if word1 not in word_to_cluster:
-                    # Trova il topic più correlato
-                    best_cluster = len(topics_data)  # Default: cluster neutro
+                if total_cooc > 0 and word not in word_scores:
+                    word_scores[word] = total_cooc
+                    cooc_count += 1
+                    # Assegna al topic più correlato
+                    best_cluster = len(topics_data)
                     max_correlation = 0
-                    
                     for i, topic in enumerate(topics_data):
-                        correlation = sum(cooc_dict.get(kw, 0) for kw in topic["keywords"])
+                        correlation = sum(cooccurrence[word].get(kw, 0) for kw in topic["keywords"])
                         if correlation > max_correlation:
                             max_correlation = correlation
                             best_cluster = i
-                    
-                    word_to_cluster[word1] = best_cluster
-                    word_weights[word1] = min(score / 20, 1.0)  # Peso basato su score
-          # Seleziona le top words per score (escludendo quelle già nei topic)
-        available_slots = max(0, max_words - len(topic_words))
+                    word_to_cluster[word] = best_cluster
         
-        print(f"DEBUG: max_words={max_words}, topic_words={len(topic_words)}, available_slots={available_slots}")
+        print(f"DEBUG: Parole co-occorrenza aggiunte: {cooc_count}")
+        print(f"DEBUG: Totale parole candidate: {len(word_scores)}")
         
-        if available_slots > 0:
-            # Ordina per score e prendi le migliori
-            sorted_words = sorted(
-                [(word, score) for word, score in word_scores.items() if word not in topic_words],
-                key=lambda x: x[1], 
-                reverse=True
-            )
-            
-            print(f"DEBUG: Candidate words from cooccurrence: {len(sorted_words)}")
-            
-            for word, score in sorted_words[:available_slots]:
-                all_words.add(word)
-                
-        print(f"DEBUG: Final word count: {len(all_words)} (should be <= {max_words})")
+        # 2. Calcola total_available_words PRIMA del taglio
+        total_available_words = len(word_scores)
         
-        # Controllo finale: se abbiamo troppe parole, mantieni solo le più importanti
-        if len(all_words) > max_words:
-            print(f"WARNING: Troppo parole ({len(all_words)}), riducendo a {max_words}")
-            
-            # Combina topic words (priorità assoluta) + altre parole per score
-            final_words = list(topic_words)  # Inizia con le parole dei topic
-            other_words = [w for w in all_words if w not in topic_words]
-            
-            # Ordina le altre parole per score
-            other_words_scored = [(w, word_scores.get(w, 0)) for w in other_words]
-            other_words_scored.sort(key=lambda x: x[1], reverse=True)
-            
-            # Aggiungi le migliori fino al limite
-            remaining_slots = max_words - len(final_words)
-            for word, score in other_words_scored[:remaining_slots]:
-                final_words.append(word)
-            
-            all_words = set(final_words)
-            print(f"DEBUG: After reduction: {len(all_words)} words")
+        # 3. Ordina per punteggio e prendi ESATTAMENTE max_words
+        sorted_words = sorted(word_scores.items(), key=lambda x: x[1], reverse=True)
+        final_words = [word for word, score in sorted_words[:max_words]]
         
-        print(f"Creando network con {len(all_words)} parole totali (limite: {max_words})")
-        print(f"- {len(topic_words)} parole dai topic (sempre incluse)")
-        print(f"- {len(all_words) - len(topic_words)} parole aggiuntive per importanza")
+        print(f"DEBUG: Parole finali selezionate: {len(final_words)} (dovrebbe essere <= {max_words})")
         
-        # Crea nodi solo per le parole (NO nodi artificiali per i topic)
-        for word in all_words:
+        # 4. Crea nodi
+        for word in final_words:
             cluster = word_to_cluster.get(word, len(topics_data))
-            weight = word_weights.get(word, 0.2)
-            
-            # Dimensione basata su peso e importanza
-            size = 6 + (weight * 25)
-            
-            # Colore basato su cluster/topic
-            if cluster < len(topic_colors):
-                color = topic_colors[cluster]
+            # Normalizza il peso basato sul punteggio
+            score = word_scores[word]
+            if score >= 1000:  # Topic words
+                weight = 1.0
             else:
-                color = '#6b7280'  # Grigio per parole non categorizzate
+                weight = min(score / 10.0, 1.0)  # Co-occurrence words
+            
+            size = 8 + (weight * 15)
+            color = topic_colors[cluster % len(topic_colors)] if cluster < len(topic_colors) else '#6b7280'
             
             nodes.append(NetworkNode(
                 id=f"word_{word}",
                 label=word,
-                type="keyword",  # Tutte sono parole/keyword
+                type="keyword",
                 size=size,
                 color=color,
                 cluster=cluster,
                 weight=weight
             ))
         
-        # Edges basati SOLO su co-occorrenza tra parole
-        word_list = list(all_words)
+        # 5. Crea edges basati su co-occorrenza
         edge_count = 0
-        for i, word1 in enumerate(word_list):
-            for word2 in word_list[i+1:]:
+        for i, word1 in enumerate(final_words):
+            for word2 in final_words[i+1:]:
                 cooc_score = cooccurrence.get(word1, {}).get(word2, 0)
-                if cooc_score >= 1:  # Soglia molto bassa per più connessioni
+                if cooc_score >= 1:
                     edges.append(NetworkEdge(
                         source=f"word_{word1}",
-                        target=f"word_{word2}",                        weight=float(min(cooc_score / 5, 1.0)),  # Normalizzazione più permissiva
+                        target=f"word_{word2}",
+                        weight=float(min(cooc_score / 3, 1.0)),
                         type="cooccurrence"
                     ))
                     edge_count += 1
         
-        print(f"Creati {len(nodes)} nodi e {edge_count} edges")
+        print(f"DEBUG: Creati {len(nodes)} nodi e {edge_count} edges")
+        print(f"DEBUG: total_available_words = {total_available_words}")
         
-        # Calcola il totale di parole disponibili (topic words + candidate words)
-        total_available = len(topic_words) + len([w for w in word_scores.keys() if w not in topic_words])
-        print(f"DEBUG: Parole totali disponibili: {total_available}")
+        # Verifica che il limite sia rispettato
+        assert len(nodes) <= max_words, f"Troppi nodi: {len(nodes)} > {max_words}"
         
-        return NetworkData(nodes=nodes, edges=edges), total_available
+        return NetworkData(nodes=nodes, edges=edges), total_available_words
 
 analysis_service = DocumentAnalysisService()
 
@@ -388,76 +317,38 @@ async def health_check():
 @app.post("/single-document-analysis")
 async def single_document_analysis(request: SingleDocumentRequest):
     try:
-        print(f"=== INIZIO ANALISI ===")
-        print(f"DEBUG: Received request - session_id: {request.session_id}")
-        print(f"DEBUG: max_words: {request.max_words} (type: {type(request.max_words)})")
-        print(f"DEBUG: n_topics: {request.n_topics}")
-        print(f"DEBUG: transcript_length: {len(request.transcript)}")
-        print(f"=== ===")
+        print(f"DEBUG: Received request - max_words: {request.max_words}")
         
-        if not request.transcript or len(request.transcript.strip()) < 20:
-            raise HTTPException(status_code=400, detail="Transcript too short")
-          # Estrai keywords con TF-IDF
-        keywords_data = analysis_service.extract_keywords_tfidf(request.transcript, max_features=30)  # Aumentato
-        keywords = [kw["keyword"] for kw in keywords_data[:20]]  # Più keywords
+        # Controllo severo sulla lunghezza minima per analisi robuste
+        words = request.transcript.split()
+        if not request.transcript or len(words) < 50:
+            raise HTTPException(status_code=400, detail="Transcript troppo breve per un'analisi significativa. Minimo 50 parole richieste.")
         
-        # Estrai topics con NMF avanzato
+        keywords_data = analysis_service.extract_keywords_tfidf(request.transcript, max_features=15)
+        keywords = [kw["keyword"] for kw in keywords_data[:10]]
+        
         topics_data = analysis_service.extract_topics_nmf(request.transcript, n_topics=request.n_topics)
         
-        # Calcola co-occorrenza delle parole
+        # Calcola co-occorrenza
         cooccurrence = analysis_service.calculate_cooccurrence_matrix(request.transcript)
         
-        # Per calcolare similarità tra topic, riesegui NMF per ottenere il modello
-        sentences = []
-        for s in request.transcript.replace('!', '.').replace('?', '.').split('.'):
-            s = s.strip()
-            if len(s) > 30:
-                sentences.append(s)
-        
-        if len(sentences) < 2:
-            sentences = [request.transcript]
-        
-        vectorizer = TfidfVectorizer(
-            max_features=50,
-            stop_words=analysis_service.italian_stopwords,
-            lowercase=True,
-            min_df=1,
-            max_df=0.7,
-            token_pattern=r'\b[a-zA-ZàèéìòùÀÈÉÌÒÙ]{3,}\b'
+        # Crea network data
+        network_data, total_available_words = analysis_service.create_network_data(
+            topics_data, cooccurrence, max_words=request.max_words
         )
         
-        tfidf_matrix = vectorizer.fit_transform(sentences)
-        effective_topics = min(request.n_topics, len(sentences), tfidf_matrix.shape[1] // 3)
-        if effective_topics < 1:
-            effective_topics = 1
-            
-        nmf_model = NMF(n_components=effective_topics, random_state=42, max_iter=100)
-        nmf_model.fit(tfidf_matrix)
-          # Calcola similarità tra topic
-        topic_similarities = analysis_service.calculate_topic_similarities(topics_data, tfidf_matrix, nmf_model)
-          # Crea network data
-        print(f"=== CHIAMATA create_network_data ===")
-        print(f"DEBUG: Passando max_words={request.max_words} a create_network_data")
-        network_data, total_available_words = analysis_service.create_network_data(topics_data, cooccurrence, topic_similarities, max_words=request.max_words)
-        print(f"DEBUG: create_network_data ha restituito {len(network_data.nodes)} nodi su {total_available_words} disponibili")
-        print(f"=== ===")
-        
-          # Prepara topics per response
         topics = []
         for i, topic_data in enumerate(topics_data):
-            # Calcola centralità come numero di connessioni
-            topic_centrality = len([edge for edge in network_data.edges if edge.source == f"topic_{topic_data['topic_id'] + 1}"])
-            
             topics.append(Topic(
                 topic_id=i + 1,
                 keywords=topic_data["keywords"][:5],
-                description=topic_data["theme"],
-                weight=topic_data["weight"],
-                centrality=float(topic_centrality)
+                description=topic_data["theme"]
             ))
         
         words = request.transcript.split()
-        summary = f"Analisi di {len(words)} parole. Identificati {len(topics)} temi con {len(network_data.nodes)} nodi e {len(network_data.edges)} connessioni nella rete."
+        summary = f"Analisi di {len(words)} parole. Identificati {len(topics)} temi con {len(network_data.nodes)} nodi nel network."
+        
+        print(f"DEBUG: Returning total_available_words: {total_available_words}")
         
         return SingleDocumentResponse(
             session_id=request.session_id,
@@ -466,11 +357,12 @@ async def single_document_analysis(request: SingleDocumentRequest):
             summary=summary,
             analysis_timestamp=datetime.now().isoformat(),
             network_data=network_data,
-            topic_similarities=topic_similarities,
+            topic_similarities={},
             total_available_words=total_available_words
         )
         
     except Exception as e:
+        print(f"ERROR: {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 if __name__ == "__main__":

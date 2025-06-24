@@ -78,19 +78,21 @@ export default function NetworkTopicVisualization({
       }, 100);
     }
   }, [networkData]);
-
   // Filtra dati in base alle opzioni di visualizzazione
+  const filteredNodes = networkData.nodes.filter(node => 
+    node.type === 'topic' || (node.type === 'keyword' && showKeywords)
+  )
+  
   const filteredData = {
-    nodes: networkData.nodes.filter(node => 
-      node.type === 'topic' || (node.type === 'keyword' && showKeywords)
-    ),
+    nodes: filteredNodes,
     links: networkData.edges.filter(edge => {
       if (!showConnections) return false
-      const sourceExists = networkData.nodes.some(n => n.id === edge.source)
-      const targetExists = networkData.nodes.some(n => n.id === edge.target)
+      // Verifica che sia source che target esistano nei nodi filtrati
+      const sourceExists = filteredNodes.some(n => n.id === edge.source)
+      const targetExists = filteredNodes.some(n => n.id === edge.target)
       if (!showKeywords) {
         // Mostra solo connessioni tra topic se keywords sono nascoste
-        return edge.type === 'topic_similarity'
+        return edge.type === 'topic_similarity' && sourceExists && targetExists
       }
       return sourceExists && targetExists
     })
