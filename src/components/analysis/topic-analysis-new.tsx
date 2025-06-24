@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -73,9 +73,10 @@ export default function TopicAnalysisComponent({
   const [error, setError] = useState<string | null>(null)
   const [expandedTopics, setExpandedTopics] = useState<Set<number>>(new Set())
   const [viewMode, setViewMode] = useState<'list' | 'network'>('list')
-  const [wordPercentage, setWordPercentage] = useState<number>(30) // Percentuale invece di numero assoluto
+  const [wordPercentage, setWordPercentage] = useState<number>(30) // Percentuale invece di numero assoluto  // Effect per analisi automatica quando cambia la percentuale
+  const debounceRef = useRef<NodeJS.Timeout | null>(null)
 
-  const runTopicAnalysis = async () => {
+  const runTopicAnalysis = useCallback(async () => {
     if (!selectedSessions || selectedSessions.length === 0 || !combinedTranscript) {
       setError("Seleziona una o più sessioni con trascrizione per l'analisi")
       return
@@ -120,11 +121,31 @@ export default function TopicAnalysisComponent({
 
     } catch (error) {
       console.error('Errore analisi session:', error)
-      setError(error instanceof Error ? error.message : 'Errore sconosciuto')
-    } finally {
+      setError(error instanceof Error ? error.message : 'Errore sconosciuto')    } finally {
       setIsAnalyzing(false)
     }
-  }
+  }, [selectedSessions, combinedTranscript, wordPercentage]) // Rimuovi dipendenze che cambiano spesso
+  // Effect per analisi automatica quando cambia la percentuale
+  useEffect(() => {
+    // Solo se abbiamo già un risultato precedente, rilanciamo l'analisi automaticamente
+    if (analysisResult && selectedSessions.length > 0 && combinedTranscript) {
+      // Debounce per evitare troppe chiamate durante il trascinamento dello slider
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+      }
+      
+      debounceRef.current = setTimeout(() => {
+        console.log('DEBUG: Auto-running analysis due to percentage change:', wordPercentage)
+        runTopicAnalysis()
+      }, 800) // 800ms di debounce
+    }
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+      }
+    }
+  }, [wordPercentage]) // Solo wordPercentage come dipendenza
 
   const toggleTopicExpansion = (topicId: number) => {
     const newExpanded = new Set(expandedTopics)
@@ -278,7 +299,7 @@ export default function TopicAnalysisComponent({
                   </span>
                 </div>                <div className="min-h-[650px] border rounded-lg bg-gray-50 overflow-hidden"> {/* Aumentato spazio */}
                   <NetworkTopicVisualization
-                    key={`network-${analysisResult.analysis_timestamp}-${analysisResult.network_data.nodes.length}`} // Usa timestamp invece di percentuale
+                    key={`network-${analysisResult.analysis_timestamp}-${analysisResult.network_data.nodes.length}-${wordPercentage}`} // Include anche wordPercentage per forzare re-render
                     networkData={analysisResult.network_data}
                     width={800}
                     height={640} // Aumentato per usare tutto lo spazio
