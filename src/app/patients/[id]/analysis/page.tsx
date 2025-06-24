@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react"
 import TopicAnalysisComponent from "@/components/analysis/topic-analysis"
+import { SentimentAnalysis } from "@/components/sentiment-analysis"
+import { EmotionTrends } from "@/components/emotion-trends"
 
 interface Session {
   id: string
@@ -47,6 +49,7 @@ export default function PatientAnalysisPage() {
   const [editingNote, setEditingNote] = useState(false)
   const [activeSessionForNote, setActiveSessionForNote] = useState<Session | null>(null)
   const [currentSlide, setCurrentSlide] = useState(0) // 0: Trascrizioni, 1: Topic Modelling, 2: Sentiment Analysis
+  const [emotionAnalysisResults, setEmotionAnalysisResults] = useState<any[]>([]) // Store emotion analysis results
 
   useEffect(() => {
     if (status === "loading") return
@@ -461,30 +464,22 @@ export default function PatientAnalysisPage() {
                             }}
                           />
                         </div>
-                      )}
-
-                      {/* Slide 2: Sentiment Analysis */}
+                      )}                      {/* Slide 2: Sentiment Analysis */}
                       {currentSlide === 2 && (
                         <div className="h-full">
-                          <div className="mb-4">
-                            <h3 className="text-lg font-semibold">
-                              Sentiment Analysis - {selectedSessions.size > 0 ? 
-                                `${selectedSessions.size} sessioni selezionate` : 
-                                'Nessuna sessione selezionata'}
-                            </h3>
-                          </div>
-                          <div className="h-[420px] flex items-center justify-center text-gray-400">
-                            <div className="text-center">
-                              <Heart className="h-16 w-16 mx-auto mb-4" />
-                              <p className="text-lg mb-2">Sentiment Analysis</p>
-                              <p className="text-sm">
-                                Analisi delle emozioni per sessione - Coming Soon
-                              </p>
-                              <p className="text-xs mt-2 text-gray-500">
-                                Calcolo Z-score per 8 emozioni fondamentali
-                              </p>
-                            </div>
-                          </div>
+                          <SentimentAnalysis 
+                            selectedSessions={getSelectedSessionsData().map(session => ({
+                              id: session.id,
+                              title: session.title,
+                              transcript: session.transcript || ""
+                            }))}                            onAnalysisComplete={(result) => {
+                              console.log('Sentiment analysis completed:', result)
+                              // Transform data for EmotionTrends component
+                              if (result.success && result.individual_sessions) {
+                                setEmotionAnalysisResults(result.individual_sessions)
+                              }
+                            }}
+                          />
                         </div>
                       )}
                     </div>
@@ -503,20 +498,24 @@ export default function PatientAnalysisPage() {
                 <CardDescription>
                   Evoluzione delle 8 emozioni fondamentali attraverso le sessioni di terapia
                 </CardDescription>
-              </CardHeader>
-              <CardContent className="h-[300px]">
-                <div className="h-full flex items-center justify-center text-gray-400">
-                  <div className="text-center">
-                    <TrendingUp className="h-16 w-16 mx-auto mb-4" />
-                    <p className="text-lg mb-2">Grafico Storico Sentiment</p>
-                    <p className="text-sm">
-                      Serie temporale delle emozioni - Coming Soon
-                    </p>
-                    <p className="text-xs mt-2 text-gray-500">
-                      Visualizzazione Z-score delle 8 emozioni nel corso delle sessioni
-                    </p>
+              </CardHeader>              <CardContent className="h-[300px]">                {emotionAnalysisResults.length > 0 ? (
+                  <EmotionTrends 
+                    analysisData={{ individual_sessions: emotionAnalysisResults }}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-gray-400">
+                    <div className="text-center">
+                      <TrendingUp className="h-16 w-16 mx-auto mb-4" />
+                      <p className="text-lg mb-2">Grafico Storico Sentiment</p>
+                      <p className="text-sm">
+                        Esegui prima l'analisi sentiment per visualizzare il grafico
+                      </p>
+                      <p className="text-xs mt-2 text-gray-500">
+                        Vai al tab "Sentiment Analysis" e analizza le sessioni selezionate
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
 
