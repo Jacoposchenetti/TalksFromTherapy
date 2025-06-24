@@ -18,7 +18,9 @@ export function Navigation() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const pathname = usePathname()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)  // Don't render navigation if not authenticated or still loading
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  
+  // Don't render navigation if not authenticated or still loading
   if (status === "loading") return null
   if (!session) {
     router.push('/login')
