@@ -5,20 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { BarChart3, Loader2, AlertCircle, Eye, EyeOff, Network } from "lucide-react"
-import dynamic from "next/dynamic"
-
-// Import dinamico del componente network per evitare problemi SSR
-const NetworkTopicVisualization = dynamic(() => import("./network-topic-visualization"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-[650px] bg-gray-50 rounded-lg">
-      <div className="text-center text-gray-500">
-        <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
-        <p className="text-sm">Caricamento visualizzazione...</p>
-      </div>
-    </div>
-  )
-})
+import NetworkTopicVisualization from "./network-topic-visualization"
 
 interface TopicWord {
   word: string
@@ -36,7 +23,7 @@ interface Topic {
 interface NetworkNode {
   id: string
   label: string
-  type: 'topic' | 'keyword'
+  type: string
   size: number
   color: string
   cluster: number
@@ -85,6 +72,7 @@ export default function TopicAnalysisComponent({
   const [error, setError] = useState<string | null>(null)
   const [expandedTopics, setExpandedTopics] = useState<Set<number>>(new Set())
   const [viewMode, setViewMode] = useState<'list' | 'network'>('list')
+  const [maxWords, setMaxWords] = useState<number>(100)
 
   const runTopicAnalysis = async () => {
     if (!selectedSessions || selectedSessions.length === 0 || !combinedTranscript) {
@@ -96,16 +84,25 @@ export default function TopicAnalysisComponent({
     setError(null)
     setAnalysisResult(null)
 
+    console.log('DEBUG: Starting analysis with maxWords:', maxWords)
+
     try {
+      const requestBody = {
+        session_id: selectedSessions.length === 1 ? selectedSessions[0].id : `combined_${selectedSessions.map(s => s.id).join('_')}`,
+        transcript: combinedTranscript,
+        max_words: maxWords,
+        timestamp: Date.now() // Aggiungi timestamp per evitare cache
+      }
+      
+      console.log('DEBUG: Request body:', requestBody)
+
       const response = await fetch('/api/single-session-analysis', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache', // Previene cache
         },
-        body: JSON.stringify({
-          session_id: selectedSessions.length === 1 ? selectedSessions[0].id : `combined_${selectedSessions.map(s => s.id).join('_')}`,
-          transcript: combinedTranscript
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -146,23 +143,47 @@ export default function TopicAnalysisComponent({
     ]
     return colors[topicId % colors.length]
   }
-
   return (
-    <div className="h-full">
+    <div className="h-full flex flex-col"> {/* Aggiunto flex flex-col per il layout verticale */}
       <div className="mb-4">
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <BarChart3 className="h-5 w-5" />
           Topic Modelling
-        </h3>
-        <p className="text-sm text-gray-600">
+        </h3>        <p className="text-sm text-gray-600">
           {selectedSessions && selectedSessions.length > 0 ? 
             `Analisi tematica di ${selectedSessions.length} ${selectedSessions.length === 1 ? 'sessione' : 'sessioni'}` :
             'Seleziona una o più sessioni per l\'analisi'
-          }        </p>
-      </div>
+          }
+        </p>
+      </div>      {/* Network Words Control - Always Visible */}
+      <div className="mb-4 p-4 bg-blue-100 border-2 border-blue-300 rounded-lg shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <label className="text-base font-bold text-blue-900">
+            🎛️ Controllo Parole Network: <span className="text-blue-600">{maxWords}</span>
+          </label>
+          <span className="text-sm text-blue-700 bg-blue-200 px-3 py-1 rounded-full">
+            Da più a meno significative
+          </span>
+        </div><input
+          type="range"
+          min="20"
+          max="300"
+          step="10"
+          value={maxWords}
+          onChange={(e) => setMaxWords(parseInt(e.target.value))}
+          className="w-full h-4 bg-gradient-to-r from-blue-500 to-blue-200 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300"
+        />        <div className="flex justify-between text-sm text-blue-700 mt-3 font-medium">
+          <span>📍 20 (Essenziali)</span>
+          <span>⚖️ 160 (Bilanciato)</span>
+          <span>📊 300 (Completo)</span>
+        </div>
+        {analysisResult && (
+          <div className="mt-3 p-2 bg-blue-50 rounded text-sm text-blue-800 border border-blue-200">
+            📊 Network attuale: <strong>{analysisResult.network_data.nodes.length} parole</strong>, <strong>{analysisResult.network_data.edges.length} connessioni</strong>
+          </div>
+        )}      </div>
       
-      <div className="h-[720px] overflow-y-auto">
-        {!analysisResult && !isAnalyzing && !error && (
+      <div className="flex-1 min-h-0 overflow-y-auto"> {/* Rimosso h-[320px] fisso per utilizzare tutto lo spazio disponibile */}{!analysisResult && !isAnalyzing && !error && (
           <div className="flex flex-col items-center justify-center h-48 text-center">
             <BarChart3 className="h-12 w-12 text-gray-400 mb-4" />
             <p className="text-gray-600 mb-4">
@@ -231,12 +252,27 @@ export default function TopicAnalysisComponent({
               </div>
             </div>            {/* Network View */}
             {viewMode === 'network' && (
-              <div className="h-[650px] border rounded-lg">
-                <NetworkTopicVisualization
-                  networkData={analysisResult.network_data}
-                  width={1000}
-                  height={650}
-                />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">
+                    Network con {analysisResult.network_data.nodes.length} parole
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={runTopicAnalysis}
+                    className="text-xs"
+                  >
+                    Aggiorna ({maxWords} parole)
+                  </Button>
+                </div>                <div className="min-h-[600px] border rounded-lg bg-gray-50 overflow-hidden"> {/* Aumentato a min-h-[600px] e aggiunto overflow-hidden */}
+                  <NetworkTopicVisualization
+                    key={`network-${maxWords}-${analysisResult.network_data.nodes.length}`} // Forza re-render quando cambiano dati
+                    networkData={analysisResult.network_data}
+                    width={800}
+                    height={590} // Aumentato per usare tutto lo spazio
+                  />
+                </div>
               </div>
             )}
 
@@ -369,6 +405,5 @@ export default function TopicAnalysisComponent({
           </div>
         )}
       </div>
-    </div>
-  )
+    </div>  )
 }

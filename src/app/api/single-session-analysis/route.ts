@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { session_id, transcript } = body
+  try {    const body = await request.json()
+    const { session_id, transcript, max_words = 100, n_topics = 3 } = body
 
     if (!session_id || !transcript) {
       return NextResponse.json(
         { error: 'session_id and transcript are required' },
         { status: 400 }
       )
-    }    // Call Python service for single document analysis
+    }
+
+    console.log('Single session analysis request:', { session_id, transcript_length: transcript.length, max_words, n_topics })// Call Python service for single document analysis
     const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8001'
     
     console.log('Calling Python service at:', `${pythonServiceUrl}/single-document-analysis`)
@@ -19,11 +20,11 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+      },      body: JSON.stringify({
         session_id,
         transcript,
-        n_topics: 3
+        n_topics,
+        max_words
       }),
     })
 

@@ -6,7 +6,7 @@ import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react"
-import TopicAnalysisComponent from "@/components/analysis/topic-analysis"
+import TopicAnalysisComponent from "@/components/analysis/topic-analysis-new"
 
 interface Session {
   id: string
@@ -305,10 +305,9 @@ export default function PatientAnalysisPage() {
         ) : (
           <div className="space-y-8">
             {/* Main Analysis Area with Slides */}
-            <div className="grid grid-cols-12 gap-6">
-              {/* Sidebar - Sessions List */}
-              <div className="col-span-3">
-                <Card className="h-[600px]">
+            <div className="grid grid-cols-12 gap-6">              {/* Sidebar - Sessions List */}
+              <div className="col-span-2">
+                <Card className="h-[900px]">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <FileText className="h-5 w-5" />
@@ -328,7 +327,7 @@ export default function PatientAnalysisPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="p-0">
-                    <div className="space-y-1 max-h-[450px] overflow-y-auto">
+                    <div className="space-y-1 max-h-[750px] overflow-y-auto">
                       {sessions.map((session, index) => (
                         <div key={session.id} className="border-b last:border-b-0">
                           <div className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
@@ -359,13 +358,12 @@ export default function PatientAnalysisPage() {
                         </div>
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
+                  </CardContent>                </Card>
               </div>
 
               {/* Main Sliding Analysis Panel */}
-              <div className="col-span-9">
-                <Card className="h-[600px]">
+              <div className="col-span-10">
+                <Card className="h-[900px]">
                   <CardHeader className="pb-4">
                     {/* Slide Navigation */}
                     <div className="flex items-center justify-between">
@@ -407,9 +405,8 @@ export default function PatientAnalysisPage() {
                         </Button>
                       </div>
                     </div>
-                  </CardHeader>
-                  
-                  <CardContent className="h-[500px] overflow-hidden">
+                  </CardHeader>                  
+                  <CardContent className="h-[800px] overflow-hidden">
                     <div className="h-full">
                       {/* Slide 0: Trascrizioni */}
                       {currentSlide === 0 && (
@@ -421,7 +418,7 @@ export default function PatientAnalysisPage() {
                                 'Nessuna Sessione Selezionata'}
                             </h3>
                           </div>
-                          <div className="h-[420px] overflow-y-auto bg-gray-50 p-4 rounded text-sm space-y-4">
+                          <div className="h-[720px] overflow-y-auto bg-gray-50 p-4 rounded text-sm space-y-4">
                             {selectedSessions.size > 0 ? (
                               getSelectedSessionsData().map((session, index) => (
                                 <div key={session.id} className="border-b pb-3 last:border-b-0">
@@ -473,7 +470,7 @@ export default function PatientAnalysisPage() {
                                 'Nessuna sessione selezionata'}
                             </h3>
                           </div>
-                          <div className="h-[420px] flex items-center justify-center text-gray-400">
+                          <div className="h-[720px] flex items-center justify-center text-gray-400">
                             <div className="text-center">
                               <Heart className="h-16 w-16 mx-auto mb-4" />
                               <p className="text-lg mb-2">Sentiment Analysis</p>
@@ -491,10 +488,8 @@ export default function PatientAnalysisPage() {
                   </CardContent>
                 </Card>
               </div>
-            </div>
-
-            {/* Historical Sentiment Trends */}
-            <Card className="h-[400px]">
+            </div>            {/* Historical Sentiment Trends */}
+            <Card className="h-[600px]">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
@@ -504,7 +499,7 @@ export default function PatientAnalysisPage() {
                   Evoluzione delle 8 emozioni fondamentali attraverso le sessioni di terapia
                 </CardDescription>
               </CardHeader>
-              <CardContent className="h-[300px]">
+              <CardContent className="h-[500px]">
                 <div className="h-full flex items-center justify-center text-gray-400">
                   <div className="text-center">
                     <TrendingUp className="h-16 w-16 mx-auto mb-4" />

@@ -15,57 +15,96 @@ export default function DashboardPage() {
     sessionsCount: 0,
     transcriptionsCount: 0,
   })
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (status === "loading") return // Still loading
-    if (!session) router.push("/login")
-    else fetchStats()
+    console.log("Dashboard useEffect - status:", status, "session:", !!session)
+    
+    if (status === "loading") {
+      console.log("Dashboard: Still loading session...")
+      return // Still loading
+    }
+    
+    if (!session) {
+      console.log("Dashboard: No session, redirecting to login...")
+      router.push("/login")
+      return
+    }
+    
+    console.log("Dashboard: Session found, fetching stats...")
+    fetchStats()
   }, [session, status, router])
 
   const fetchStats = async () => {
     try {
+      setIsLoading(true)
+      setError(null)
       console.log("Dashboard: Fetching stats...")
+      
       const [patientsRes, sessionsRes] = await Promise.all([
         fetch("/api/patients"),
         fetch("/api/sessions"),
       ])
       
       console.log("Dashboard: Response status - patients:", patientsRes.status, "sessions:", sessionsRes.status)
-        if (patientsRes.ok && sessionsRes.ok) {
-        const [patientsData, sessions] = await Promise.all([
-          patientsRes.json(),
-          sessionsRes.json(),
-        ])
-        
-        // L'API pazienti restituisce { patients: [...] }
-        const patients = patientsData.patients || []
-        
-        console.log("Dashboard: Data received - patients:", patients, "sessions:", sessions)
-        console.log("Dashboard: Patients length:", patients?.length, "Sessions length:", sessions?.length)
-        
-        const patientsCount = Array.isArray(patients) ? patients.length : 0
-        const sessionsCount = Array.isArray(sessions) ? sessions.length : 0
-        const transcriptionsCount = Array.isArray(sessions) ? sessions.filter((s: any) => s.transcript).length : 0
-        
-        const newStats = {
-          patientsCount: patientsCount,
-          sessionsCount: sessionsCount,
-          transcriptionsCount: transcriptionsCount,
-        }
-        
-        console.log("Dashboard: New stats:", newStats)
-        setStats(newStats)
-      } else {
-        console.error("Dashboard: API response not ok")
+        if (!patientsRes.ok || !sessionsRes.ok) {
+        throw new Error(`HTTP error - patients: ${patientsRes.status}, sessions: ${sessionsRes.status}`)
       }
-    } catch (error) {console.error("Error fetching stats:", error)
+      
+      const [patientsData, sessions] = await Promise.all([
+        patientsRes.json(),
+        sessionsRes.json(),
+      ])
+      
+      // L'API pazienti restituisce { patients: [...] }
+      const patients = patientsData.patients || []
+      
+      console.log("Dashboard: Data received - patients:", patients, "sessions:", sessions)
+      console.log("Dashboard: Patients length:", patients?.length, "Sessions length:", sessions?.length)
+      
+      const patientsCount = Array.isArray(patients) ? patients.length : 0
+      const sessionsCount = Array.isArray(sessions) ? sessions.length : 0
+      const transcriptionsCount = Array.isArray(sessions) ? sessions.filter((s: any) => s.transcript).length : 0
+      
+      const newStats = {
+        patientsCount: patientsCount,
+        sessionsCount: sessionsCount,
+        transcriptionsCount: transcriptionsCount,
+      }
+      
+      console.log("Dashboard: New stats:", newStats)
+      setStats(newStats)
+    } catch (error) {
+      console.error("Error fetching stats:", error)
+      setError(error instanceof Error ? error.message : "Errore nel caricamento delle statistiche")
+    } finally {
+      setIsLoading(false)
     }
   }
 
+  // Loading state
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="text-gray-600">Caricamento sessione...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Errore</h1>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>
+            Ricarica Pagina
+          </Button>
+        </div>
       </div>
     )
   }
