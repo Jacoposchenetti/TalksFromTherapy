@@ -1,0 +1,12 @@
+[
+  {
+    "id": "test-session-1",
+    "title": "Sessione Test 1",
+    "transcript": "Oggi mi sento molto felice e pieno di energia. Sono veramente entusiasta per quello che mi aspetta. La terapia mi sta aiutando molto e sono fiducioso nel futuro."
+  },
+  {
+    "id": "test-session-2", 
+    "title": "Sessione Test 2",
+    "transcript": "Ieri ho avuto una giornata difficile. Mi sentivo triste e ansioso. Però ora sto meglio e voglio continuare a lavorare su me stesso."
+  }
+]
