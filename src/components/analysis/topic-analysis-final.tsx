@@ -23,7 +23,7 @@ interface Topic {
 interface NetworkNode {
   id: string
   label: string
-  type: 'topic' | 'keyword'
+  type: string
   size: number
   color: string
   cluster: number
@@ -67,12 +67,14 @@ export default function TopicAnalysisComponent({
   selectedSessions = [], 
   combinedTranscript = "",
   onAnalysisComplete 
-}: TopicAnalysisComponentProps) {  const [isAnalyzing, setIsAnalyzing] = useState(false)
+}: TopicAnalysisComponentProps) {
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<SingleDocumentAnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expandedTopics, setExpandedTopics] = useState<Set<number>>(new Set())
   const [viewMode, setViewMode] = useState<'list' | 'network'>('list')
   const [wordPercentage, setWordPercentage] = useState<number>(30) // Percentuale invece di numero assoluto
+
   const runTopicAnalysis = async () => {
     if (!selectedSessions || selectedSessions.length === 0 || !combinedTranscript) {
       setError("Seleziona una o più sessioni con trascrizione per l'analisi")
@@ -294,229 +296,6 @@ export default function TopicAnalysisComponent({
                     height={640}
                   />
                 </div>
-              </div>
-            )}
-
-            {/* List View */}
-            {viewMode === 'list' && (
-              <>
-                {/* Summary */}
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold mb-2">Riassunto dell'Analisi</h3>
-                  <p className="text-sm text-gray-700">{analysisResult.summary}</p>
-                  {analysisResult.topic_similarities && Object.keys(analysisResult.topic_similarities).length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-xs text-gray-600 font-medium">Similarità tra temi:</p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {Object.entries(analysisResult.topic_similarities).map(([pair, similarity]) => (
-                          <Badge key={pair} variant="secondary" className="text-xs">
-                            {pair.replace(/_/g, ' ')}: {(similarity * 100).toFixed(1)}%
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Keywords */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold">Parole Chiave Principali</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {analysisResult.keywords.map((keyword, idx) => (
-                      <Badge
-                        key={idx}
-                        variant="secondary"
-                        className="text-sm"
-                      >
-                        {keyword}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Topics */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Temi Identificati</h3>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={runTopicAnalysis}
-                      className="flex items-center gap-2"
-                    >
-                      <BarChart3 className="h-4 w-4" />
-                      Rigenera Analisi
-                    </Button>
-                  </div>
-
-                  {analysisResult.topics.map((topic) => (
-                    <Card key={topic.topic_id} className="border-l-4 border-l-blue-500">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Badge className={getTopicColor(topic.topic_id)}>
-                              Tema {topic.topic_id}
-                            </Badge>
-                            {topic.description && (
-                              <span className="text-sm text-gray-600">
-                                {topic.description}
-                              </span>
-                            )}
-                            {topic.weight && (
-                              <Badge variant="outline" className="text-xs">
-                                Peso: {(topic.weight * 100).toFixed(1)}%
-                              </Badge>
-                            )}
-                            {topic.centrality && (
-                              <Badge variant="outline" className="text-xs">
-                                Connessioni: {topic.centrality}
-                              </Badge>
-                            )}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleTopicExpansion(topic.topic_id)}
-                          >
-                            {expandedTopics.has(topic.topic_id) ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {topic.keywords.map((keyword, idx) => (
-                            <Badge
-                              key={idx}
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              {keyword}
-                            </Badge>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {/* Analysis Info */}
-            <div className="text-xs text-gray-500 border-t pt-4">
-              <p>
-                Analisi completata il {new Date(analysisResult.analysis_timestamp).toLocaleString('it-IT')}
-              </p>
-              <p>
-                {selectedSessions && selectedSessions.length > 0 && (
-                  selectedSessions.length === 1 ? 
-                    `Sessione analizzata: ${selectedSessions[0].title}` :
-                    `Analisi combinata di ${selectedSessions.length} sessioni: ${selectedSessions.map(s => s.title).join(', ')}`
-                )}
-              </p>
-              {analysisResult.network_data && (
-                <p className="mt-1">
-                  Rete: {analysisResult.network_data.nodes.length} nodi, {analysisResult.network_data.edges.length} connessioni
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-    <div className="h-full">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2">
-          <BarChart3 className="h-5 w-5" />
-          Topic Modelling
-        </h3>
-        <p className="text-sm text-gray-600">
-          {selectedSessions && selectedSessions.length > 0 ? 
-            `Analisi tematica di ${selectedSessions.length} ${selectedSessions.length === 1 ? 'sessione' : 'sessioni'}` :
-            'Seleziona una o più sessioni per l\'analisi'
-          }        </p>
-      </div>
-      
-      <div className="h-[720px] overflow-y-auto">
-        {!analysisResult && !isAnalyzing && !error && (
-          <div className="flex flex-col items-center justify-center h-48 text-center">
-            <BarChart3 className="h-12 w-12 text-gray-400 mb-4" />
-            <p className="text-gray-600 mb-4">
-              {selectedSessions && selectedSessions.length > 0 ? 
-                "Clicca su 'Analizza Sessioni' per estrarre i temi principali" :
-                "Seleziona una o più sessioni per iniziare l'analisi"
-              }
-            </p>
-            <Button 
-              onClick={runTopicAnalysis}
-              disabled={!selectedSessions || selectedSessions.length === 0 || !combinedTranscript}
-              className="flex items-center gap-2"
-            >
-              <BarChart3 className="h-4 w-4" />
-              Analizza Sessioni
-            </Button>
-          </div>
-        )}
-
-        {isAnalyzing && (
-          <div className="flex flex-col items-center justify-center h-48 text-center">
-            <Loader2 className="h-12 w-12 text-blue-500 animate-spin mb-4" />
-            <p className="text-gray-600 mb-2">Analisi in corso...</p>
-            <p className="text-sm text-gray-500">
-              Sto analizzando {selectedSessions?.length} {selectedSessions?.length === 1 ? 'sessione' : 'sessioni'}
-            </p>
-          </div>
-        )}
-
-        {error && (
-          <div className="flex flex-col items-center justify-center h-48 text-center">
-            <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-            <p className="text-red-600 mb-4">{error}</p>
-            <Button 
-              onClick={runTopicAnalysis}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              Riprova
-            </Button>
-          </div>
-        )}
-
-        {analysisResult && (
-          <div className="space-y-6">
-            {/* View Mode Toggle */}
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Risultati Analisi</h3>
-              <div className="flex gap-2">
-                <Button
-                  variant={viewMode === 'list' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewMode('list')}
-                >
-                  <BarChart3 className="h-4 w-4 mr-1" />
-                  Lista
-                </Button>
-                <Button
-                  variant={viewMode === 'network' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewMode('network')}
-                >
-                  <Network className="h-4 w-4 mr-1" />
-                  Rete
-                </Button>
-              </div>
-            </div>            {/* Network View */}
-            {viewMode === 'network' && (
-              <div className="h-[650px] border rounded-lg">
-                <NetworkTopicVisualization
-                  networkData={analysisResult.network_data}
-                  width={1000}
-                  height={650}
-                />
               </div>
             )}
 

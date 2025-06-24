@@ -79,11 +79,9 @@ export default function TopicAnalysisComponent({
     if (!selectedSessions || selectedSessions.length === 0 || !combinedTranscript) {
       setError("Seleziona una o più sessioni con trascrizione per l'analisi")
       return
-    }
-
-    setIsAnalyzing(true)
+    }    setIsAnalyzing(true)
     setError(null)
-    setAnalysisResult(null)
+    // NON azzerare analysisResult qui per mantenere total_available_words per il calcolo
 
     console.log('DEBUG: Starting analysis with wordPercentage:', wordPercentage)
 
@@ -278,11 +276,9 @@ export default function TopicAnalysisComponent({
                       </span>
                     )}
                   </span>
-                </div>
-
-                <div className="min-h-[650px] border rounded-lg bg-gray-50 overflow-hidden"> {/* Aumentato spazio */}
+                </div>                <div className="min-h-[650px] border rounded-lg bg-gray-50 overflow-hidden"> {/* Aumentato spazio */}
                   <NetworkTopicVisualization
-                    key={`network-${wordPercentage}-${analysisResult.network_data.nodes.length}`} // Usa percentuale per il key
+                    key={`network-${analysisResult.analysis_timestamp}-${analysisResult.network_data.nodes.length}`} // Usa timestamp invece di percentuale
                     networkData={analysisResult.network_data}
                     width={800}
                     height={640} // Aumentato per usare tutto lo spazio
