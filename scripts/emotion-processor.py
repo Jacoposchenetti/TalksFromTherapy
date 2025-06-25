@@ -115,8 +115,7 @@ class EmotionProcessor:
             return {
                 'success': False,
                 'error': str(e),
-                'analysis': None
-            }
+                'analysis': None            }
     
     def analyze_multiple_sessions(self, sessions_data: list) -> dict:
         """Analyze multiple sessions and return combined analysis"""
@@ -127,6 +126,7 @@ class EmotionProcessor:
             for session in sessions_data:
                 session_id = session.get('id', '')
                 session_title = session.get('title', '')
+                session_date = session.get('sessionDate', '')
                 transcript = session.get('transcript', '')
                 
                 if not transcript.strip():
@@ -137,6 +137,7 @@ class EmotionProcessor:
                 if session_result['success']:
                     session_result['session_id'] = session_id
                     session_result['session_title'] = session_title
+                    session_result['session_date'] = session_date
                     session_analyses.append(session_result)
                 
                 combined_text += f"\n\n{transcript}"
