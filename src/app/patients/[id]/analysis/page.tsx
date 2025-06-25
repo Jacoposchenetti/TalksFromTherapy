@@ -497,11 +497,9 @@ export default function PatientAnalysisPage() {
                     </div>
                   </CardContent>
                 </Card>
-              </div>            </div>
-
-            {/* Historical Sentiment Trends - Only visible in Sentiment Analysis tab */}
+              </div>            </div>            {/* Historical Sentiment Trends - Only visible in Sentiment Analysis tab */}
             {currentSlide === 2 && (
-              <Card className="h-[400px]">
+              <Card className="h-[600px]">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="h-5 w-5" />
@@ -511,7 +509,7 @@ export default function PatientAnalysisPage() {
                     Evoluzione delle 8 emozioni fondamentali attraverso le sessioni di terapia
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="min-h-[300px] max-h-none overflow-auto">
+                <CardContent className="min-h-[500px] max-h-none overflow-auto">
                   {(() => {
                     console.log('🎨 Rendering trends section. emotionAnalysisResults:', emotionAnalysisResults)
                     console.log('🎨 emotionAnalysisResults.length:', emotionAnalysisResults.length)
@@ -520,9 +518,8 @@ export default function PatientAnalysisPage() {
                         <EmotionTrends 
                           analysisData={{ individual_sessions: emotionAnalysisResults }}
                         />
-                      </div>
-                    ) : (
-                      <div className="min-h-[300px] flex items-center justify-center text-gray-400">
+                      </div>                    ) : (
+                      <div className="min-h-[500px] flex items-center justify-center text-gray-400">
                         <div className="text-center">
                           <TrendingUp className="h-16 w-16 mx-auto mb-4" />
                           <p className="text-lg mb-2">Grafico Storico Sentiment</p>
