@@ -164,7 +164,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
     } else {
       console.log('ℹ️ No analysis result to clear')
     }
-  }, [validSessions.map(s => s.id).join(','), analysisResult?.analysis?.individual_sessions?.map(s => s.session_id).join(',')])
+  }, [validSessions.map(s => s.id).join(','), analysisResult?.analysis?.individual_sessions?.map(s => s.session_id)?.join(',') || ''])
 
   if (validSessions.length === 0) {
     return (
