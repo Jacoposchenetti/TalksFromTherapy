@@ -16,6 +16,7 @@ interface Session {
   title: string
   audioFilePath?: string
   transcript?: string
+  sessionDate: string
   status: 'UPLOADED' | 'TRANSCRIBING' | 'TRANSCRIBED' | 'ANALYZING' | 'ANALYZED' | 'ERROR'
   createdAt: string
   updatedAt: string
@@ -364,11 +365,9 @@ export default function PatientAnalysisPage() {
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-
-              {/* Main Sliding Analysis Panel */}
+              </div>              {/* Main Sliding Analysis Panel */}
               <div className="col-span-9">
-                <Card className="h-[600px]">
+                <Card className="min-h-[600px]">
                   <CardHeader className="pb-4">
                     {/* Slide Navigation */}
                     <div className="flex items-center justify-between">
@@ -410,9 +409,8 @@ export default function PatientAnalysisPage() {
                         </Button>
                       </div>
                     </div>
-                  </CardHeader>
-                  
-                  <CardContent className="h-[500px] overflow-hidden">
+                  </CardHeader>                  
+                  <CardContent className="min-h-[500px] overflow-auto">
                     <div className="h-full">
                       {/* Slide 0: Trascrizioni */}
                       {currentSlide === 0 && (
@@ -466,17 +464,31 @@ export default function PatientAnalysisPage() {
                         </div>
                       )}                      {/* Slide 2: Sentiment Analysis */}
                       {currentSlide === 2 && (
-                        <div className="h-full">
-                          <SentimentAnalysis 
+                        <div className="h-full">                          <SentimentAnalysis 
                             selectedSessions={getSelectedSessionsData().map(session => ({
                               id: session.id,
                               title: session.title,
-                              transcript: session.transcript || ""
-                            }))}                            onAnalysisComplete={(result) => {
-                              console.log('Sentiment analysis completed:', result)
+                              transcript: session.transcript || "",
+                              sessionDate: session.sessionDate
+                            }))}
+                            onAnalysisComplete={(result) => {
+                              console.log('🎯 Sentiment analysis completed:', result)
+                              console.log('🎯 Result type:', typeof result)
+                              console.log('🎯 Result.success:', result.success)
+                              console.log('🎯 Result.analysis:', result.analysis)
+                              console.log('🎯 Individual sessions type:', typeof result.analysis?.individual_sessions)
+                              console.log('🎯 Individual sessions:', result.analysis?.individual_sessions)
+                              
                               // Transform data for EmotionTrends component
-                              if (result.success && result.individual_sessions) {
-                                setEmotionAnalysisResults(result.individual_sessions)
+                              if (result.success && result.analysis?.individual_sessions) {
+                                console.log('🔄 Setting emotionAnalysisResults:', result.analysis.individual_sessions)
+                                setEmotionAnalysisResults(result.analysis.individual_sessions)
+                                console.log('📊 State should be updated now')
+                              } else {
+                                console.log('❌ Conditions not met:', {
+                                  success: result.success,
+                                  hasIndividualSessions: !!result.analysis?.individual_sessions
+                                })
                               }
                             }}
                           />
@@ -485,39 +497,48 @@ export default function PatientAnalysisPage() {
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-            </div>
+              </div>            </div>
 
-            {/* Historical Sentiment Trends */}
-            <Card className="h-[400px]">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Storico Sentiment - Andamento Emozioni nel Tempo
-                </CardTitle>
-                <CardDescription>
-                  Evoluzione delle 8 emozioni fondamentali attraverso le sessioni di terapia
-                </CardDescription>
-              </CardHeader>              <CardContent className="h-[300px]">                {emotionAnalysisResults.length > 0 ? (
-                  <EmotionTrends 
-                    analysisData={{ individual_sessions: emotionAnalysisResults }}
-                  />
-                ) : (
-                  <div className="h-full flex items-center justify-center text-gray-400">
-                    <div className="text-center">
-                      <TrendingUp className="h-16 w-16 mx-auto mb-4" />
-                      <p className="text-lg mb-2">Grafico Storico Sentiment</p>
-                      <p className="text-sm">
-                        Esegui prima l'analisi sentiment per visualizzare il grafico
-                      </p>
-                      <p className="text-xs mt-2 text-gray-500">
-                        Vai al tab "Sentiment Analysis" e analizza le sessioni selezionate
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {/* Historical Sentiment Trends - Only visible in Sentiment Analysis tab */}
+            {currentSlide === 2 && (
+              <Card className="h-[400px]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Storico Sentiment - Andamento Emozioni nel Tempo
+                  </CardTitle>
+                  <CardDescription>
+                    Evoluzione delle 8 emozioni fondamentali attraverso le sessioni di terapia
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="min-h-[300px] max-h-none overflow-auto">
+                  {(() => {
+                    console.log('🎨 Rendering trends section. emotionAnalysisResults:', emotionAnalysisResults)
+                    console.log('🎨 emotionAnalysisResults.length:', emotionAnalysisResults.length)
+                    return emotionAnalysisResults.length > 0 ? (
+                      <div className="w-full overflow-hidden">
+                        <EmotionTrends 
+                          analysisData={{ individual_sessions: emotionAnalysisResults }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="min-h-[300px] flex items-center justify-center text-gray-400">
+                        <div className="text-center">
+                          <TrendingUp className="h-16 w-16 mx-auto mb-4" />
+                          <p className="text-lg mb-2">Grafico Storico Sentiment</p>
+                          <p className="text-sm">
+                            Esegui prima l'analisi sentiment per visualizzare il grafico
+                          </p>
+                          <p className="text-xs mt-2 text-gray-500">
+                            Vai al tab "Sentiment Analysis" e analizza le sessioni selezionate
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Notes Section */}
             <Card>

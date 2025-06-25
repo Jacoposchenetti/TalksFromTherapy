@@ -10,6 +10,7 @@ interface Session {
   id: string
   title: string
   transcript?: string
+  sessionDate: string
 }
 
 interface SentimentAnalysisProps {
@@ -59,6 +60,14 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
   const [analysisResult, setAnalysisResult] = useState<EmotionAnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // Add logging to understand what's happening
+  console.log('🔍 SentimentAnalysis render:', {
+    selectedSessionsCount: selectedSessions.length,
+    hasAnalysisResult: !!analysisResult,
+    isAnalyzing,
+    error: !!error
+  })
+
   // Filter sessions with transcripts
   const validSessions = selectedSessions.filter(session => 
     session.transcript && 
@@ -92,13 +101,20 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
       if (!response.ok) {
         throw new Error(`Analisi emotiva fallita: ${response.status}`)
       }      const result = await response.json()
-      
-      console.log('🎯 API Response received:', result)
+        console.log('🎯 API Response received:', result)
       console.log('🎯 Response success:', result.success)
       console.log('🎯 Individual sessions count:', result.individual_sessions?.length)
+      console.log('🎯 Analysis structure available:', !!result.analysis)
+      if (result.analysis) {
+        console.log('🎯 Analysis individual sessions:', result.analysis.individual_sessions?.length)
+        console.log('🎯 First session example:', result.analysis.individual_sessions?.[0])
+      }
       
       if (result.success) {
         console.log('✅ Setting analysis result:', result)
+        console.log('🔍 Full result structure:', JSON.stringify(result, null, 2))
+        console.log('🔍 Analysis object:', result.analysis)
+        console.log('🔍 Individual sessions:', result.analysis?.individual_sessions)
         setAnalysisResult(result)
         console.log('📞 Calling onAnalysisComplete callback')
         onAnalysisComplete?.(result)
@@ -108,20 +124,47 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Errore sconosciuto'
       setError(errorMessage)
-      console.error('Emotion analysis error:', err)
-    } finally {
-      setIsAnalyzing(false)    }
+      console.error('Emotion analysis error:', err)    } finally {
+      setIsAnalyzing(false)
+    }
   }
 
   const clearAnalysis = () => {
+    console.log('🧹 clearAnalysis called - clearing results')
     setAnalysisResult(null)
     setError(null)
   }
-
-  // Clear analysis when selected sessions change
+  // Clear analysis only when the actual session selection changes meaningfully
   useEffect(() => {
-    clearAnalysis()
-  }, [selectedSessions])
+    console.log('🔄 useEffect triggered - checking if analysis should be cleared')
+    
+    // Only clear if we have an analysis result and the sessions have actually changed
+    if (analysisResult) {
+      const currentSessionIds = new Set(validSessions.map(s => s.id))
+      const analyzedSessionIds = new Set(
+        analysisResult.analysis?.individual_sessions?.map(s => s.session_id) || []
+      )
+      
+      // Check if the sets are different
+      const sessionSetChanged = currentSessionIds.size !== analyzedSessionIds.size || 
+        [...currentSessionIds].some(id => !analyzedSessionIds.has(id))
+      
+      console.log('🔄 Session comparison:', {
+        currentIds: [...currentSessionIds].sort(),
+        analyzedIds: [...analyzedSessionIds].sort(),
+        changed: sessionSetChanged
+      })
+      
+      if (sessionSetChanged) {
+        console.log('🔄 Session selection changed, clearing analysis')
+        clearAnalysis()
+      } else {
+        console.log('✅ Session selection unchanged, keeping analysis')
+      }
+    } else {
+      console.log('ℹ️ No analysis result to clear')
+    }
+  }, [validSessions.map(s => s.id).join(','), analysisResult?.analysis?.individual_sessions?.map(s => s.session_id).join(',')])
 
   if (validSessions.length === 0) {
     return (
@@ -136,12 +179,20 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
       </div>
     )
   }
-
   if (analysisResult) {
     const { analysis } = analysisResult
     
+    console.log('🎨 Rendering analysis result:', {
+      hasAnalysis: !!analysis,
+      hasCombinedAnalysis: !!analysis?.combined_analysis,
+      hasIndividualSessions: !!analysis?.individual_sessions,
+      individualSessionsCount: analysis?.individual_sessions?.length,
+      individualSessions: analysis?.individual_sessions
+    })
+    
     return (
-      <div className="h-full overflow-y-auto space-y-4">        <div className="flex items-center justify-between">
+      <div className="h-full overflow-y-auto space-y-4">
+        <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">
             Analisi Emotiva Completata
           </h3>
@@ -154,35 +205,54 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
           </Button>
         </div>        {/* Combined Analysis */}
         {analysis.combined_analysis && (
-          <Card>
+          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
             <CardContent className="p-4">
               <EmotionVisualizer 
                 data={analysis.combined_analysis.analysis}
-                title={`Analisi Combinata (${analysis.total_sessions} sessioni)`}
+                title={`🌸 Analisi Combinata (${analysis.total_sessions} sessioni)`}
                 showDetails={false}
                 flowerPlot={analysis.combined_analysis.flower_plot}
               />
             </CardContent>
           </Card>
-        )}{/* Individual Sessions */}
-        {analysis.individual_sessions.length > 0 && (
-          <div className="space-y-3">
-            <h4 className="text-md font-medium">
-              {analysis.individual_sessions.length > 1 ? 'Analisi per Sessione' : 'Analisi Emotiva'}
-            </h4>
-            <div className="grid grid-cols-1 gap-3 max-h-80 overflow-y-auto">
-              {analysis.individual_sessions.map((sessionAnalysis) => (
-                <Card key={sessionAnalysis.session_id} className="border-l-4 border-l-blue-500">
-                  <CardContent className="p-3">
-                    <EmotionVisualizer 
-                      data={sessionAnalysis.analysis}
-                      title={sessionAnalysis.session_title}
-                      showDetails={false}
-                      flowerPlot={sessionAnalysis.flower_plot}
-                    />
-                  </CardContent>
-                </Card>
-              ))}
+        )}
+
+        {/* Individual Sessions */}
+        {analysis.individual_sessions && analysis.individual_sessions.length > 0 && (          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="h-px bg-gray-300 flex-1"></div>
+              <h4 className="text-md font-medium text-gray-700">
+                {analysis.individual_sessions.length > 1 ? '📊 Analisi per Sessione' : '📊 Analisi Emotiva'}
+                <span className="text-sm text-gray-500 ml-2">
+                  ({analysis.individual_sessions.length} sessioni)
+                </span>
+              </h4>
+              <div className="h-px bg-gray-300 flex-1"></div>
+            </div>
+            <div className="space-y-3">
+              {(() => {
+                console.log('🎨 Rendering individual sessions:', analysis.individual_sessions.length)
+                analysis.individual_sessions.forEach((sessionAnalysis, index) => {
+                  console.log(`🎨 Session ${index + 1}:`, {
+                    id: sessionAnalysis.session_id,
+                    title: sessionAnalysis.session_title,
+                    hasAnalysis: !!sessionAnalysis.analysis,
+                    hasFlowerPlot: !!sessionAnalysis.flower_plot
+                  })
+                })
+                return analysis.individual_sessions.map((sessionAnalysis) => (
+                  <Card key={sessionAnalysis.session_id} className="border-l-4 border-l-blue-500">
+                    <CardContent className="p-3">
+                      <EmotionVisualizer 
+                        data={sessionAnalysis.analysis}
+                        title={sessionAnalysis.session_title}
+                        showDetails={false}
+                        flowerPlot={sessionAnalysis.flower_plot}
+                      />
+                    </CardContent>
+                  </Card>
+                ))
+              })()}
             </div>
           </div>
         )}

@@ -35,11 +35,11 @@ export async function POST(request: NextRequest) {
         id: { in: sessionIds },
         userId: user.id,
         isActive: true
-      },
-      select: {
+      },      select: {
         id: true,
         title: true,
         transcript: true,
+        sessionDate: true,
         status: true
       }
     })
@@ -59,14 +59,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: "No sessions with transcripts found" 
       }, { status: 400 })
-    }
-
-    // Prepare session data for analysis
+    }    // Prepare session data for analysis
     const sessionData: SessionData[] = sessionsWithTranscripts.map(session => ({
       id: session.id,
       title: session.title,
-      transcript: session.transcript!
-    }))    // Perform emotion analysis
+      transcript: session.transcript!,
+      sessionDate: session.sessionDate ? session.sessionDate.toISOString() : new Date().toISOString()
+    }))// Perform emotion analysis
     console.log('🧪 Starting emotion analysis for', sessionData.length, 'sessions')
     console.log('🌍 Language configured:', language)
     console.log('📊 Session data:', sessionData.map(s => ({ id: s.id, title: s.title, transcript_length: s.transcript.length })))
