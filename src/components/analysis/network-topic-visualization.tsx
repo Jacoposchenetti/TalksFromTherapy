@@ -45,40 +45,40 @@ export default function NetworkTopicVisualization({
   const fgRef = useRef<any>()
   const [selectedNode, setSelectedNode] = useState<NetworkNode | null>(null)
   const [showKeywords, setShowKeywords] = useState(true)
-  const [showConnections, setShowConnections] = useState(true)
-  // Configura le forze D3 per spaziare molto di più i nodi
+  const [showConnections, setShowConnections] = useState(true)  // Configura le forze D3 per spaziare i nodi mantenendo i link visibili
   useEffect(() => {
     if (fgRef.current) {
       const fg = fgRef.current;
       
-      // Configura le forze esistenti di D3 per maggiore distanza
-      setTimeout(() => {        // Forza dei link - distanza molto maggiore e meno rigidità
+      // Configura le forze esistenti di D3 per layout ottimale
+      setTimeout(() => {
+        // Forza dei link - distanza media ma link più forti
         if (fg.d3Force('link')) {
           fg.d3Force('link')
-            .distance(500)     // Distanza ancora più aumentata
-            .strength(0.05);   // Link ancora meno rigidi
+            .distance(150)     // Distanza moderata
+            .strength(0.3);    // Link più forti per mantenerli visibili
         }
         
-        // Forza di repulsione - molto più forte
+        // Forza di repulsione - bilanciata
         if (fg.d3Force('charge')) {
           fg.d3Force('charge')
-            .strength(-2500)   // Repulsione ancora più forte
-            .distanceMax(1500); // Distanza massima aumentata
+            .strength(-1200)   // Repulsione media
+            .distanceMax(800); // Distanza massima ragionevole
         }
         
-        // Centro meno attrattivo
+        // Centro leggermente attrattivo
         if (fg.d3Force('center')) {
           fg.d3Force('center')
-            .strength(0.01);   // Ancora più ridotto
+            .strength(0.03);   // Leggera attrazione al centro
         }
-          // Zoom per adattare alla vista con più spazio
+        
+        // Zoom iniziale ragionevole - SOLO una volta
         setTimeout(() => {
-          fg.zoomToFit(3000, 150); // Tempo ancora più lungo e molto padding
-        }, 1500);
+          fg.zoomToFit(1200, 60); // Tempo e padding moderati
+        }, 600);
       }, 100);
     }
-  }, [networkData]);
-  // Filtra dati in base alle opzioni di visualizzazione
+  }, [networkData]);  // Filtra dati in base alle opzioni di visualizzazione
   const filteredNodes = networkData.nodes.filter(node => 
     node.type === 'topic' || (node.type === 'keyword' && showKeywords)
   )
@@ -98,6 +98,9 @@ export default function NetworkTopicVisualization({
     })
   }
 
+  // Debug: log del numero di nodi e link
+  console.log(`Network: ${filteredData.nodes.length} nodes, ${filteredData.links.length} links, showConnections: ${showConnections}, showKeywords: ${showKeywords}`)
+
   const handleNodeClick = (node: NetworkNode) => {
     setSelectedNode(node)
     // Centra il grafo sul nodo cliccato
@@ -106,10 +109,9 @@ export default function NetworkTopicVisualization({
       fgRef.current.zoom(3, 2000)
     }
   }
-
   const resetView = () => {
     if (fgRef.current) {
-      fgRef.current.zoomToFit(1000)
+      fgRef.current.zoomToFit(1000, 60) // Zoom ragionevole con padding moderato
       setSelectedNode(null)
     }
   }
@@ -141,21 +143,21 @@ export default function NetworkTopicVisualization({
     }
     return Math.max(4, node.size * 0.6)
   }
-
   const getLinkWidth = (link: NetworkEdge) => {
-    return Math.max(1, link.weight * 3)
+    return Math.max(2, link.weight * 4) // Spessore minimo aumentato da 1 a 2
   }
 
   const getLinkColor = (link: NetworkEdge) => {
     switch (link.type) {
       case 'topic_keyword':
-        return '#94A3B8' // Gray
+        return '#64748B' // Gray più scuro per migliore visibilità
       case 'keyword_cooccurrence':
-        return '#10B981' // Green
+      case 'cooccurrence':
+        return '#059669' // Green più intenso
       case 'topic_similarity':
-        return '#F59E0B' // Amber
+        return '#D97706' // Amber più intenso
       default:
-        return '#94A3B8'
+        return '#64748B' // Gray più scuro
     }
   }
 
@@ -266,11 +268,12 @@ export default function NetworkTopicVisualization({
         height={height}
         nodeLabel={getNodeLabel}
         nodeVal={getNodeSize}
-        nodeColor={(node: any) => node.color}
-        linkWidth={getLinkWidth}
+        nodeColor={(node: any) => node.color}        linkWidth={getLinkWidth}
         linkColor={getLinkColor}
-        linkDirectionalParticles={1}
-        linkDirectionalParticleWidth={1}
+        linkDirectionalParticles={2} // Più particelle per migliore visibilità
+        linkDirectionalParticleWidth={2} // Particelle più grandi
+        linkDirectionalParticleSpeed={0.006} // Velocità moderata
+        linkOpacity={0.8} // Opacity dei link
         onNodeClick={handleNodeClick}
         onBackgroundClick={() => setSelectedNode(null)}
         nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -311,13 +314,11 @@ export default function NetworkTopicVisualization({
           // Testo principale
           ctx.fillStyle = '#1F2937'
           ctx.fillText(label, node.x, node.y + nodeRadius + 15)
-        }}
-        // Parametri di base per il layout
-        cooldownTicks={300}        onEngineStop={() => {
-          // Auto-zoom per mostrare tutto il network con molto più spazio
-          if (fgRef.current) {
-            fgRef.current.zoomToFit(2000, 150) // Tempo più lungo e molto più padding
-          }
+        }}        // Parametri di base per il layout
+        cooldownTicks={300}
+        onEngineStop={() => {
+          // Non fare zoom automatico quando finisce l'engine - mantieni il zoom impostato
+          console.log('Network simulation stopped')
         }}
       />
     </div>

@@ -86,11 +86,11 @@ export default function TopicAnalysisComponent({
 
     console.log('DEBUG: Starting analysis with wordPercentage:', wordPercentage)
 
-    try {
-      // Calcola il numero di parole basato sulla percentuale (minimo 20, massimo basato su disponibili)
+    try {      // Calcola il numero di parole basato sulla percentuale (minimo 15, fallback più realistico)
+      const estimatedAvailable = combinedTranscript.split(' ').filter(w => w.length >= 3).length * 0.3 // Stima 30% delle parole come candidate
       const maxWords = analysisResult?.total_available_words 
-        ? Math.max(20, Math.round((analysisResult.total_available_words * wordPercentage) / 100))
-        : Math.max(20, Math.round((300 * wordPercentage) / 100)) // Fallback se non abbiamo il totale
+        ? Math.max(15, Math.round((analysisResult.total_available_words * wordPercentage) / 100))
+        : Math.max(15, Math.round((estimatedAvailable * wordPercentage) / 100)) // Fallback più realistico
 
       const requestBody = {
         session_id: selectedSessions.length === 1 ? selectedSessions[0].id : `combined_${selectedSessions.map(s => s.id).join('_')}`,

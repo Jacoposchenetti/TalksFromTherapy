@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp, Download } from "lucide-react"
 import { DocumentParser } from "@/lib/document-parser"
 import { NotificationManager } from "@/lib/notification-manager"
+import TopicModelingGPT from "@/components/analysis/topic-modeling-gpt"
 
 interface Session {
   id: string
@@ -95,7 +96,8 @@ function SessionsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const patientId = searchParams.get("patientId")
-    const [sessions, setSessions] = useState<Session[]>([])
+  
+  const [sessions, setSessions] = useState<Session[]>([])
   const [patient, setPatient] = useState<Patient | null>(null)
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
@@ -114,6 +116,8 @@ function SessionsPageContent() {
     sessionName: ''
   })
   const [exportMenuOpen, setExportMenuOpen] = useState<string | null>(null) // sessionId or null
+  const [selectedSessionsForTopics, setSelectedSessionsForTopics] = useState<Set<string>>(new Set())
+  const [showTopicModeling, setShowTopicModeling] = useState(false)
 
   useEffect(() => {
     if (status === "loading") return
@@ -658,6 +662,30 @@ function SessionsPageContent() {
     handleDeleteCancel()
   }
 
+  const handleSessionSelectionForTopics = (sessionId: string) => {
+    const newSelection = new Set(selectedSessionsForTopics)
+    if (newSelection.has(sessionId)) {
+      newSelection.delete(sessionId)
+    } else {
+      newSelection.add(sessionId)
+    }
+    setSelectedSessionsForTopics(newSelection)
+  }
+
+  const handleTopicsGenerated = (topics: any[]) => {
+    console.log('Topic generati:', topics)
+    // Qui puoi aggiungere logica per salvare o visualizzare i topic
+  }
+
+  const getSelectedTranscriptsForTopics = () => {
+    return getFilteredSessions()
+      .filter(session => selectedSessionsForTopics.has(session.id) && session.transcript)
+      .map(session => ({
+        id: session.id,
+        content: session.transcript!
+      }))
+  }
+
   if (status === "loading" || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -793,9 +821,49 @@ function SessionsPageContent() {
                 ⚠️ Seleziona un paziente prima di caricare file audio o di testo
               </p>
             )}
-          </div>
-        </CardContent>
-      </Card>      <div className="grid gap-4">
+          </div>        </CardContent>
+      </Card>
+
+      {/* Topic Modeling Section */}
+      {getFilteredSessions().some(session => session.transcript) && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Topic Modeling con GPT-3.5
+            </CardTitle>
+            <CardDescription>
+              Seleziona le sessioni trascritte per analizzare i temi principali
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowTopicModeling(!showTopicModeling)}
+                >
+                  {showTopicModeling ? 'Nascondi Analisi' : 'Mostra Analisi Topic'}
+                </Button>
+                {selectedSessionsForTopics.size > 0 && (
+                  <span className="text-sm text-gray-600">
+                    {selectedSessionsForTopics.size} sessioni selezionate
+                  </span>
+                )}
+              </div>
+              
+              {showTopicModeling && (
+                <TopicModelingGPT
+                  selectedTranscripts={getSelectedTranscriptsForTopics()}
+                  onTopicsGenerated={handleTopicsGenerated}
+                />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-4">
         {getFilteredSessions().length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -812,9 +880,31 @@ function SessionsPageContent() {
             </CardContent>
           </Card>        ) : (          getFilteredSessions().map((session) => (
             <Card key={session.id} className="hover:shadow-md transition-shadow w-full overflow-visible">
-              <CardHeader className="overflow-visible">
-                <div className="flex items-start justify-between gap-4 overflow-visible">
+              <CardHeader className="overflow-visible">                <div className="flex items-start justify-between gap-4 overflow-visible">
+                  {/* Checkbox per topic modeling */}
+                  {session.transcript && showTopicModeling && (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedSessionsForTopics.has(session.id)}
+                        onChange={() => handleSessionSelectionForTopics(session.id)}
+                        className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                    </div>
+                  )}
+                  
                   <div className="flex-1 min-w-0">                    <CardTitle className="flex items-center gap-2 flex-wrap">
+                      {/* Checkbox per topic modeling se la sessione è trascritta */}
+                      {session.transcript && showTopicModeling && (
+                        <input
+                          type="checkbox"
+                          checked={selectedSessionsForTopics.has(session.id)}
+                          onChange={() => handleSessionSelectionForTopics(session.id)}
+                          className="h-4 w-4 text-blue-600"
+                          title="Seleziona per topic modeling"
+                        />
+                      )}
+                      
                       {editingSessionId === session.id ? (
                         <div className="flex items-center gap-2 flex-1">
                           <Input
