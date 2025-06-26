@@ -6,7 +6,7 @@ import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react"
-import TopicAnalysisComponent from "@/components/analysis/topic-analysis-new"
+import TopicAnalysisComponent from "@/components/analysis/topic-modeling-gpt"
 
 interface Session {
   id: string

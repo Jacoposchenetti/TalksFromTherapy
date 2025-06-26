@@ -1,156 +1,215 @@
-'use client';
+"use client"
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2 } from 'lucide-react';
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { AlertCircle, Brain, Loader2, MessageCircle } from "lucide-react"
 
-interface Transcript {
-  id: string;
-  content: string;
+interface Session {
+  id: string
+  title: string
+  transcript: string
 }
 
 interface Topic {
-  id: number;
-  name: string;
-  keywords: string[];
-  associatedWords: {
-    transcriptId: string;
-    words: string[];
-  }[];
+  topic_id: number
+  keywords: string[]
+  description: string
 }
 
-interface TopicModelingGPTProps {
-  selectedTranscripts: Transcript[];
-  onTopicsGenerated?: (topics: Topic[]) => void;
+interface AnalysisResult {
+  session_id: string
+  topics: Topic[]
+  summary: string
+  analysis_timestamp: string
 }
 
-export default function TopicModelingGPT({ selectedTranscripts, onTopicsGenerated }: TopicModelingGPTProps) {
-  const [loading, setLoading] = useState(false);
-  const [topics, setTopics] = useState<Topic[]>([]);
-  const [error, setError] = useState<string | null>(null);
+interface TopicAnalysisProps {
+  selectedSessions: Session[]
+  combinedTranscript: string
+  onAnalysisComplete?: (result: AnalysisResult) => void
+}
 
-  const generateTopics = async () => {
-    if (selectedTranscripts.length === 0) {
-      setError('Seleziona almeno un transcript');
-      return;
+export default function TopicAnalysisComponent({ 
+  selectedSessions, 
+  combinedTranscript, 
+  onAnalysisComplete 
+}: TopicAnalysisProps) {
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const runTopicAnalysis = async () => {
+    if (!combinedTranscript || combinedTranscript.trim().length === 0) {
+      setError("Nessuna trascrizione disponibile per l'analisi")
+      return
     }
 
-    setLoading(true);
-    setError(null);
+    setIsAnalyzing(true)
+    setError(null)
 
-    try {
-      const response = await fetch('/api/topics/generate', {
+    try {      const response = await fetch('/api/single-session-analysis', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          transcriptIds: selectedTranscripts.map(t => t.id),
-          maxTopics: 5
+          session_id: `combined_${Date.now()}`,
+          transcript: combinedTranscript
         }),
-      });
+      })
 
-      const data = await response.json();
-
-      if (data.success) {
-        setTopics(data.topics);
-        onTopicsGenerated?.(data.topics);
-      } else {
-        setError(data.message || 'Errore nella generazione dei topic');
+      if (!response.ok) {
+        throw new Error(`Errore API: ${response.status} ${response.statusText}`)
       }
+
+      const result = await response.json()
+      setAnalysisResult(result)
+      onAnalysisComplete?.(result)
+
     } catch (error) {
-      setError('Errore di rete: ' + (error instanceof Error ? error.message : 'Errore sconosciuto'));
+      console.error('Errore durante l\'analisi:', error)
+      setError(error instanceof Error ? error.message : 'Errore sconosciuto durante l\'analisi')
     } finally {
-      setLoading(false);
+      setIsAnalyzing(false)
     }
-  };
+  }
+
+  const getTopicColor = (index: number) => {
+    const colors = [
+      'bg-blue-100 text-blue-800',
+      'bg-green-100 text-green-800',
+      'bg-yellow-100 text-yellow-800',
+      'bg-red-100 text-red-800',
+      'bg-purple-100 text-purple-800',
+      'bg-indigo-100 text-indigo-800'
+    ]
+    return colors[index % colors.length]
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Topic Modeling con GPT-3.5</h2>
-        <p className="text-gray-600">
-          Transcript selezionati: {selectedTranscripts.length}
-        </p>
+    <div className="h-full space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Brain className="h-5 w-5" />
+            Analisi Topic GPT-3.5
+          </h3>
+          <p className="text-sm text-gray-600">
+            {selectedSessions.length > 0 
+              ? `${selectedSessions.length} sessioni selezionate` 
+              : 'Nessuna sessione selezionata'}
+          </p>
+        </div>
+        
+        <Button 
+          onClick={runTopicAnalysis}
+          disabled={isAnalyzing || !combinedTranscript || combinedTranscript.trim().length === 0}
+          className="flex items-center gap-2"
+        >
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Analizzando...
+            </>
+          ) : (
+            <>
+              <Brain className="h-4 w-4" />
+              Avvia Analisi Topic
+            </>
+          )}
+        </Button>
       </div>
 
-      <Button
-        onClick={generateTopics}
-        disabled={loading || selectedTranscripts.length === 0}
-        className="w-full sm:w-auto"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Generando topic...
-          </>
-        ) : (
-          'Genera Topic'
-        )}
-      </Button>
-
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-red-800">
+              <AlertCircle className="h-4 w-4" />
+              <span className="font-medium">Errore:</span>
+              <span>{error}</span>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {topics.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-xl font-semibold">Topic Identificati</h3>
-          
-          {topics.map((topic, index) => (
-            <Card key={index}>
-              <CardHeader>
-                <CardTitle className="text-lg text-blue-600">
-                  {topic.name}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+      {!combinedTranscript || combinedTranscript.trim().length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <MessageCircle className="h-12 w-12 text-gray-400 mb-4" />
+            <h4 className="text-lg font-medium text-gray-900 mb-2">
+              Nessuna trascrizione selezionata
+            </h4>
+            <p className="text-gray-600 text-center">
+              Seleziona una o più sessioni per avviare l'analisi dei topic.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-6">
+          {/* Informazioni sulla trascrizione */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Informazioni Trascrizione</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <h4 className="font-medium mb-2">Parole chiave:</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {topic.keywords.map((keyword, idx) => (
-                      <Badge key={idx} variant="outline" className="border-blue-200">
-                        {keyword}
-                      </Badge>
-                    ))}
-                  </div>
+                  <span className="font-medium">Lunghezza:</span> {combinedTranscript.length} caratteri
                 </div>
-
-                {topic.associatedWords.length > 0 && (
-                  <div>
-                    <h4 className="font-medium mb-2">Parole associate dai transcript:</h4>
-                    <div className="space-y-2">
-                      {topic.associatedWords.map((assoc, idx) => (
-                        <div key={idx} className="border-l-2 border-gray-200 pl-3">
-                          <p className="text-sm text-gray-500 mb-1">
-                            Transcript {assoc.transcriptId}:
-                          </p>
-                          <div className="flex flex-wrap gap-1">
-                            {assoc.words.map((word, wordIdx) => (
-                              <Badge
-                                key={wordIdx}
-                                variant="secondary"
-                                className="text-xs"
-                              >
-                                {word}
-                              </Badge>
-                            ))}
-                          </div>
+                <div>
+                  <span className="font-medium">Parole:</span> {combinedTranscript.split(' ').length} parole
+                </div>
+              </div>
+            </CardContent>
+          </Card>          {/* Risultati dell'analisi */}
+          {analysisResult && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="h-5 w-5" />
+                  Topic Identificati
+                </CardTitle>
+                <CardDescription>
+                  {analysisResult.summary}
+                </CardDescription>
+              </CardHeader>              <CardContent>
+                <div className="max-h-96 overflow-y-auto space-y-4 pr-2">
+                  {analysisResult.topics.map((topic, index) => (
+                    <div key={topic.topic_id} className="p-4 border rounded-lg">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h4 className="font-medium text-lg">
+                            Topic {topic.topic_id}: {topic.description}
+                          </h4>
                         </div>
-                      ))}
+                        <Badge className={getTopicColor(index)}>
+                          Topic {topic.topic_id}
+                        </Badge>
+                      </div>
+                      
+                      <div>
+                        <p className="text-sm text-gray-600 mb-2">Parole chiave:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {topic.keywords.map((keyword, keywordIndex) => (
+                            <Badge 
+                              key={keywordIndex} 
+                              variant="outline"
+                              className="text-xs"
+                            >
+                              {keyword}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  ))}
+                </div>
+              </CardContent>            </Card>
+          )}
         </div>
       )}
     </div>
-  );
+  )
 }
