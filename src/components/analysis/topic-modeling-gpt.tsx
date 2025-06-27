@@ -57,27 +57,96 @@ export default function TopicAnalysisComponent({
     setIsAnalyzing(true)
     setError(null)
 
-    try {      const response = await fetch('/api/single-session-analysis', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          session_id: `combined_${Date.now()}`,
-          transcript: combinedTranscript
-        }),
-      })
+    try {
+      let allTopics: Topic[] = []
+      let allSummaries: string[] = []
 
-      if (!response.ok) {
-        throw new Error(`Errore API: ${response.status} ${response.statusText}`)
-      }      const result = await response.json()
+      // Se ci sono più sessioni, analizza ognuna separatamente per i topic
+      if (selectedSessions.length > 1) {
+        console.log(`Analyzing ${selectedSessions.length} sessions separately for topics`)
+        
+        for (let i = 0; i < selectedSessions.length; i++) {
+          const session = selectedSessions[i]
+          console.log(`Analyzing session ${i + 1}/${selectedSessions.length}: ${session.title}`)
+
+          const response = await fetch('/api/single-session-analysis', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              session_id: session.id,
+              transcript: session.transcript
+            }),
+          })
+
+          if (response.ok) {
+            const sessionResult = await response.json()
+            
+            // Aggiungi i topic di questa sessione con ID univoci
+            const sessionTopics = sessionResult.topics.map((topic: Topic) => ({
+              ...topic,
+              topic_id: allTopics.length + topic.topic_id, // Rendi univoco l'ID
+              description: `${topic.description} (${session.title})`
+            }))
+            
+            allTopics.push(...sessionTopics)
+            allSummaries.push(`${session.title}: ${sessionResult.summary}`)
+            
+            console.log(`Session ${i + 1}: Found ${sessionTopics.length} topics`)
+          } else {
+            console.error(`Session ${i + 1} analysis failed:`, response.status)
+          }
+
+          // Pausa tra le analisi
+          if (i < selectedSessions.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
+        }
+
+        // Se abbiamo troppi topic, consolida quelli simili
+        if (allTopics.length > 8) {
+          console.log(`Consolidating ${allTopics.length} topics`)
+          allTopics = await consolidateTopics(allTopics)
+        }
+
+      } else {
+        // Sessione singola: usa l'approccio originale
+        const response = await fetch('/api/single-session-analysis', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            session_id: `combined_${Date.now()}`,
+            transcript: combinedTranscript
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Errore API: ${response.status} ${response.statusText}`)
+        }
+
+        const result = await response.json()
+        allTopics = result.topics
+        allSummaries = [result.summary]
+      }
+
+      // Crea il risultato combinato
+      const result = {
+        session_id: `multi_session_${Date.now()}`,
+        topics: allTopics,
+        summary: allSummaries.join(' | '),
+        analysis_timestamp: new Date().toISOString()
+      }
+
       setAnalysisResult(result)
       onAnalysisComplete?.(result)
 
       // Classifica automaticamente il testo se l'analisi è riuscita
       if (result.topics && result.topics.length > 0) {
         console.log('Starting text classification...')
-        const segments = await classifyTextToTopics(combinedTranscript, result.topics)
+        const segments = await classifyTextToTopicsSeparately(selectedSessions, result.topics)
         console.log('Classification completed, segments:', segments)
         setAnalysisResult(prev => prev ? { ...prev, text_segments: segments } : null)
       }
@@ -88,6 +157,80 @@ export default function TopicAnalysisComponent({
     } finally {
       setIsAnalyzing(false)
     }
+  }
+
+  const consolidateTopics = async (topics: Topic[]): Promise<Topic[]> => {
+    // Se abbiamo 8 o meno topic, non consolidare
+    if (topics.length <= 8) {
+      return topics
+    }
+
+    console.log(`Consolidating ${topics.length} topics into max 8`)
+
+    try {
+      const topicDescriptions = topics.map(t => 
+        `${t.topic_id}: ${t.description} (${t.keywords.join(', ')})`
+      ).join('\n')
+
+      const consolidationPrompt = `
+Analizza questi topic e raggruppa quelli simili per ridurre il numero totale a massimo 8 topic principali.
+
+TOPIC DA CONSOLIDARE:
+${topicDescriptions}
+
+ISTRUZIONI:
+- Raggruppa topic simili o correlati
+- Mantieni i topic più importanti e specifici
+- Crea descrizioni che rappresentino i topic consolidati
+- Combina le parole chiave dei topic raggruppati
+- Massimo 8 topic finali
+
+Rispondi SOLO con JSON:
+{
+  "consolidated_topics": [
+    {
+      "topic_id": 1,
+      "description": "descrizione_consolidata",
+      "keywords": ["parola1", "parola2", "parola3", "parola4"]
+    }
+  ]
+}
+`
+
+      const response = await fetch('/api/classify-text-segments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sentences: [consolidationPrompt],
+          topics: "consolidation",
+          session_id: `consolidate_${Date.now()}`,
+          isTopicConsolidation: true
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        const content = result.segments?.[0]?.text || '{}'
+        
+        try {
+          const parsed = JSON.parse(content)
+          if (parsed.consolidated_topics && Array.isArray(parsed.consolidated_topics)) {
+            console.log(`Consolidated to ${parsed.consolidated_topics.length} topics`)
+            return parsed.consolidated_topics
+          }
+        } catch (parseError) {
+          console.error('Failed to parse consolidation result:', parseError)
+        }
+      }
+    } catch (error) {
+      console.error('Topic consolidation failed:', error)
+    }
+
+    // Fallback: prendi i primi 8 topic
+    console.log('Using fallback: taking first 8 topics')
+    return topics.slice(0, 8)
   }
   
   const getTopicColor = (topicId: number) => {
@@ -120,61 +263,277 @@ export default function TopicAnalysisComponent({
     return backgroundColors[(topicId - 1) % backgroundColors.length]
   }
 
-  const classifyTextToTopics = async (transcript: string, topics: Topic[]) => {
-    // Dividi il testo in frasi significative
-    const sentences = transcript
-      .split(/[.!?]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 20)
-
-    if (sentences.length === 0 || topics.length === 0) {
+  const classifyTextToTopicsSeparately = async (sessions: Session[], topics: Topic[]) => {
+    if (sessions.length === 0 || topics.length === 0) {
+      console.log('No sessions or topics found')
       return []
     }
 
+    const topicList = topics.map(t => `${t.topic_id}: ${t.description} (parole chiave: ${t.keywords.join(', ')})`).join('\n')
+    console.log(`Processing ${sessions.length} sessions separately`)
+
+    let allSegments: TextSegment[] = []
+
     try {
-      // Crea il prompt per la classificazione
-      const topicList = topics.map(t => `${t.topic_id}: ${t.description} (${t.keywords.join(', ')})`).join('\n')
-      
-      console.log('Calling classify-text-segments with:', {
-        sentences: sentences.length,
-        topicList,
-        session_id: `classify_${Date.now()}`
-      })
-      
-      const response = await fetch('/api/classify-text-segments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sentences,
-          topics: topicList,
-          session_id: `classify_${Date.now()}`
-        }),
-      })
+      // Processa ogni sessione separatamente
+      for (let i = 0; i < sessions.length; i++) {
+        const session = sessions[i]
+        console.log(`Processing session ${i + 1}/${sessions.length}: ${session.title}`)
 
-      console.log('Response status:', response.status)
+        // Dividi il testo della sessione in frasi
+        const allSentences = session.transcript
+          .split(/[.!?]+/)
+          .map(s => s.trim())
+          .filter(s => s.length > 15)
 
-      if (response.ok) {
-        const result = await response.json()
-        console.log('Classification result:', result)
-        console.log('Segments received:', result.segments?.length || 0)
-        return result.segments || []
-      } else {
-        console.error('Classification API error:', response.status, response.statusText)
-        const errorText = await response.text()
-        console.error('Error details:', errorText)
+        console.log(`Session ${i + 1}: ${allSentences.length} total sentences`)
+
+        if (allSentences.length === 0) {
+          console.log(`Session ${i + 1}: No sentences found, skipping`)
+          continue
+        }
+
+        // Aggiungi un separatore tra le sessioni se non è la prima
+        if (i > 0) {
+          allSegments.push({
+            text: `\n--- ${session.title} ---\n`,
+            topic_id: null,
+            confidence: 0
+          })
+        }
+
+        // Classificazione sequenziale con contesto crescente
+        const sessionSegments = await classifyWithContext(allSentences, topicList, session.id)
+        allSegments.push(...sessionSegments)
+
+        // Pausa tra le sessioni per evitare rate limiting
+        if (i < sessions.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
       }
+
+      console.log(`Total segments from all sessions: ${allSegments.length}`)
+      console.log(`Segments with topics: ${allSegments.filter(s => s.topic_id !== null).length}`)
+      
+      return allSegments
+
     } catch (error) {
-      console.error('Errore nella classificazione del testo:', error)
+      console.error('Error in separate classification:', error)
+      
+      // Fallback: processamento semplice del testo combinato
+      return sessions.flatMap((session, sessionIndex) => {
+        const sentences = session.transcript
+          .split(/[.!?]+/)
+          .map(s => s.trim())
+          .filter(s => s.length > 15)
+
+        const segments = sentences.map(sentence => ({
+          text: sentence,
+          topic_id: null,
+          confidence: 0
+        }))
+
+        if (sessionIndex > 0) {
+          return [
+            {
+              text: `\n--- ${session.title} ---\n`,
+              topic_id: null,
+              confidence: 0
+            },
+            ...segments
+          ]
+        }
+        
+        return segments
+      })
+    }
+  }
+
+  const classifyWithContext = async (sentences: string[], topicList: string, sessionId: string): Promise<TextSegment[]> => {
+    const segments: TextSegment[] = []
+    
+    // Processa i blocchi di frasi
+    const chunkSize = 20 // Processa 20 frasi alla volta
+    for (let chunkIndex = 0; chunkIndex < sentences.length; chunkIndex += chunkSize) {
+      const sentenceChunk = sentences.slice(chunkIndex, chunkIndex + chunkSize)
+      console.log(`Processing chunk ${Math.floor(chunkIndex / chunkSize) + 1}: ${sentenceChunk.length} sentences`)
+
+      try {
+        // Prima classificazione: prova a classificare tutte le frasi del blocco
+        const response = await fetch('/api/classify-text-segments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sentences: sentenceChunk,
+            topics: topicList,
+            session_id: `${sessionId}_chunk_${chunkIndex}_${Date.now()}`
+          }),
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          const initialClassifications = result.segments || []
+
+          // Processa ogni frase del blocco sequenzialmente
+          for (let sentenceIndex = 0; sentenceIndex < sentenceChunk.length; sentenceIndex++) {
+            const sentence = sentenceChunk[sentenceIndex]
+            const initialClassification = initialClassifications[sentenceIndex]
+            
+            let finalSegment: TextSegment
+
+            // Se la classificazione iniziale ha un topic valido, usala
+            if (initialClassification?.topic_id && initialClassification.topic_id > 0) {
+              finalSegment = {
+                text: sentence,
+                topic_id: initialClassification.topic_id,
+                confidence: initialClassification.confidence || 0.5
+              }
+              console.log(`Sentence ${chunkIndex + sentenceIndex + 1}: Direct classification -> Topic ${finalSegment.topic_id}`)
+            } else {
+              // Altrimenti, prova la classificazione con contesto
+              console.log(`Sentence ${chunkIndex + sentenceIndex + 1}: Needs context classification`)
+              finalSegment = await classifySingleWithContext(
+                sentence, 
+                segments, 
+                topicList, 
+                sessionId, 
+                chunkIndex + sentenceIndex
+              )
+            }
+
+            segments.push(finalSegment)
+          }
+        } else {
+          console.error(`Chunk classification error:`, response.status, response.statusText)
+          
+          // Fallback per il blocco
+          sentenceChunk.forEach(sentence => {
+            segments.push({
+              text: sentence,
+              topic_id: null,
+              confidence: 0
+            })
+          })
+        }
+      } catch (error) {
+        console.error('Error in chunk classification:', error)
+        
+        // Fallback per il blocco
+        sentenceChunk.forEach(sentence => {
+          segments.push({
+            text: sentence,
+            topic_id: null,
+            confidence: 0
+          })
+        })
+      }
+
+      // Pausa tra i blocchi
+      if (chunkIndex + chunkSize < sentences.length) {
+        await new Promise(resolve => setTimeout(resolve, 300))
+      }
     }
 
-    // Fallback: nessuna classificazione
-    return sentences.map(sentence => ({
+    return segments
+  }
+
+  const classifySingleWithContext = async (
+    sentence: string, 
+    previousSegments: TextSegment[], 
+    topicList: string, 
+    sessionId: string, 
+    sentenceIndex: number
+  ): Promise<TextSegment> => {
+    
+    // Prova con contesto crescente: 1 frase, poi 2 frasi precedenti
+    for (let contextSize = 1; contextSize <= 2; contextSize++) {
+      const contextSegments = previousSegments.slice(-contextSize)
+      
+      if (contextSegments.length === 0) {
+        // Nessun contesto disponibile
+        break
+      }
+
+      const contextSentences = contextSegments.map(seg => seg.text)
+      const contextTopics = contextSegments.map(seg => 
+        seg.topic_id ? `Topic ${seg.topic_id}` : 'Non classificato'
+      )
+
+      console.log(`Trying context classification for sentence ${sentenceIndex + 1} with ${contextSize} previous sentences`)
+
+      try {
+        const contextPrompt = `
+CONTESTO PRECEDENTE:
+${contextSentences.map((sent, i) => `${i + 1}. "${sent}" -> ${contextTopics[i]}`).join('\n')}
+
+FRASE DA CLASSIFICARE:
+"${sentence}"
+
+TOPIC DISPONIBILI:
+${topicList}
+
+Considerando il contesto delle frasi precedenti e i loro topic assegnati, classifica la frase corrente. 
+Se il contesto suggerisce un topic specifico, usalo. Altrimenti assegna il topic più appropriato basandoti sul contenuto.
+
+Rispondi SOLO con JSON:
+{"topic_id": numero_o_null, "confidence": valore_0_a_1, "reasoning": "breve_spiegazione"}
+`
+
+        const response = await fetch('/api/classify-text-segments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sentences: [contextPrompt],
+            topics: topicList,
+            session_id: `${sessionId}_context_${contextSize}_${Date.now()}`,
+            isContextClassification: true
+          }),
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          const classification = result.segments?.[0]
+          
+          if (classification?.topic_id && classification.topic_id > 0) {
+            console.log(`Context classification (${contextSize} sentences) successful -> Topic ${classification.topic_id}`)
+            return {
+              text: sentence,
+              topic_id: classification.topic_id,
+              confidence: classification.confidence || 0.4
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Context classification failed for context size ${contextSize}:`, error)
+      }
+
+      // Piccola pausa tra i tentativi
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+
+    // Se tutti i tentativi falliscono, cerca di ereditare il topic dalla frase precedente se ha senso
+    const lastSegmentWithTopic = previousSegments.slice().reverse().find(seg => seg.topic_id !== null)
+    
+    if (lastSegmentWithTopic && previousSegments.length > 0) {
+      console.log(`Inheriting topic ${lastSegmentWithTopic.topic_id} from previous context`)
+      return {
+        text: sentence,
+        topic_id: lastSegmentWithTopic.topic_id,
+        confidence: 0.2 // Bassa confidence per topic ereditato
+      }
+    }
+
+    // Ultimo fallback: non classificato
+    console.log(`No classification possible for sentence ${sentenceIndex + 1}`)
+    return {
       text: sentence,
       topic_id: null,
       confidence: 0
-    }))
+    }
   }
 
   return (
@@ -330,17 +689,33 @@ export default function TopicAnalysisComponent({
                     
                     <div className="space-y-2 text-sm leading-relaxed">
                       {analysisResult.text_segments ? (
-                        analysisResult.text_segments.map((segment, index) => (
-                          <span
-                            key={index}
-                            className={`inline-block p-1 rounded ${getTopicBackgroundColor(segment.topic_id)} ${
-                              segment.topic_id ? 'border-l-2 border-gray-400' : ''
-                            }`}
-                            title={segment.topic_id ? `Topic ${segment.topic_id} (${Math.round(segment.confidence * 100)}% confidence)` : 'Non classificato'}
-                          >
-                            {segment.text}
-                          </span>
-                        ))
+                        analysisResult.text_segments.map((segment, index) => {
+                          // Controlla se è un separatore di sessione
+                          const isSessionSeparator = segment.text.includes('---') && segment.topic_id === null
+                          
+                          if (isSessionSeparator) {
+                            return (
+                              <div
+                                key={index}
+                                className="py-3 my-4 text-center font-medium text-gray-700 border-t border-b border-gray-300 bg-gray-50"
+                              >
+                                {segment.text.replace(/\n/g, '').trim()}
+                              </div>
+                            )
+                          }
+                          
+                          return (
+                            <span
+                              key={index}
+                              className={`inline-block p-1 rounded ${getTopicBackgroundColor(segment.topic_id)} ${
+                                segment.topic_id ? 'border-l-2 border-gray-400' : ''
+                              }`}
+                              title={segment.topic_id ? `Topic ${segment.topic_id} (${Math.round(segment.confidence * 100)}% confidence)` : 'Non classificato'}
+                            >
+                              {segment.text}
+                            </span>
+                          )
+                        })
                       ) : (
                         <p className="text-gray-500 italic">
                           Classificazione del testo in corso...
