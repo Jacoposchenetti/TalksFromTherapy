@@ -215,8 +215,10 @@ export default function PatientAnalysisPage() {
   }
 
   // Semantic Frame Analysis function
-  const performSemanticFrameAnalysis = async () => {
-    if (!targetWord.trim()) {
+  const performSemanticFrameAnalysis = async (word?: string) => {
+    const wordToAnalyze = word || targetWord.trim()
+    
+    if (!wordToAnalyze) {
       setSemanticFrameError("Inserisci una parola chiave per l'analisi")
       return
     }
@@ -239,7 +241,7 @@ export default function PatientAnalysisPage() {
         },
         body: JSON.stringify({
           text: combinedTranscript,
-          targetWord: targetWord.trim(),
+          targetWord: wordToAnalyze,
           sessionId: getSelectedSessionsData()[0]?.id || null,
           language: 'italian'
         }),
@@ -260,6 +262,15 @@ export default function PatientAnalysisPage() {
     } finally {
       setSemanticFrameLoading(false)
     }
+  }
+
+  // Helper function to analyze a connected word
+  const analyzeConnectedWord = async (word: string) => {
+    setTargetWord(word)
+    // Small delay to ensure state update, then start analysis
+    setTimeout(() => {
+      performSemanticFrameAnalysis(word)
+    }, 50)
   }
   // Slide navigation
   const slides = [
@@ -579,7 +590,7 @@ export default function PatientAnalysisPage() {
                               }}
                             />
                             <Button 
-                              onClick={performSemanticFrameAnalysis}
+                              onClick={() => performSemanticFrameAnalysis()}
                               disabled={semanticFrameLoading || !targetWord.trim() || selectedSessions.size === 0}
                               variant="default" 
                               className="w-full md:w-auto"
@@ -684,17 +695,32 @@ export default function PatientAnalysisPage() {
                                 {semanticFrameResult.semantic_frame?.connected_words && 
                                  semanticFrameResult.semantic_frame.connected_words.length > 0 && (
                                   <div className="bg-white rounded-lg border p-4">
-                                    <h4 className="font-semibold mb-3 text-gray-700">Parole Connesse</h4>
+                                    <h4 className="font-semibold mb-3 text-gray-700">
+                                      Parole Connesse
+                                      <span className="text-xs text-gray-500 ml-2 font-normal">(clicca per analizzare)</span>
+                                    </h4>
                                     <div className="flex flex-wrap gap-2">
                                       {semanticFrameResult.semantic_frame.connected_words.map((word: string, index: number) => (
-                                        <span 
+                                        <button
                                           key={index}
-                                          className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded"
+                                          onClick={() => analyzeConnectedWord(word)}
+                                          disabled={semanticFrameLoading}
+                                          className={`
+                                            text-xs font-medium px-2.5 py-0.5 rounded transition-all duration-200
+                                            ${semanticFrameLoading 
+                                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                              : 'bg-blue-100 text-blue-800 hover:bg-blue-200 hover:text-blue-900 cursor-pointer hover:shadow-sm'
+                                            }
+                                          `}
+                                          title={`Clicca per analizzare il frame semantico di "${word}"`}
                                         >
                                           {word}
-                                        </span>
+                                        </button>
                                       ))}
                                     </div>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                      💡 Clicca su una parola per esplorare il suo frame semantico nelle sessioni selezionate
+                                    </p>
                                   </div>
                                 )}
                               </div>
