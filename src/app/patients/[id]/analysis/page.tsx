@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react"
+import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp, Network } from "lucide-react"
 import TopicAnalysisComponent from "@/components/analysis/topic-analysis"
 import { SentimentAnalysis } from "@/components/sentiment-analysis"
 import { EmotionTrends } from "@/components/emotion-trends"
@@ -207,12 +207,12 @@ export default function PatientAnalysisPage() {
       .filter(transcript => transcript.trim().length > 0)
       .join("\n\n--- SESSIONE SUCCESSIVA ---\n\n")
   }
-
   // Slide navigation
   const slides = [
     { title: "Trascrizioni", icon: FileText },
     { title: "Topic Modelling", icon: BarChart3 },
-    { title: "Sentiment Analysis", icon: Heart }
+    { title: "Sentiment Analysis", icon: Heart },
+    { title: "Analisi Semantica", icon: Network }
   ]
 
   const nextSlide = () => {
@@ -492,6 +492,45 @@ export default function PatientAnalysisPage() {
                               }
                             }}
                           />
+                        </div>
+                      )}
+
+                      {/* Slide 3: Analisi Semantica */}
+                      {currentSlide === 3 && (
+                        <div className="h-full flex flex-col gap-6">
+                          <div className="mb-2">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                              <Network className="h-5 w-5 text-blue-700" />
+                              Analisi Semantica (Semantic Frame)
+                            </h3>
+                            <p className="text-gray-600 text-sm mt-1">
+                              Esplora il contesto cognitivo ed emotivo di una parola chiave nelle sessioni selezionate.<br/>
+                              Inserisci una parola e visualizza la sua rete semantica e il profilo emotivo associato.
+                            </p>
+                          </div>
+                          <div className="flex flex-col md:flex-row gap-4 items-start">
+                            <input
+                              type="text"
+                              className="border rounded px-3 py-2 w-full md:w-64 focus:ring-2 focus:ring-blue-400"
+                              placeholder="Es: madre, lavoro, amore..."
+                              disabled
+                            />
+                            <Button disabled variant="secondary" className="w-full md:w-auto">
+                              Analizza (prossimamente)
+                            </Button>
+                          </div>
+                          <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50 min-h-[300px]">
+                            <span className="text-gray-400 text-center">
+                              <Network className="w-12 h-12 mx-auto mb-2" />
+                              <span className="block font-medium">Visualizzazione frame semantico</span>
+                              <span className="block text-sm mt-1">Qui apparirà la rete semantica e il profilo emotivo della parola selezionata</span>
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-4">
+                            <p>
+                              <strong>Cos'è?</strong> La Semantic Frame Analysis permette di esplorare le associazioni cognitive ed emotive di una parola chiave nel testo, utile per analisi narrative, metafore, ruoli e insight clinici.
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>
