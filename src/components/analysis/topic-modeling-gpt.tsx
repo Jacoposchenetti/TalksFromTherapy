@@ -87,7 +87,7 @@ export default function TopicAnalysisComponent({
             const sessionTopics = sessionResult.topics.map((topic: Topic) => ({
               ...topic,
               topic_id: allTopics.length + topic.topic_id, // Rendi univoco l'ID
-              description: `${topic.description} (${session.title})`
+              description: topic.description // Rimuovi riferimento al documento
             }))
             
             allTopics.push(...sessionTopics)
@@ -613,33 +613,50 @@ Rispondi SOLO con JSON:
             </CardContent>
           </Card>          {/* Risultati dell'analisi */}
           {analysisResult && (
-            <Card>              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Brain className="h-5 w-5" />
-                    Topic Identificati
-                  </div>
+            <Card className="relative">
+              {/* Overlay del titolo in alto a sinistra */}
+              <div className="absolute top-4 left-4 z-10">
+                <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border shadow-sm">
+                  <Brain className="h-4 w-4" />
+                  <span className="text-sm font-medium">Topic Identificati</span>
                   {analysisResult.text_segments && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setShowTextView(!showTextView)}
-                      className="flex items-center gap-2"
+                      className="ml-2 h-7 px-2"
                     >
                       {showTextView ? (
                         <>
-                          <EyeOff className="h-4 w-4" />
-                          Nascondi Testo
+                          <EyeOff className="h-3 w-3 mr-1" />
+                          Nascondi
                         </>
                       ) : (
                         <>
-                          <Eye className="h-4 w-4" />
-                          Visualizza nel Testo
+                          <Eye className="h-3 w-3 mr-1" />
+                          Nel Testo
                         </>
                       )}
                     </Button>
                   )}
-                </CardTitle>
+                </div>
+              </div>
+
+              {/* Overlay dei topic badges in alto a destra */}
+              <div className="absolute top-4 right-4 z-10">
+                <div className="flex flex-wrap gap-1.5 max-w-md justify-end">
+                  {analysisResult.topics.map((topic) => (
+                    <Badge
+                      key={topic.topic_id}
+                      className={`${getTopicColor(topic.topic_id)} text-xs shadow-sm bg-white/90 backdrop-blur-sm`}
+                    >
+                      {topic.description.replace(/\s*\([^)]*\)$/, '')}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              <CardHeader className="pt-16">
                 <CardDescription>
                   {analysisResult.summary}
                 </CardDescription>
@@ -651,10 +668,11 @@ Rispondi SOLO con JSON:
                         <div className="flex items-start justify-between mb-3">
                           <div>
                             <h4 className="font-medium text-lg">
-                              Topic {topic.topic_id}: {topic.description}
+                              {topic.description}
                             </h4>
-                          </div>                          <Badge className={getTopicColor(topic.topic_id)}>
-                            Topic {topic.topic_id}
+                          </div>
+                          <Badge className={getTopicColor(topic.topic_id)}>
+                            {topic.description.replace(/\s*\([^)]*\)$/, '')}
                           </Badge>
                         </div>
                         
@@ -679,9 +697,10 @@ Rispondi SOLO con JSON:
                   <div className="max-h-96 overflow-y-auto pr-2">
                     <div className="mb-4">
                       <h4 className="font-medium mb-2">Legenda Topic:</h4>
-                      <div className="flex flex-wrap gap-2">                        {analysisResult.topics.map((topic, index) => (
+                      <div className="flex flex-wrap gap-2">
+                        {analysisResult.topics.map((topic, index) => (
                           <Badge key={topic.topic_id} className={getTopicColor(topic.topic_id)}>
-                            Topic {topic.topic_id}: {topic.description}
+                            {topic.description.replace(/\s*\([^)]*\)$/, '')}
                           </Badge>
                         ))}
                       </div>
@@ -710,7 +729,7 @@ Rispondi SOLO con JSON:
                               className={`inline-block p-1 rounded ${getTopicBackgroundColor(segment.topic_id)} ${
                                 segment.topic_id ? 'border-l-2 border-gray-400' : ''
                               }`}
-                              title={segment.topic_id ? `Topic ${segment.topic_id} (${Math.round(segment.confidence * 100)}% confidence)` : 'Non classificato'}
+                              title={segment.topic_id ? `${analysisResult.topics.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)` : 'Non classificato'}
                             >
                               {segment.text}
                             </span>
