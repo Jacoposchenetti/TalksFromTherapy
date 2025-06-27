@@ -76,7 +76,9 @@ export default function TopicAnalysisComponent({
 
       // Classifica automaticamente il testo se l'analisi è riuscita
       if (result.topics && result.topics.length > 0) {
+        console.log('Starting text classification...')
         const segments = await classifyTextToTopics(combinedTranscript, result.topics)
+        console.log('Classification completed, segments:', segments)
         setAnalysisResult(prev => prev ? { ...prev, text_segments: segments } : null)
       }
 
@@ -103,17 +105,17 @@ export default function TopicAnalysisComponent({
   }
 
   const getTopicBackgroundColor = (topicId: number | null) => {
-    if (topicId === null) return 'bg-gray-100'
+    if (topicId === null) return 'bg-gray-100 text-gray-600'
     
     const backgroundColors = [
-      'bg-blue-100',
-      'bg-green-100', 
-      'bg-yellow-100',
-      'bg-red-100',
-      'bg-purple-100',
-      'bg-indigo-100',
-      'bg-pink-100',
-      'bg-orange-100'
+      'bg-blue-100 text-blue-900',
+      'bg-green-100 text-green-900', 
+      'bg-yellow-100 text-yellow-900',
+      'bg-red-100 text-red-900',
+      'bg-purple-100 text-purple-900',
+      'bg-indigo-100 text-indigo-900',
+      'bg-pink-100 text-pink-900',
+      'bg-orange-100 text-orange-900'
     ]
     return backgroundColors[(topicId - 1) % backgroundColors.length]
   }
@@ -133,6 +135,12 @@ export default function TopicAnalysisComponent({
       // Crea il prompt per la classificazione
       const topicList = topics.map(t => `${t.topic_id}: ${t.description} (${t.keywords.join(', ')})`).join('\n')
       
+      console.log('Calling classify-text-segments with:', {
+        sentences: sentences.length,
+        topicList,
+        session_id: `classify_${Date.now()}`
+      })
+      
       const response = await fetch('/api/classify-text-segments', {
         method: 'POST',
         headers: {
@@ -145,9 +153,17 @@ export default function TopicAnalysisComponent({
         }),
       })
 
+      console.log('Response status:', response.status)
+
       if (response.ok) {
         const result = await response.json()
+        console.log('Classification result:', result)
+        console.log('Segments received:', result.segments?.length || 0)
         return result.segments || []
+      } else {
+        console.error('Classification API error:', response.status, response.statusText)
+        const errorText = await response.text()
+        console.error('Error details:', errorText)
       }
     } catch (error) {
       console.error('Errore nella classificazione del testo:', error)
