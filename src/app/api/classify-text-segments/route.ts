@@ -28,10 +28,10 @@ FRASI DA CLASSIFICARE:
 ${sentences.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}
 
 ISTRUZIONI:
-1. Assegna ogni frase al topic più appropriato usando l'ID del topic
+1. Assegna ogni frase al topic più appropriato usando l'ID numerico del topic (1, 2, 3, ecc.)
 2. Se una frase non appartiene chiaramente a nessun topic, usa null
 3. Fornisci una confidence da 0.0 a 1.0
-4. Rispondi in formato JSON:
+4. Rispondi SOLO in formato JSON valido, nient'altro:
 
 {"classifications": [
   {"sentence_id": 1, "topic_id": 2, "confidence": 0.8},
@@ -63,7 +63,12 @@ ISTRUZIONI:
     }
 
     try {
-      const classificationsData = JSON.parse(content)
+      // Pulisci la risposta da eventuali caratteri extra
+      const cleanContent = content.replace(/```json|```/g, '').trim()
+      console.log('Cleaned content:', cleanContent)
+      
+      const classificationsData = JSON.parse(cleanContent)
+      console.log('Parsed classifications:', classificationsData)
       
       // Trasforma le classificazioni in segmenti
       const segments = sentences.map((sentence: string, index: number) => {
@@ -71,13 +76,17 @@ ISTRUZIONI:
           (c: any) => c.sentence_id === index + 1
         )
         
-        return {
+        const segment = {
           text: sentence,
           topic_id: classification?.topic_id || null,
           confidence: classification?.confidence || 0
         }
+        
+        console.log(`Segment ${index + 1}:`, segment)
+        return segment
       })
 
+      console.log('Final segments:', segments)
       console.log('Classification completed:', { segments_count: segments.length })
 
       return NextResponse.json({ segments })
