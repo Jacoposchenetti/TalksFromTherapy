@@ -627,13 +627,40 @@ export default function PatientAnalysisPage() {
                                       <Network className="h-5 w-5 text-blue-600" />
                                       Rete Semantica per "{semanticFrameResult.target_word}"
                                     </h4>
-                                    <div className="flex justify-center">
+                                    <div className="flex justify-center mb-4">
                                       <img 
                                         src={`data:image/png;base64,${semanticFrameResult.visualization.frame_plot}`}
                                         alt={`Rete semantica per ${semanticFrameResult.target_word}`}
                                         className="max-w-full h-auto rounded border"
                                         style={{ maxHeight: '500px' }}
                                       />
+                                    </div>
+                                    
+                                    {/* Legend */}
+                                    <div className="bg-gray-50 rounded-lg p-3 mt-4">
+                                      <h5 className="text-sm font-medium text-gray-700 mb-2">📋 Legenda Colori</h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                                          <span><strong>Rosso:</strong> Parole con valenza negativa</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                          <span><strong>Verde:</strong> Parole con valenza positiva</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+                                          <span><strong>Grigio:</strong> Parole neutrali</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                                          <span><strong>Viola:</strong> Connessioni contrastive</span>
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 text-xs text-gray-600">
+                                        <p><strong>Dimensione font:</strong> Proporzionale alla centralità/importanza della parola nel testo</p>
+                                        <p><strong>Connessioni:</strong> Linee indicano relazioni sintattiche tra le parole</p>
+                                      </div>
                                     </div>
                                   </div>
                                 )}
