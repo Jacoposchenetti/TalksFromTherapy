@@ -49,8 +49,14 @@ export default function PatientAnalysisPage() {
   const [savingNote, setSavingNote] = useState(false)
   const [editingNote, setEditingNote] = useState(false)
   const [activeSessionForNote, setActiveSessionForNote] = useState<Session | null>(null)
-  const [currentSlide, setCurrentSlide] = useState(0) // 0: Trascrizioni, 1: Topic Modelling, 2: Sentiment Analysis
+  const [currentSlide, setCurrentSlide] = useState(0) // 0: Trascrizioni, 1: Topic Modelling, 2: Sentiment Analysis, 3: Semantic Frame
   const [emotionAnalysisResults, setEmotionAnalysisResults] = useState<any[]>([]) // Store emotion analysis results
+  
+  // Semantic Frame Analysis state
+  const [targetWord, setTargetWord] = useState("")
+  const [semanticFrameLoading, setSemanticFrameLoading] = useState(false)
+  const [semanticFrameResult, setSemanticFrameResult] = useState<any>(null)
+  const [semanticFrameError, setSemanticFrameError] = useState<string | null>(null)
 
   useEffect(() => {
     if (status === "loading") return
@@ -206,6 +212,54 @@ export default function PatientAnalysisPage() {
       .map(session => session.transcript || "")
       .filter(transcript => transcript.trim().length > 0)
       .join("\n\n--- SESSIONE SUCCESSIVA ---\n\n")
+  }
+
+  // Semantic Frame Analysis function
+  const performSemanticFrameAnalysis = async () => {
+    if (!targetWord.trim()) {
+      setSemanticFrameError("Inserisci una parola chiave per l'analisi")
+      return
+    }
+
+    const combinedTranscript = getCombinedTranscript()
+    if (!combinedTranscript.trim()) {
+      setSemanticFrameError("Nessuna trascrizione disponibile nelle sessioni selezionate")
+      return
+    }
+
+    setSemanticFrameLoading(true)
+    setSemanticFrameError(null)
+    setSemanticFrameResult(null)
+
+    try {
+      const response = await fetch('/api/semantic-frame-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: combinedTranscript,
+          targetWord: targetWord.trim(),
+          sessionId: getSelectedSessionsData()[0]?.id || null,
+          language: 'italian'
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setSemanticFrameResult(data)
+        console.log('Semantic Frame Analysis successful:', data)
+      } else {
+        setSemanticFrameError(data.error || 'Errore durante l\'analisi semantica')
+        console.error('Semantic Frame Analysis error:', data.error)
+      }
+    } catch (error) {
+      console.error('Semantic Frame Analysis request failed:', error)
+      setSemanticFrameError('Errore di connessione durante l\'analisi')
+    } finally {
+      setSemanticFrameLoading(false)
+    }
   }
   // Slide navigation
   const slides = [
@@ -508,24 +562,158 @@ export default function PatientAnalysisPage() {
                               Inserisci una parola e visualizza la sua rete semantica e il profilo emotivo associato.
                             </p>
                           </div>
+                          
+                          {/* Input Controls */}
                           <div className="flex flex-col md:flex-row gap-4 items-start">
                             <input
                               type="text"
+                              value={targetWord}
+                              onChange={(e) => setTargetWord(e.target.value)}
                               className="border rounded px-3 py-2 w-full md:w-64 focus:ring-2 focus:ring-blue-400"
                               placeholder="Es: madre, lavoro, amore..."
-                              disabled
+                              disabled={semanticFrameLoading}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter' && !semanticFrameLoading) {
+                                  performSemanticFrameAnalysis()
+                                }
+                              }}
                             />
-                            <Button disabled variant="secondary" className="w-full md:w-auto">
-                              Analizza (prossimamente)
+                            <Button 
+                              onClick={performSemanticFrameAnalysis}
+                              disabled={semanticFrameLoading || !targetWord.trim() || selectedSessions.size === 0}
+                              variant="default" 
+                              className="w-full md:w-auto"
+                            >
+                              {semanticFrameLoading ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                  Analizzando...
+                                </>
+                              ) : (
+                                <>
+                                  <Network className="mr-2 h-4 w-4" />
+                                  Analizza Frame
+                                </>
+                              )}
                             </Button>
                           </div>
-                          <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50 min-h-[300px]">
-                            <span className="text-gray-400 text-center">
-                              <Network className="w-12 h-12 mx-auto mb-2" />
-                              <span className="block font-medium">Visualizzazione frame semantico</span>
-                              <span className="block text-sm mt-1">Qui apparirà la rete semantica e il profilo emotivo della parola selezionata</span>
-                            </span>
+
+                          {/* Error Message */}
+                          {semanticFrameError && (
+                            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                              <strong>Errore:</strong> {semanticFrameError}
+                            </div>
+                          )}
+
+                          {/* Results Visualization */}
+                          <div className="flex-1 flex flex-col min-h-[400px]">
+                            {semanticFrameResult ? (
+                              <div className="space-y-6">
+                                {/* Network Visualization */}
+                                {semanticFrameResult.visualization?.frame_plot && (
+                                  <div className="bg-white rounded-lg border p-4">
+                                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                      <Network className="h-5 w-5 text-blue-600" />
+                                      Rete Semantica per "{semanticFrameResult.target_word}"
+                                    </h4>
+                                    <div className="flex justify-center">
+                                      <img 
+                                        src={`data:image/png;base64,${semanticFrameResult.visualization.frame_plot}`}
+                                        alt={`Rete semantica per ${semanticFrameResult.target_word}`}
+                                        className="max-w-full h-auto rounded border"
+                                        style={{ maxHeight: '500px' }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Analysis Results */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {/* Frame Statistics */}
+                                  <div className="bg-white rounded-lg border p-4">
+                                    <h4 className="font-semibold mb-3 text-gray-700">Statistiche Frame</h4>
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex justify-between">
+                                        <span>Parole connesse:</span>
+                                        <span className="font-medium">{semanticFrameResult.semantic_frame?.frame_size || 0}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Connessioni totali:</span>
+                                        <span className="font-medium">{semanticFrameResult.semantic_frame?.total_connections || 0}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Valenza emotiva:</span>
+                                        <span className={`font-medium ${
+                                          (semanticFrameResult.semantic_frame?.emotional_valence || 0) > 0 
+                                            ? 'text-green-600' 
+                                            : 'text-red-600'
+                                        }`}>
+                                          {(semanticFrameResult.semantic_frame?.emotional_valence || 0).toFixed(3)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Significant Emotions */}
+                                  <div className="bg-white rounded-lg border p-4">
+                                    <h4 className="font-semibold mb-3 text-gray-700">Emozioni Significative</h4>
+                                    {semanticFrameResult.semantic_frame?.significant_emotions && 
+                                     Object.keys(semanticFrameResult.semantic_frame.significant_emotions).length > 0 ? (
+                                      <div className="space-y-2 text-sm">
+                                        {Object.entries(semanticFrameResult.semantic_frame.significant_emotions)
+                                          .sort(([,a], [,b]) => Math.abs(b as number) - Math.abs(a as number))
+                                          .slice(0, 5)
+                                          .map(([emotion, score]) => (
+                                            <div key={emotion} className="flex justify-between items-center">
+                                              <span className="capitalize">{emotion}:</span>
+                                              <span className={`font-medium ${
+                                                (score as number) > 0 ? 'text-green-600' : 'text-red-600'
+                                              }`}>
+                                                {(score as number).toFixed(2)}
+                                              </span>
+                                            </div>
+                                          ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-gray-500 text-sm">Nessuna emozione significativa rilevata</p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Connected Words */}
+                                {semanticFrameResult.semantic_frame?.connected_words && 
+                                 semanticFrameResult.semantic_frame.connected_words.length > 0 && (
+                                  <div className="bg-white rounded-lg border p-4">
+                                    <h4 className="font-semibold mb-3 text-gray-700">Parole Connesse</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                      {semanticFrameResult.semantic_frame.connected_words.map((word: string, index: number) => (
+                                        <span 
+                                          key={index}
+                                          className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded"
+                                        >
+                                          {word}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
+                                <span className="text-gray-400 text-center">
+                                  <Network className="w-12 h-12 mx-auto mb-2" />
+                                  <span className="block font-medium">Visualizzazione frame semantico</span>
+                                  <span className="block text-sm mt-1">
+                                    {selectedSessions.size === 0 
+                                      ? "Seleziona delle sessioni e inserisci una parola per iniziare l'analisi"
+                                      : "Inserisci una parola chiave e clicca 'Analizza Frame'"
+                                    }
+                                  </span>
+                                </span>
+                              </div>
+                            )}
                           </div>
+
                           <div className="text-xs text-gray-500 mt-4">
                             <p>
                               <strong>Cos'è?</strong> La Semantic Frame Analysis permette di esplorare le associazioni cognitive ed emotive di una parola chiave nel testo, utile per analisi narrative, metafore, ruoli e insight clinici.
