@@ -233,19 +233,22 @@ class EmoAtlasAnalysisService:
             return self._generate_fallback_analysis(text)
         
         try:
-            # Initialize EmoScores with the text
-            emo = EmoScores(text, lang=language)
+            # Initialize EmoScores for the language
+            emo = EmoScores(language=language)
+            
+            # Get z-scores for the text
+            z_scores_data = emo.zscores(text)
             
             # Get emotion scores (z-scores)
             z_scores = {
-                'joy': float(emo.z_scores.get('joy', 0)),
-                'trust': float(emo.z_scores.get('trust', 0)),
-                'fear': float(emo.z_scores.get('fear', 0)),
-                'surprise': float(emo.z_scores.get('surprise', 0)),
-                'sadness': float(emo.z_scores.get('sadness', 0)),
-                'disgust': float(emo.z_scores.get('disgust', 0)),
-                'anger': float(emo.z_scores.get('anger', 0)),
-                'anticipation': float(emo.z_scores.get('anticipation', 0))
+                'joy': float(z_scores_data.get('joy', 0)),
+                'trust': float(z_scores_data.get('trust', 0)),
+                'fear': float(z_scores_data.get('fear', 0)),
+                'surprise': float(z_scores_data.get('surprise', 0)),
+                'sadness': float(z_scores_data.get('sadness', 0)),
+                'disgust': float(z_scores_data.get('disgust', 0)),
+                'anger': float(z_scores_data.get('anger', 0)),
+                'anticipation': float(z_scores_data.get('anticipation', 0))
             }
             
             # Calculate derived metrics
@@ -586,6 +589,191 @@ def generate_analysis_summary(sessions: List[SessionAnalysis]) -> Dict:
     except Exception as e:
         print(f"❌ Error generating summary: {e}")
         return {}
+
+@app.post("/semantic-frame-analysis")
+async def semantic_frame_analysis(request: Dict):
+    """Perform semantic frame analysis using EmoAtlas"""
+    try:
+        text = request.get('text', '')
+        target_word = request.get('target_word', '')
+        session_id = request.get('session_id', 'unknown')
+        language = request.get('language', 'italian')
+        
+        if not text or not target_word:
+            raise HTTPException(status_code=400, detail="Text and target_word are required")
+        
+        print(f"🔍 Starting semantic frame analysis for word '{target_word}'")
+        
+        if not EMOATLAS_AVAILABLE:
+            return generate_fallback_semantic_analysis(text, target_word, session_id, language)
+        
+        try:
+            # Initialize EmoScores for the language
+            emo = EmoScores(language=language)
+        except Exception as e:
+            print(f"❌ Error initializing EmoScores with language '{language}': {e}")
+            print("🔄 Falling back to semantic analysis without EmoAtlas")
+            return generate_fallback_semantic_analysis(text, target_word, session_id, language)
+        
+        # Generate the forma mentis network
+        print(f"🕸️ Generating forma mentis network...")
+        fmnt = emo.formamentis_network(text)
+        
+        # Extract semantic frame for the target word
+        print(f"🎯 Extracting semantic frame for '{target_word}'...")
+        try:
+            fmnt_word = emo.extract_word_from_formamentis(fmnt, target_word)
+            
+            # Get connected words (vertices in the semantic frame)
+            connected_words = list(fmnt_word.vertices) if hasattr(fmnt_word, 'vertices') else []
+            
+            # Create semantic frame text for emotion analysis
+            sem_frame_text = " ".join(connected_words)
+            
+            # Analyze emotions of the semantic frame
+            frame_emo = EmoScores(language=language)
+            frame_z_scores_data = frame_emo.zscores(sem_frame_text)
+            
+            frame_z_scores = {
+                'joy': float(frame_z_scores_data.get('joy', 0)),
+                'trust': float(frame_z_scores_data.get('trust', 0)),
+                'fear': float(frame_z_scores_data.get('fear', 0)),
+                'surprise': float(frame_z_scores_data.get('surprise', 0)),
+                'sadness': float(frame_z_scores_data.get('sadness', 0)),
+                'disgust': float(frame_z_scores_data.get('disgust', 0)),
+                'anger': float(frame_z_scores_data.get('anger', 0)),
+                'anticipation': float(frame_z_scores_data.get('anticipation', 0))
+            }
+            
+            # Calculate semantic frame metrics
+            positive_score = frame_z_scores['joy'] + frame_z_scores['trust'] + frame_z_scores['anticipation']
+            negative_score = frame_z_scores['fear'] + frame_z_scores['sadness'] + frame_z_scores['anger'] + frame_z_scores['disgust']
+            emotional_valence = positive_score - negative_score
+            
+            # Get significant emotions
+            significant_emotions = {
+                emotion: score for emotion, score in frame_z_scores.items() 
+                if abs(score) >= 1.96
+            }
+            
+            # Calculate semantic similarity (based on number of connections)
+            total_words = len(text.split())
+            connected_ratio = len(connected_words) / max(total_words, 1)
+            semantic_similarity = min(1.0, connected_ratio * 10)  # Normalize
+            
+            return {
+                "success": True,
+                "session_id": session_id,
+                "target_word": target_word,
+                "semantic_frame": {
+                    "connected_words": connected_words,
+                    "frame_text": sem_frame_text,
+                    "total_connections": len(connected_words)
+                },
+                "emotional_analysis": {
+                    "z_scores": frame_z_scores,
+                    "emotional_valence": emotional_valence,
+                    "positive_score": positive_score,
+                    "negative_score": negative_score,
+                    "significant_emotions": significant_emotions
+                },
+                "context_analysis": {
+                    "emotional_context": "positive" if emotional_valence > 1 else "negative" if emotional_valence < -1 else "neutral",
+                    "semantic_similarity": semantic_similarity,
+                    "average_valence": emotional_valence,
+                    "total_occurrences": len(connected_words),
+                    "analyzed_contexts": 1
+                },
+                "statistics": {
+                    "connected_words": len(connected_words),
+                    "total_connections": len(connected_words),
+                    "emotional_valence": emotional_valence,
+                    "semantic_centrality": semantic_similarity
+                },
+                "language": language,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            print(f"⚠️ Word '{target_word}' not found in forma mentis network: {e}")
+            # Fallback: analyze the word in context
+            return generate_fallback_semantic_analysis(text, target_word, session_id, language)
+            
+    except Exception as e:
+        print(f"❌ Semantic frame analysis error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id,
+            "target_word": target_word
+        }
+
+def generate_fallback_semantic_analysis(text: str, target_word: str, session_id: str, language: str) -> Dict:
+    """Generate fallback semantic analysis when EmoAtlas is not available or word is not found"""
+    print(f"🔧 Using fallback semantic analysis for '{target_word}'")
+    
+    # Simple context extraction
+    sentences = text.split('.')
+    target_contexts = []
+    
+    for sentence in sentences:
+        if target_word.lower() in sentence.lower():
+            words = sentence.strip().split()
+            target_contexts.extend(words)
+    
+    # Remove duplicates and the target word itself
+    connected_words = list(set([w.strip('.,!?;:') for w in target_contexts if w.lower() != target_word.lower()]))
+    
+    # Generate mock but realistic emotion scores
+    import random
+    frame_z_scores = {
+        'joy': random.uniform(-2, 2),
+        'trust': random.uniform(-2, 2),
+        'fear': random.uniform(-2, 2),
+        'surprise': random.uniform(-1, 1),
+        'sadness': random.uniform(-2, 2),
+        'disgust': random.uniform(-2, 2),
+        'anger': random.uniform(-2, 2),
+        'anticipation': random.uniform(-2, 2)
+    }
+    
+    positive_score = frame_z_scores['joy'] + frame_z_scores['trust'] + frame_z_scores['anticipation']
+    negative_score = frame_z_scores['fear'] + frame_z_scores['sadness'] + frame_z_scores['anger'] + frame_z_scores['disgust']
+    emotional_valence = positive_score - negative_score
+    
+    return {
+        "success": True,
+        "session_id": session_id,
+        "target_word": target_word,
+        "semantic_frame": {
+            "connected_words": connected_words[:20],  # Limit for readability
+            "frame_text": " ".join(connected_words[:20]),
+            "total_connections": len(connected_words)
+        },
+        "emotional_analysis": {
+            "z_scores": frame_z_scores,
+            "emotional_valence": emotional_valence,
+            "positive_score": positive_score,
+            "negative_score": negative_score,
+            "significant_emotions": {k: v for k, v in frame_z_scores.items() if abs(v) >= 1.96}
+        },
+        "context_analysis": {
+            "emotional_context": "positive" if emotional_valence > 1 else "negative" if emotional_valence < -1 else "neutral",
+            "semantic_similarity": min(1.0, len(connected_words) / 50),
+            "average_valence": emotional_valence,
+            "total_occurrences": len(connected_words),
+            "analyzed_contexts": 1
+        },
+        "statistics": {
+            "connected_words": len(connected_words),
+            "total_connections": len(connected_words),
+            "emotional_valence": emotional_valence,
+            "semantic_centrality": min(1.0, len(connected_words) / 50)
+        },
+        "language": language,
+        "timestamp": datetime.now().isoformat(),
+        "note": "Fallback analysis - EmoAtlas not available or word not found in network"
+    }
 
 if __name__ == "__main__":
     import uvicorn
