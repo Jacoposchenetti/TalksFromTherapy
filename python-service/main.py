@@ -662,7 +662,8 @@ async def semantic_frame_analysis(request: Dict):
             semantic_similarity = min(1.0, connected_ratio * 10)  # Normalize
             
             # Generate semantic network visualization using EmoAtlas
-            network_plot = generate_semantic_network_plot(fmnt, target_word, connected_words, frame_z_scores)
+            # Pass the extracted subnetwork instead of the full network
+            network_plot = generate_semantic_network_plot(fmnt_word, target_word, connected_words, frame_z_scores)
             
             return {
                 "success": True,
@@ -712,8 +713,8 @@ async def semantic_frame_analysis(request: Dict):
             "target_word": target_word
         }
 
-def generate_semantic_network_plot(fmnt, target_word: str, connected_words: list, frame_z_scores: dict) -> str:
-    """Generate a network plot using EmoAtlas native draw_formamentis function"""
+def generate_semantic_network_plot(fmnt_word, target_word: str, connected_words: list, frame_z_scores: dict) -> str:
+    """Generate a network plot using EmoAtlas native draw_formamentis function on the extracted subnetwork"""
     try:
         import matplotlib
         matplotlib.use('Agg')  # Use non-interactive backend
@@ -722,22 +723,32 @@ def generate_semantic_network_plot(fmnt, target_word: str, connected_words: list
         import base64
         
         # Create a new figure with high DPI for better quality
-        plt.figure(figsize=(14, 10), dpi=120)
+        plt.figure(figsize=(12, 10), dpi=120)
         
         # Use EmoAtlas native draw_formamentis function
-        print(f"🎨 Drawing forma mentis network using EmoAtlas...")
+        print(f"🎨 Drawing forma mentis subnetwork using EmoAtlas...")
         
         # Initialize EmoScores to access draw_formamentis
         emo = EmoScores(language='italian')
         
-        # Draw the forma mentis network with the recommended parameters
-        emo.draw_formamentis(
-            fmn=fmnt,
-            alpha_syntactic=0.4,  # Syntactic connections opacity
-            alpha_hypernyms=0,    # Hypernym connections (disabled)
-            alpha_synonyms=0,     # Synonym connections (disabled)  
-            thickness=2           # Line thickness
-        )
+        # Check if we have a valid subnetwork
+        if fmnt_word is not None:
+            print(f"🔍 Drawing extracted subnetwork for '{target_word}' with {len(connected_words)} connections...")
+            
+            # Draw the SUBNETWORK (not the full network) with highlight parameter
+            emo.draw_formamentis(
+                fmn=fmnt_word,            # USE THE EXTRACTED SUBNETWORK
+                highlight=target_word,    # HIGHLIGHT THE TARGET WORD
+                alpha_syntactic=0.4,      # Syntactic connections opacity
+                alpha_hypernyms=0,        # Hypernym connections (disabled)
+                alpha_synonyms=0,         # Synonym connections (disabled)  
+                thickness=2               # Line thickness
+            )
+            
+            print(f"✅ Successfully drew subnetwork with '{target_word}' highlighted")
+        else:
+            print(f"⚠️ No subnetwork available, falling back to NetworkX visualization")
+            return generate_fallback_network_plot(target_word, connected_words, frame_z_scores)
         
         # Add title with emotional information
         emotion_info = f"Valenza: {frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0):.2f}"
