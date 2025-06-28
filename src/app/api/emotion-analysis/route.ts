@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     console.log('🌍 Language configured:', language)
     console.log('📊 Session data:', sessionData.map(s => ({ id: s.id, title: s.title, transcript_length: s.transcript.length })))
     
-    const analysis = await emoatlasService.analyzeMultipleSessions(sessionData, language)
+    const analysis = await emoatlasService.analyzeEmotions(sessionData, language)
     
     console.log('📈 Analysis result:', { 
       success: analysis.success, 
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
 // Health check endpoint
 export async function GET() {
   try {
-    const health = await emoatlasService.checkHealth()
+    const health = await emoatlasService.healthCheck()
     
     return NextResponse.json({
       status: health.healthy ? 'healthy' : 'unhealthy',

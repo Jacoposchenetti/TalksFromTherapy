@@ -58,15 +58,24 @@ export async function POST(request: NextRequest) {
     console.log('🌍 Language:', language)
 
     // Generate emotional flower plot
-    const flowerResult = await emoatlasService.generateFlowerPlot(sessionRecord.transcript, language)
+    const sessionData = [{
+      id: sessionRecord.id,
+      title: sessionRecord.title,
+      transcript: sessionRecord.transcript,
+      sessionDate: new Date().toISOString()
+    }]
+    
+    const analysisResult = await emoatlasService.analyzeEmotions(sessionData, language)
 
-    if (!flowerResult.success) {
-      console.error('❌ Flower plot generation failed:', flowerResult.error)
+    if (!analysisResult.success || analysisResult.individual_sessions.length === 0) {
+      console.error('❌ Flower plot generation failed:', analysisResult.error)
       return NextResponse.json({ 
         error: "Failed to generate emotional flower", 
-        details: flowerResult.error 
+        details: analysisResult.error 
       }, { status: 500 })
     }
+
+    const analysis = analysisResult.individual_sessions[0]
 
     console.log('✅ Emotional flower generated successfully')
     
@@ -74,7 +83,9 @@ export async function POST(request: NextRequest) {
       success: true,
       session_id: sessionRecord.id,
       session_title: sessionRecord.title,
-      flower_plot: flowerResult.plot,
+      flower_plot: analysis.analysis.flower_plot,
+      z_scores: analysis.analysis.z_scores,
+      emotional_valence: analysis.analysis.emotional_valence,
       language: language,
       timestamp: new Date().toISOString()
     })
