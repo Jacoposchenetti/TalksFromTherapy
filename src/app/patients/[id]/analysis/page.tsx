@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp, Network } from "lucide-react"
 import { SentimentAnalysis } from "@/components/sentiment-analysis"
 import { EmotionTrends } from "@/components/emotion-trends"
+import TopicAnalysisComponent from "@/components/analysis/topic-modeling-gpt"
 
 interface Session {
   id: string
