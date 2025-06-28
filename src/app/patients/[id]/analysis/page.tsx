@@ -750,6 +750,51 @@ export default function PatientAnalysisPage() {
                                     </p>
                                   </div>
                                 )}
+
+                                {/* Semantic Network Visualization */}
+                                <div className="bg-yellow-50 p-3 rounded border mb-4">
+                                  <h5 className="font-semibold text-sm">🔍 Debug - Struttura Dati API:</h5>
+                                  <div className="text-xs mt-2">
+                                    <div><strong>Success:</strong> {String(semanticFrameResult.success)}</div>
+                                    <div><strong>Target Word:</strong> {semanticFrameResult.target_word || 'N/A'}</div>
+                                    <div><strong>Network Plot Present:</strong> {semanticFrameResult.network_plot ? 'YES' : 'NO'}</div>
+                                    {semanticFrameResult.network_plot && (
+                                      <div><strong>Network Plot Length:</strong> {semanticFrameResult.network_plot.length}</div>
+                                    )}
+                                    <div><strong>Available Keys:</strong> {Object.keys(semanticFrameResult).join(', ')}</div>
+                                  </div>
+                                </div>
+
+                                {semanticFrameResult.network_plot && (
+                                  <div className="bg-white rounded-lg border p-4 mb-4">
+                                    <h4 className="font-semibold mb-3 text-gray-700 flex items-center gap-2">
+                                      <Network className="w-5 h-5 text-green-600" />
+                                      🎯 Rete Semantica Generata da EmoAtlas
+                                    </h4>
+                                    <div className="flex justify-center bg-gray-50 p-4 rounded-lg">
+                                      <img 
+                                        src={`data:image/png;base64,${semanticFrameResult.network_plot}`}
+                                        alt={`Rete semantica per la parola "${targetWord}"`}
+                                        className="max-w-full h-auto rounded-lg shadow-lg border-2 border-blue-200"
+                                        style={{ maxHeight: '600px', maxWidth: '100%' }}
+                                        onLoad={() => console.log('✅ Network plot image loaded successfully!')}
+                                        onError={(e) => {
+                                          console.error('❌ Errore nel caricamento immagine network plot:', e);
+                                          console.error('❌ Image src length:', e.currentTarget.src.length);
+                                          console.error('❌ Base64 data length:', semanticFrameResult.network_plot.length);
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="mt-3 text-center">
+                                      <p className="text-sm text-gray-600 font-medium">
+                                        📊 Grafico generato da EmoAtlas con NetworkX
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Parola analizzata: "<strong>{targetWord}</strong>" | Dimensione: {Math.round(semanticFrameResult.network_plot.length / 1024)}KB
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">

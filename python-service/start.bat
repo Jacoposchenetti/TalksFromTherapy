@@ -1,5 +1,25 @@
 @echo off
-REM Startup script for Topic Analysis Python service on Windows
+REM SREM Check if emoatlas environment exists
+if exist "..\\emoatlas_env\\Scripts\\python.exe" (
+    echo 🔧 Using emoatlas virtual environment...
+    set "PYTHON_EXE=..\emoatlas_env\Scripts\python.exe"
+    set "PIP_EXE=..\emoatlas_env\Scripts\pip.exe"
+) else if exist "..\\.venv\\Scripts\\python.exe" (
+    echo 🔧 Using existing project virtual environment...
+    set "PYTHON_EXE=..\.venv\Scripts\python.exe"
+    set "PIP_EXE=..\.venv\Scripts\pip.exe"
+) else if exist "venv\\Scripts\\python.exe" (
+    echo 🔧 Using local virtual environment...
+    set "PYTHON_EXE=venv\Scripts\python.exe"
+    set "PIP_EXE=venv\Scripts\pip.exe"
+) else (
+    echo 📦 Creating local virtual environment...
+    python -m venv venv
+    set "PYTHON_EXE=venv\Scripts\python.exe"
+    set "PIP_EXE=venv\Scripts\pip.exe"
+    echo 📥 Installing requirements...
+    %PIP_EXE% install -r requirements.txt
+) Topic Analysis Python service on Windows
 
 echo 🐍 Starting Topic Analysis Service (TF-IDF + NMF)...
 
