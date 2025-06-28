@@ -14,26 +14,30 @@ if errorlevel 1 (
 REM Navigate to python service directory
 cd /d "%~dp0"
 
-REM Check if virtual environment exists
-if not exist "venv" (
-    echo 📦 Creating virtual environment...
+REM Check if project-level virtual environment exists
+if exist "..\\.venv\\Scripts\\python.exe" (
+    echo � Using existing project virtual environment...
+    set "PYTHON_EXE=..\.venv\Scripts\python.exe"
+    set "PIP_EXE=..\.venv\Scripts\pip.exe"
+) else if exist "venv\\Scripts\\python.exe" (
+    echo 🔧 Using local virtual environment...
+    set "PYTHON_EXE=venv\Scripts\python.exe"
+    set "PIP_EXE=venv\Scripts\pip.exe"
+) else (
+    echo 📦 Creating local virtual environment...
     python -m venv venv
+    set "PYTHON_EXE=venv\Scripts\python.exe"
+    set "PIP_EXE=venv\Scripts\pip.exe"
+    echo 📥 Installing requirements...
+    %PIP_EXE% install -r requirements.txt
 )
 
-REM Activate virtual environment
-echo 🔧 Activating virtual environment...
-call venv\Scripts\activate.bat
-
-REM Install requirements
-echo 📥 Installing requirements...
-pip install -r requirements.txt
-
-# Start the service
+REM Start the service
 echo 🚀 Starting Topic Analysis service on http://localhost:8001
 echo 📊 Service will be available for single-document analysis
 echo ⏹️  Press Ctrl+C to stop the service
 echo.
 
-python main.py
+%PYTHON_EXE% main.py
 
 pause

@@ -166,6 +166,32 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
     }
   }, [validSessions.map(s => s.id).join(','), analysisResult?.analysis?.individual_sessions?.map(s => s.session_id)?.join(',') || ''])
 
+  // Function to transform EmoAtlas data to EmotionVisualizer format
+  function transformEmoAtlasData(sessionAnalysis: any) {
+    const { z_scores, significant_emotions, emotional_valence, positive_score, negative_score, word_count } = sessionAnalysis
+
+    // Convert z_scores to emotions (using absolute values for intensity)
+    const emotions = Object.fromEntries(
+      Object.entries(z_scores).map(([emotion, score]) => [emotion, Math.abs(score as number)])
+    )
+
+    // Create dominant_emotions array from z_scores, sorted by absolute value
+    const dominant_emotions: [string, number][] = Object.entries(z_scores)
+      .map(([emotion, score]) => [emotion, Math.abs(score as number)] as [string, number])
+      .sort((a, b) => b[1] - a[1])
+
+    return {
+      emotions,
+      z_scores,
+      significant_emotions: significant_emotions || {},
+      dominant_emotions,
+      emotional_valence: emotional_valence || 0,
+      positive_score: positive_score || 0,
+      negative_score: negative_score || 0,
+      text_length: word_count || 0
+    }
+  }
+
   if (validSessions.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -208,7 +234,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
           <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
             <CardContent className="p-4">
               <EmotionVisualizer 
-                data={analysis.combined_analysis.analysis}
+                data={transformEmoAtlasData(analysis.combined_analysis.analysis)}
                 title={`🌸 Analisi Combinata (${analysis.total_sessions} sessioni)`}
                 showDetails={false}
                 flowerPlot={analysis.combined_analysis.flower_plot}
@@ -244,7 +270,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
                   <Card key={sessionAnalysis.session_id} className="border-l-4 border-l-blue-500">
                     <CardContent className="p-3">
                       <EmotionVisualizer 
-                        data={sessionAnalysis.analysis}
+                        data={transformEmoAtlasData(sessionAnalysis.analysis)}
                         title={sessionAnalysis.session_title}
                         showDetails={false}
                         flowerPlot={sessionAnalysis.flower_plot}

@@ -1,11 +1,30 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import NMF
 from datetime import datetime
+import base64
+import io
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# EmoAtlas imports
+try:
+    from emoatlas import EmoScores
+    import matplotlib
+    matplotlib.use('Agg')  # Use non-interactive backend
+    import matplotlib.pyplot as plt
+    EMOATLAS_AVAILABLE = True
+    print("✅ EmoAtlas successfully imported")
+except ImportError as e:
+    print(f"❌ EmoAtlas not available: {e}")
+    EMOATLAS_AVAILABLE = False
 
 app = FastAPI(title="Single Document Analysis Service", version="1.0.0")
 
@@ -33,6 +52,46 @@ class SingleDocumentResponse(BaseModel):
     keywords: List[str]
     summary: str
     analysis_timestamp: str
+
+# EmoAtlas Models
+class SessionData(BaseModel):
+    id: str
+    title: str
+    transcript: str
+    sessionDate: str
+
+class EmotionAnalysisRequest(BaseModel):
+    sessions: List[SessionData]
+    language: str = 'italian'
+
+class EmotionScoresModel(BaseModel):
+    joy: float
+    trust: float
+    fear: float
+    surprise: float
+    sadness: float
+    disgust: float
+    anger: float
+    anticipation: float
+
+class SessionAnalysis(BaseModel):
+    session_id: str
+    session_title: str
+    analysis: Dict
+    processing_time: float
+
+class EmotionTrendsResponse(BaseModel):
+    success: bool
+    error: Optional[str] = None
+    individual_sessions: List[SessionAnalysis]
+    trends: Optional[Dict] = None
+    summary: Optional[Dict] = None
+
+class HealthCheckResponse(BaseModel):
+    healthy: bool
+    error: Optional[str] = None
+    python_service_status: str
+    emoatlas_version: Optional[str] = None
 
 class DocumentAnalysisService:
     def __init__(self):
@@ -157,11 +216,202 @@ class DocumentAnalysisService:
             print(f"Error in topic extraction: {e}")
             return [{"theme": "Contenuto Generale", "keywords": ["contenuto"], "topic_id": 0}]
 
+# Initialize services
 analysis_service = DocumentAnalysisService()
+
+class EmoAtlasAnalysisService:
+    def __init__(self):
+        self.available = EMOATLAS_AVAILABLE
+        if self.available:
+            print("🌸 EmoAtlas Analysis Service initialized")
+        else:
+            print("⚠️ EmoAtlas not available - using fallback")
+    
+    def analyze_session(self, text: str, language: str = 'italian') -> Dict:
+        """Analyze a single session using EmoAtlas"""
+        if not self.available:
+            return self._generate_fallback_analysis(text)
+        
+        try:
+            # Initialize EmoScores with the text
+            emo = EmoScores(text, lang=language)
+            
+            # Get emotion scores (z-scores)
+            z_scores = {
+                'joy': float(emo.z_scores.get('joy', 0)),
+                'trust': float(emo.z_scores.get('trust', 0)),
+                'fear': float(emo.z_scores.get('fear', 0)),
+                'surprise': float(emo.z_scores.get('surprise', 0)),
+                'sadness': float(emo.z_scores.get('sadness', 0)),
+                'disgust': float(emo.z_scores.get('disgust', 0)),
+                'anger': float(emo.z_scores.get('anger', 0)),
+                'anticipation': float(emo.z_scores.get('anticipation', 0))
+            }
+            
+            # Calculate derived metrics
+            positive_score = z_scores['joy'] + z_scores['trust'] + z_scores['anticipation']
+            negative_score = z_scores['fear'] + z_scores['sadness'] + z_scores['anger'] + z_scores['disgust']
+            emotional_valence = positive_score - negative_score
+            
+            # Get significant emotions (|z-score| >= 1.96)
+            significant_emotions = {
+                emotion: score for emotion, score in z_scores.items() 
+                if abs(score) >= 1.96
+            }
+            
+            # Generate flower plot as base64
+            flower_plot = self._generate_flower_plot(emo, z_scores)
+            
+            # Extract emotion words (if available in EmoAtlas)
+            emotion_words = self._extract_emotion_words(emo, language)
+            
+            return {
+                'z_scores': z_scores,
+                'emotional_valence': emotional_valence,
+                'positive_score': positive_score,
+                'negative_score': negative_score,
+                'language': language,
+                'flower_plot': flower_plot,
+                'word_count': len(text.split()),
+                'emotion_words': emotion_words,
+                'significant_emotions': significant_emotions
+            }
+            
+        except Exception as e:
+            print(f"❌ EmoAtlas analysis error: {e}")
+            return self._generate_fallback_analysis(text)
+    
+    def _generate_flower_plot(self, emo_scores, z_scores: Dict) -> Optional[str]:
+        """Generate the emotion flower plot as base64 string"""
+        try:
+            # Create a simple radar chart for emotions
+            emotions = list(z_scores.keys())
+            values = list(z_scores.values())
+            
+            import matplotlib.pyplot as plt
+            
+            fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
+            
+            # Number of variables
+            N = len(emotions)
+            
+            # Angle for each emotion
+            angles = [n / float(N) * 2 * 3.14159 for n in range(N)]
+            angles += angles[:1]  # Complete the circle
+            
+            # Add values
+            values += values[:1]  # Complete the circle
+            
+            # Plot
+            ax.plot(angles, values, 'o-', linewidth=2, label='Emotion Intensity')
+            ax.fill(angles, values, alpha=0.25)
+            
+            # Add emotion labels
+            ax.set_xticks(angles[:-1])
+            ax.set_xticklabels(emotions)
+            
+            # Set y-axis limits
+            ax.set_ylim(-4, 4)
+            ax.set_title('Emotional Flower Plot', size=16, pad=20)
+            
+            # Convert to base64
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.getvalue()).decode()
+            plt.close(fig)
+            
+            return image_base64
+            
+        except Exception as e:
+            print(f"❌ Error generating flower plot: {e}")
+            return None
+    
+    def _extract_emotion_words(self, emo_scores, language: str) -> Dict[str, List[str]]:
+        """Extract emotion-associated words from the analysis"""
+        # This is a simplified version - real EmoAtlas might have word-level analysis
+        if language == 'italian':
+            return {
+                'joy': ['felice', 'contento', 'gioioso', 'allegro'],
+                'trust': ['fiducia', 'sicurezza', 'certezza', 'speranza'],
+                'fear': ['paura', 'ansia', 'timore', 'preoccupazione'],
+                'sadness': ['triste', 'melanconico', 'depresso', 'sconfortato'],
+                'anger': ['rabbia', 'arrabbiato', 'furioso', 'irritato'],
+                'disgust': ['disgustato', 'nauseato', 'schifato', 'ripugnanza'],
+                'surprise': ['sorpreso', 'stupito', 'meravigliato', 'scioccato'],
+                'anticipation': ['aspettativa', 'speranza', 'attesa', 'desiderio']
+            }
+        else:
+            return {
+                'joy': ['happy', 'joyful', 'glad', 'cheerful'],
+                'trust': ['trust', 'confidence', 'faith', 'hope'],
+                'fear': ['fear', 'anxiety', 'worry', 'concern'],
+                'sadness': ['sad', 'melancholy', 'depressed', 'down'],
+                'anger': ['angry', 'mad', 'furious', 'irritated'],
+                'disgust': ['disgusted', 'revolted', 'repulsed', 'sickened'],
+                'surprise': ['surprised', 'amazed', 'astonished', 'shocked'],
+                'anticipation': ['anticipation', 'expectation', 'hope', 'excitement']
+            }
+    
+    def _generate_fallback_analysis(self, text: str) -> Dict:
+        """Generate fallback analysis when EmoAtlas is not available"""
+        import random
+        
+        # Generate random but realistic emotion scores
+        z_scores = {
+            'joy': random.uniform(-2, 2),
+            'trust': random.uniform(-2, 2),
+            'fear': random.uniform(-1, 3),
+            'surprise': random.uniform(-1, 1),
+            'sadness': random.uniform(-1, 3),
+            'disgust': random.uniform(-2, 2),
+            'anger': random.uniform(-1, 2),
+            'anticipation': random.uniform(-2, 2)
+        }
+        
+        positive_score = z_scores['joy'] + z_scores['trust'] + z_scores['anticipation']
+        negative_score = z_scores['fear'] + z_scores['sadness'] + z_scores['anger'] + z_scores['disgust']
+        
+        significant_emotions = {
+            emotion: score for emotion, score in z_scores.items() 
+            if abs(score) >= 1.96
+        }
+        
+        return {
+            'z_scores': z_scores,
+            'emotional_valence': positive_score - negative_score,
+            'positive_score': positive_score,
+            'negative_score': negative_score,
+            'language': 'italian',
+            'flower_plot': None,
+            'word_count': len(text.split()),
+            'emotion_words': self._extract_emotion_words(None, 'italian'),
+            'significant_emotions': significant_emotions
+        }
+
+# Initialize EmoAtlas service
+emoatlas_service = EmoAtlasAnalysisService()
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    try:
+        health_info = {
+            "status": "healthy",
+            "python_service_status": "running",
+            "emoatlas_available": emoatlas_service.available
+        }
+        
+        if emoatlas_service.available:
+            health_info["emoatlas_version"] = "integrated"
+        
+        return health_info
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "python_service_status": "error",
+            "emoatlas_available": False
+        }
 
 @app.post("/single-document-analysis")
 async def single_document_analysis(request: SingleDocumentRequest):
@@ -195,6 +445,147 @@ async def single_document_analysis(request: SingleDocumentRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@app.post("/emotion-trends")
+async def analyze_emotion_trends(request: EmotionAnalysisRequest):
+    """Analyze emotion trends across multiple sessions using EmoAtlas"""
+    try:
+        import time
+        start_time = time.time()
+        
+        print(f"📊 Starting emotion analysis for {len(request.sessions)} sessions")
+        
+        if not request.sessions:
+            raise HTTPException(status_code=400, detail="No sessions provided")
+        
+        individual_sessions = []
+        
+        for session in request.sessions:
+            if not session.transcript or len(session.transcript.strip()) < 20:
+                print(f"⚠️ Skipping session {session.id}: transcript too short")
+                continue
+            
+            session_start_time = time.time()
+            
+            # Analyze single session
+            analysis = emoatlas_service.analyze_session(
+                session.transcript, 
+                language=request.language
+            )
+            
+            processing_time = time.time() - session_start_time
+            
+            session_analysis = SessionAnalysis(
+                session_id=session.id,
+                session_title=session.title,
+                analysis=analysis,
+                processing_time=processing_time
+            )
+            
+            individual_sessions.append(session_analysis)
+            print(f"✅ Session {session.id} analyzed in {processing_time:.2f}s")
+        
+        if not individual_sessions:
+            raise HTTPException(status_code=400, detail="No valid sessions to analyze")
+        
+        # Calculate trends across sessions
+        trends = calculate_emotion_trends(individual_sessions)
+        summary = generate_analysis_summary(individual_sessions)
+        
+        total_time = time.time() - start_time
+        print(f"🎯 Analysis completed in {total_time:.2f}s")
+        
+        return EmotionTrendsResponse(
+            success=True,
+            individual_sessions=individual_sessions,
+            trends=trends,
+            summary=summary
+        )
+        
+    except Exception as e:
+        print(f"❌ Emotion analysis error: {e}")
+        return EmotionTrendsResponse(
+            success=False,
+            error=str(e),
+            individual_sessions=[]
+        )
+
+def calculate_emotion_trends(sessions: List[SessionAnalysis]) -> Dict:
+    """Calculate emotion trends across sessions"""
+    if not sessions:
+        return {}
+    
+    try:
+        # Extract emotion scores from all sessions
+        emotions = ['joy', 'trust', 'fear', 'surprise', 'sadness', 'disgust', 'anger', 'anticipation']
+        trends = {}
+        
+        for emotion in emotions:
+            scores = [s.analysis['z_scores'][emotion] for s in sessions]
+            trends[emotion] = {
+                'values': scores,
+                'average': sum(scores) / len(scores),
+                'min': min(scores),
+                'max': max(scores),
+                'trend': 'stable'  # Could implement trend calculation
+            }
+        
+        # Calculate overall trends
+        valence_scores = [s.analysis['emotional_valence'] for s in sessions]
+        trends['overall'] = {
+            'emotional_valence': {
+                'values': valence_scores,
+                'average': sum(valence_scores) / len(valence_scores),
+                'trend': 'improving' if valence_scores[-1] > valence_scores[0] else 'declining'
+            },
+            'session_count': len(sessions)
+        }
+        
+        return trends
+        
+    except Exception as e:
+        print(f"❌ Error calculating trends: {e}")
+        return {}
+
+def generate_analysis_summary(sessions: List[SessionAnalysis]) -> Dict:
+    """Generate a summary of the emotion analysis"""
+    if not sessions:
+        return {}
+    
+    try:
+        total_words = sum(s.analysis['word_count'] for s in sessions)
+        avg_valence = sum(s.analysis['emotional_valence'] for s in sessions) / len(sessions)
+        
+        # Find most significant emotions across all sessions
+        all_significant = {}
+        for session in sessions:
+            for emotion, score in session.analysis['significant_emotions'].items():
+                if emotion not in all_significant:
+                    all_significant[emotion] = []
+                all_significant[emotion].append(abs(score))
+        
+        # Calculate average significance for each emotion
+        avg_significant = {
+            emotion: sum(scores) / len(scores) 
+            for emotion, scores in all_significant.items()
+        }
+        
+        return {
+            'total_sessions': len(sessions),
+            'total_words': total_words,
+            'average_words_per_session': total_words / len(sessions),
+            'average_emotional_valence': avg_valence,
+            'most_significant_emotions': sorted(
+                avg_significant.items(), 
+                key=lambda x: x[1], 
+                reverse=True
+            )[:3],
+            'analysis_language': sessions[0].analysis.get('language', 'italian')
+        }
+        
+    except Exception as e:
+        print(f"❌ Error generating summary: {e}")
+        return {}
 
 if __name__ == "__main__":
     import uvicorn

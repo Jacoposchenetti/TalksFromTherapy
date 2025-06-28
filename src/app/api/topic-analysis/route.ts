@@ -161,8 +161,7 @@ export async function POST(request: NextRequest) {
           processingTime: Date.now(),
           createdAt: new Date(),
           updatedAt: new Date()
-        })),
-        skipDuplicates: true
+        }))
       })
     } catch (dbError) {
       console.warn('Failed to save analysis to database:', dbError)
