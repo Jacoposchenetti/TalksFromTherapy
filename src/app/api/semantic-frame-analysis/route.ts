@@ -29,32 +29,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Perform semantic frame analysis using the EmoAtlas service
-    // TODO: Implement semantic frame analysis
-    const result = {
-      success: true,
-      session_id: sessionId,
-      target_word: targetWord,
-      frames: [],
-      context_analysis: {
-        emotional_context: 'neutral',
-        semantic_similarity: 0.5,
-        contextual_relevance: 0.7
-      }
-    }
+    console.log('🔍 Starting semantic frame analysis for:', targetWord)
+    
+    const result = await emoatlasService.analyzeSemanticFrame(
+      text,
+      targetWord,
+      sessionId,
+      language
+    )
 
-    // Enhance response with additional metadata
-    const enhancedResult = {
-      ...result,
-      metadata: {
-        processingTime: new Date().toISOString(),
-        language,
-        inputLength: text.length,
-        targetWord,
-        sessionId: sessionId || null
-      }
-    };
+    console.log('🎯 Semantic frame analysis result:', {
+      success: result.success,
+      target_word: result.target_word,
+      connected_words: result.semantic_frame?.total_connections || 0
+    })
 
-    return NextResponse.json(enhancedResult);
+    return NextResponse.json(result)
 
   } catch (error) {
     console.error('Semantic frame analysis API error:', error);
