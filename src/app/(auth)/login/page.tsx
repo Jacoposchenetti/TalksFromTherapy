@@ -16,26 +16,36 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError("")
 
     try {
+      console.log("Login attempt started...")
       const result = await signIn("credentials", {
         email,
         password,
         redirect: false,
       })
 
+      console.log("SignIn result:", result)
+
       if (result?.error) {
+        console.error("Login error:", result.error)
         setError("Email o password non validi")
+      } else if (result?.ok) {
+        console.log("Login successful, redirecting...")
+        // Aspetta un momento prima del redirect per assicurarsi che la sessione sia impostata
+        setTimeout(() => {
+          router.push("/dashboard")
+        }, 100)
       } else {
-        router.push("/dashboard")
-        router.refresh()
+        console.error("Unexpected login result:", result)
+        setError("Si è verificato un errore imprevisto")
       }
     } catch (error) {
+      console.error("Login exception:", error)
       setError("Si è verificato un errore durante il login")
     } finally {
       setIsLoading(false)
