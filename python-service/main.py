@@ -661,6 +661,9 @@ async def semantic_frame_analysis(request: Dict):
             connected_ratio = len(connected_words) / max(total_words, 1)
             semantic_similarity = min(1.0, connected_ratio * 10)  # Normalize
             
+            # Generate semantic network visualization using EmoAtlas
+            network_plot = generate_semantic_network_plot(fmnt, target_word, connected_words, frame_z_scores)
+            
             return {
                 "success": True,
                 "session_id": session_id,
@@ -691,7 +694,8 @@ async def semantic_frame_analysis(request: Dict):
                     "semantic_centrality": semantic_similarity
                 },
                 "language": language,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "network_plot": network_plot
             }
             
         except Exception as e:
@@ -707,6 +711,167 @@ async def semantic_frame_analysis(request: Dict):
             "session_id": session_id,
             "target_word": target_word
         }
+
+def generate_semantic_network_plot(fmnt, target_word: str, connected_words: list, frame_z_scores: dict) -> str:
+    """Generate a network plot using EmoAtlas native draw_formamentis function"""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-interactive backend
+        import matplotlib.pyplot as plt
+        import io
+        import base64
+        
+        # Create a new figure with high DPI for better quality
+        plt.figure(figsize=(14, 10), dpi=120)
+        
+        # Use EmoAtlas native draw_formamentis function
+        print(f"🎨 Drawing forma mentis network using EmoAtlas...")
+        
+        # Initialize EmoScores to access draw_formamentis
+        emo = EmoScores(language='italian')
+        
+        # Draw the forma mentis network with the recommended parameters
+        emo.draw_formamentis(
+            fmn=fmnt,
+            alpha_syntactic=0.4,  # Syntactic connections opacity
+            alpha_hypernyms=0,    # Hypernym connections (disabled)
+            alpha_synonyms=0,     # Synonym connections (disabled)  
+            thickness=2           # Line thickness
+        )
+        
+        # Add title with emotional information
+        emotion_info = f"Valenza: {frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0):.2f}"
+        plt.title(f'Rete Cognitiva EmoAtlas - "{target_word}"\n{emotion_info} | Connessioni: {len(connected_words)}', 
+                 fontsize=16, fontweight='bold', pad=20)
+        
+        # Improve layout
+        plt.tight_layout()
+        
+        # Convert to base64
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=120, 
+                   facecolor='white', edgecolor='none')
+        buffer.seek(0)
+        
+        # Encode to base64
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        # Close figure to free memory
+        plt.close()
+        
+        print(f"✅ Network plot generated successfully (size: {len(image_base64)} chars)")
+        return image_base64
+        
+    except Exception as e:
+        print(f"❌ Error generating EmoAtlas network plot: {e}")
+        print(f"🔄 Falling back to simple NetworkX plot...")
+        return generate_fallback_network_plot(target_word, connected_words, frame_z_scores)
+
+def generate_fallback_network_plot(target_word: str, connected_words: list, frame_z_scores: dict) -> str:
+    """Fallback network plot using NetworkX when EmoAtlas fails"""
+    try:
+        import networkx as nx
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import matplotlib.colors as mcolors
+        from matplotlib.patches import Rectangle
+        import numpy as np
+        
+        # Create a new figure with high DPI
+        plt.figure(figsize=(12, 8), dpi=100)
+        
+        # Create network graph
+        G = nx.Graph()
+        
+        # Add the target word as central node
+        G.add_node(target_word, node_type='target')
+        
+        # Add connected words as nodes
+        for word in connected_words[:20]:  # Limit to first 20 for readability
+            G.add_node(word, node_type='connected')
+            G.add_edge(target_word, word)
+        
+        # Create layout with target word in center
+        pos = nx.spring_layout(G, k=3, iterations=50)
+        
+        # Ensure target word is centered
+        if target_word in pos:
+            center_x, center_y = 0, 0
+            pos[target_word] = (center_x, center_y)
+            
+            # Arrange other nodes in a circle around the center
+            angle_step = 2 * np.pi / len(connected_words[:20])
+            for i, word in enumerate(connected_words[:20]):
+                if word in pos:
+                    angle = i * angle_step
+                    radius = 0.8
+                    pos[word] = (center_x + radius * np.cos(angle), center_y + radius * np.sin(angle))
+        
+        # Color nodes based on emotional valence
+        node_colors = []
+        node_sizes = []
+        
+        for node in G.nodes():
+            if node == target_word:
+                # Target word color based on overall emotional valence
+                valence = frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0)
+                if valence > 0.5:
+                    node_colors.append('#4CAF50')  # Green for positive
+                elif valence < -0.5:
+                    node_colors.append('#F44336')  # Red for negative
+                else:
+                    node_colors.append('#2196F3')  # Blue for neutral
+                node_sizes.append(1000)
+            else:
+                # Connected words get lighter colors
+                node_colors.append('#E3F2FD')  # Light blue
+                node_sizes.append(600)
+        
+        # Draw network
+        nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=node_sizes, alpha=0.8)
+        nx.draw_networkx_edges(G, pos, edge_color='gray', alpha=0.5, width=1)
+        
+        # Add labels with better positioning
+        labels = {}
+        for node in G.nodes():
+            if node == target_word:
+                labels[node] = node.upper()
+            else:
+                labels[node] = node[:10] + "..." if len(node) > 10 else node
+                
+        nx.draw_networkx_labels(G, pos, labels, font_size=8, font_weight='bold')
+        
+        # Add title and emotional info
+        emotion_info = f"Valenza Emotiva: {frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0):.2f}"
+        plt.title(f'Rete Semantica (Fallback) - "{target_word}"\n{emotion_info}', fontsize=14, fontweight='bold', pad=20)
+        
+        # Add legend
+        legend_elements = [
+            Rectangle((0,0),1,1, facecolor='#2196F3', label='Parola Target'),
+            Rectangle((0,0),1,1, facecolor='#E3F2FD', label='Parole Connesse'),
+        ]
+        plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1, 1))
+        
+        # Remove axes
+        plt.axis('off')
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        # Convert to base64
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100, 
+                   facecolor='white', edgecolor='none')
+        buffer.seek(0)
+        image_base64 = base64.b64encode(buffer.getvalue()).decode()
+        plt.close()
+        
+        return image_base64
+        
+    except Exception as e:
+        print(f"❌ Error generating fallback network plot: {e}")
+        return None
 
 def generate_fallback_semantic_analysis(text: str, target_word: str, session_id: str, language: str) -> Dict:
     """Generate fallback semantic analysis when EmoAtlas is not available or word is not found"""
