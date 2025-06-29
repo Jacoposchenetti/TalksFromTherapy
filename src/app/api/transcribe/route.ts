@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { transcribeAudio } from "@/lib/openai"
+import { transcribeAudio, diarizeTranscript } from "@/lib/openai"
 import { join } from "path"
 
 export const runtime = 'nodejs'
@@ -119,35 +119,45 @@ export async function POST(request: NextRequest) {  try {
       const fileStats = fs.statSync(audioFilePath)
       console.log(`📁 Dimensione file: ${fileStats.size} bytes (${(fileStats.size / 1024 / 1024).toFixed(2)} MB)`)
       
-      // Utilizza OpenAI Whisper per la trascrizione reale
-      const transcript = await transcribeAudio(audioFilePath)
+      // Step 1: Utilizza OpenAI Whisper per la trascrizione iniziale
+      console.log(`📝 Step 1: Trascrizione iniziale con Whisper...`)
+      const initialTranscript = await transcribeAudio(audioFilePath)
       
-      console.log(`📝 Trascrizione ricevuta: "${transcript}"`)
-      console.log(`📏 Lunghezza trascrizione: ${transcript.length} caratteri`)
+      console.log(`📝 Trascrizione iniziale ricevuta: "${initialTranscript.substring(0, 100)}..."`)
+      console.log(`📏 Lunghezza trascrizione iniziale: ${initialTranscript.length} caratteri`)
       
       // Verifica se la trascrizione sembra valida
-      if (transcript.length < 10 || transcript.includes("Sottotitoli e revisione a cura di")) {
-        console.warn(`⚠️ Trascrizione sospetta: "${transcript}"`)
+      if (initialTranscript.length < 10 || initialTranscript.includes("Sottotitoli e revisione a cura di")) {
+        console.warn(`⚠️ Trascrizione sospetta: "${initialTranscript}"`)
         console.warn(`💡 Potrebbe essere un watermark, file vuoto o audio di bassa qualità`)
       }
       
-      // Aggiorna la sessione con la trascrizione completata
+      // Step 2: Diarizzazione con GPT-3.5-turbo
+      console.log(`🎭 Step 2: Avvio diarizzazione con GPT-3.5-turbo...`)
+      const diarizedTranscript = await diarizeTranscript(initialTranscript, sessionRecord.title)
+      
+      console.log(`🎭 Diarizzazione completata: "${diarizedTranscript.substring(0, 100)}..."`)
+      console.log(`📏 Lunghezza trascrizione diarizzata: ${diarizedTranscript.length} caratteri`)
+      
+      // Aggiorna la sessione con la trascrizione diarizzata completata
       await prisma.session.update({
         where: { id: sessionId },
         data: { 
           status: "TRANSCRIBED",
-          transcript: transcript,
+          transcript: diarizedTranscript,
           updatedAt: new Date()
         }
       })
 
-      console.log(`✅ Trascrizione REALE completata per sessione ${sessionId}`)
+      console.log(`✅ Processo completo (trascrizione + diarizzazione) completato per sessione ${sessionId}`)
 
       return NextResponse.json({
-        message: "Trascrizione completata con successo",
+        message: "Trascrizione e diarizzazione completate con successo",
         sessionId,
         status: "TRANSCRIBED",
-        transcript: transcript,
+        transcript: diarizedTranscript,
+        initialTranscriptLength: initialTranscript.length,
+        diarizedTranscriptLength: diarizedTranscript.length,
         fileSize: fileStats.size,
         filePath: audioFilePath
       })
