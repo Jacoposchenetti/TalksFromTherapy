@@ -18,8 +18,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('Classifying text segments:', { session_id, sentences_count: sentences.length })
+    console.log('Topics received:', topics)
+    console.log('First few sentences:', sentences.slice(0, 3))
 
-    const prompt = `Classifica ogni frase del testo ai topic identificati.
+    const prompt = `Classifica ogni frase del testo ai topic identificati con massima precisione e selettività.
 
 TOPIC DISPONIBILI:
 ${topics}
@@ -27,17 +29,33 @@ ${topics}
 FRASI DA CLASSIFICARE:
 ${sentences.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}
 
-ISTRUZIONI:
+ISTRUZIONI CRITICHE:
 1. Assegna ogni frase al topic più appropriato usando l'ID numerico del topic (1, 2, 3, ecc.)
-2. Se una frase non appartiene chiaramente a nessun topic, usa null
-3. Fornisci una confidence da 0.0 a 1.0
-4. Rispondi SOLO in formato JSON valido, nient'altro:
+2. IMPORTANTE: Se una frase non appartiene CHIARAMENTE e SPECIFICAMENTE a un topic, usa null
+3. Fornisci una confidence da 0.0 a 1.0 (usa confidence alta solo se sei MOLTO sicuro)
+4. EVITA di classificare tutto nello stesso topic - sii molto selettivo
+5. Usa confidence bassa (< 0.5) per qualsiasi dubbio, anche minimo
+6. PREFERISCI null piuttosto che una classificazione incerta
+7. Una frase deve essere ESPLICITAMENTE e CHIARAMENTE collegata al topic per essere classificata
+8. Se hai anche il minimo dubbio, usa null
 
+REGOLA D'ORO: È meglio non classificare (null) che classificare erroneamente.
+
+ESEMPIO DI CLASSIFICAZIONE SELETTIVA:
 {"classifications": [
-  {"sentence_id": 1, "topic_id": 2, "confidence": 0.8},
-  {"sentence_id": 2, "topic_id": null, "confidence": 0.3}
+  {"sentence_id": 1, "topic_id": 1, "confidence": 0.9},
+  {"sentence_id": 2, "topic_id": null, "confidence": 0.1},
+  {"sentence_id": 3, "topic_id": null, "confidence": 0.3},
+  {"sentence_id": 4, "topic_id": 2, "confidence": 0.8},
+  {"sentence_id": 5, "topic_id": null, "confidence": 0.2}
 ]}
-`
+
+Rispondi SOLO in formato JSON valido, nient'altro:`
+
+    console.log('Prompt being sent to GPT:')
+    console.log('='.repeat(50))
+    console.log(prompt)
+    console.log('='.repeat(50))
 
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
@@ -51,7 +69,7 @@ ISTRUZIONI:
           content: prompt
         }
       ],
-      temperature: 0.2,
+      temperature: 0.1,
       max_tokens: 1000
     })
 

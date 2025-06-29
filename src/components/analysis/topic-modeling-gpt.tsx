@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, Brain, Loader2, MessageCircle, FileText, Eye, EyeOff } from "lucide-react"
+import { AlertCircle, Brain, Loader2, MessageCircle, FileText, Eye, EyeOff, Search, Plus, X } from "lucide-react"
 
 interface Session {
   id: string
@@ -47,6 +47,11 @@ export default function TopicAnalysisComponent({
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showTextView, setShowTextView] = useState(false)
+  
+  // Custom topic search state
+  const [customTopics, setCustomTopics] = useState("")
+  const [isCustomAnalyzing, setIsCustomAnalyzing] = useState(false)
+  const [customAnalysisResult, setCustomAnalysisResult] = useState<AnalysisResult | null>(null)
 
   const runTopicAnalysis = async () => {
     if (!combinedTranscript || combinedTranscript.trim().length === 0) {
@@ -156,6 +161,64 @@ export default function TopicAnalysisComponent({
       setError(error instanceof Error ? error.message : 'Errore sconosciuto durante l\'analisi')
     } finally {
       setIsAnalyzing(false)
+    }
+  }
+
+  const runCustomTopicAnalysis = async () => {
+    if (!combinedTranscript || combinedTranscript.trim().length === 0) {
+      setError("Nessuna trascrizione disponibile per l'analisi")
+      return
+    }
+
+    if (!customTopics.trim()) {
+      setError("Inserisci almeno un topic personalizzato")
+      return
+    }
+
+    setIsCustomAnalyzing(true)
+    setError(null)
+
+    try {
+      // Parse custom topics from comma-separated string
+      const topicList = customTopics
+        .split(',')
+        .map(topic => topic.trim())
+        .filter(topic => topic.length > 0)
+
+      if (topicList.length === 0) {
+        throw new Error("Nessun topic valido inserito")
+      }
+
+      console.log('Custom topics:', topicList)
+
+      // Create topic objects for the custom topics
+      const customTopicObjects: Topic[] = topicList.map((topic, index) => ({
+        topic_id: index + 1,
+        keywords: [topic.toLowerCase()],
+        description: topic
+      }))
+
+      // Classify text with custom topics
+      const segments = await classifyTextToTopicsSeparately(selectedSessions, customTopicObjects)
+      
+      const result: AnalysisResult = {
+        session_id: `custom_topics_${Date.now()}`,
+        topics: customTopicObjects,
+        summary: `Analisi con topic personalizzati: ${topicList.join(', ')}`,
+        analysis_timestamp: new Date().toISOString(),
+        text_segments: segments
+      }
+
+      setCustomAnalysisResult(result)
+      console.log('Custom topic analysis completed:', result)
+      console.log('Text segments count:', result.text_segments?.length || 0)
+      console.log('Text segments preview:', result.text_segments?.slice(0, 3))
+
+    } catch (error) {
+      console.error('Errore durante l\'analisi con topic personalizzati:', error)
+      setError(error instanceof Error ? error.message : 'Errore sconosciuto durante l\'analisi personalizzata')
+    } finally {
+      setIsCustomAnalyzing(false)
     }
   }
 
@@ -536,8 +599,11 @@ Rispondi SOLO con JSON:
     }
   }
 
+  // Get the active result to display
+  const activeResult = customAnalysisResult || analysisResult
+
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex flex-col">
       {/* Header Section - Consistent with Sentiment Analysis */}
       <div className="flex flex-col items-center justify-center mb-8">
         <div className="mb-6">
@@ -549,35 +615,10 @@ Rispondi SOLO con JSON:
         <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">
           Analisi dei Topic Semantici
         </h2>
-        
-        <p className="text-gray-600 text-center max-w-2xl">
-          Identifica automaticamente i temi principali e le aree semantiche nelle sessioni selezionate
-        </p>
       </div>
 
-      {/* Sessions Section */}
+      {/* Main Action Button */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-700 mb-3 text-center">
-          Sessioni da Analizzare:
-        </h3>
-        
-        <div className="bg-gray-50 rounded-lg p-4 mb-4">
-          {selectedSessions.length > 0 ? (
-            <div className="space-y-2">
-              {selectedSessions.map((session, index) => (
-                <div key={session.id} className="flex justify-between items-center text-sm">
-                  <span className="font-medium">{session.title}</span>
-                  <span className="text-gray-500">
-                    {session.transcript ? `${Math.round(session.transcript.split(' ').length)} parole` : 'No transcript'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-center">Nessuna sessione selezionata</p>
-          )}
-        </div>
-        
         <div className="flex justify-center">
           <Button 
             onClick={runTopicAnalysis}
@@ -598,14 +639,68 @@ Rispondi SOLO con JSON:
             )}
           </Button>
         </div>
-        
-        {/* Additional Info */}
-        <div className="text-center mt-4">
-          <p className="text-sm text-gray-600">
-            L'analisi utilizza GPT-3.5 per identificare temi principali, parole chiave<br/>
-            e aree semantiche con classificazione automatica del testo.
-          </p>
-        </div>
+
+        {/* Topic personalizzati opzionali - solo se c'è già un'analisi */}
+        {(analysisResult || customAnalysisResult) && (
+          <div className="mt-6 border-t pt-6">
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={customTopics}
+                    onChange={(e) => setCustomTopics(e.target.value)}
+                    className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Topic personalizzati (es: famiglia, lavoro, emozioni, relazioni)..."
+                    disabled={isCustomAnalyzing}
+                  />
+                  {customTopics && (
+                    <button
+                      onClick={() => setCustomTopics("")}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+
+                <Button 
+                  onClick={runCustomTopicAnalysis}
+                  disabled={isCustomAnalyzing || !customTopics.trim()}
+                  variant="outline"
+                  className="px-6"
+                >
+                  {isCustomAnalyzing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Classificando...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4 mr-2" />
+                      Ricalcola
+                    </>
+                  )}
+                </Button>
+
+                {customAnalysisResult && (
+                  <Button
+                    onClick={() => {
+                      setCustomAnalysisResult(null)
+                      setCustomTopics("")
+                    }}
+                    variant="ghost"
+                    size="sm"
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Reset
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -633,60 +728,40 @@ Rispondi SOLO con JSON:
           </CardContent>
         </Card>
       ) : (
-        <div className="flex-1">
-          {/* Risultati dell'analisi */}
-          {analysisResult && (
-            <Card className="relative">
-              {/* Overlay del titolo in alto a sinistra */}
-              <div className="absolute top-4 left-4 z-10">
-                <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border shadow-sm">
-                  <Brain className="h-4 w-4" />
-                  <span className="text-sm font-medium">Topic Identificati</span>
-                  {analysisResult.text_segments && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowTextView(!showTextView)}
-                      className="ml-2 h-7 px-2"
-                    >
-                      {showTextView ? (
-                        <>
-                          <EyeOff className="h-3 w-3 mr-1" />
-                          Nascondi
-                        </>
-                      ) : (
-                        <>
+        <div className="w-full">
+          {/* Risultati dell'analisi - normale o personalizzata */}
+          {(analysisResult || customAnalysisResult) && (
+            <Card className="relative min-h-0 max-h-[80vh] overflow-y-auto custom-scrollbar">
+
+              <CardHeader className="pt-4">
+                {!showTextView && (
+                  <div className="flex items-center justify-between">
+                    <CardDescription className="mb-0">
+                      {activeResult?.summary}
+                    </CardDescription>
+                    {(() => {
+                      const hasCustomSegments = customAnalysisResult?.text_segments && customAnalysisResult.text_segments.length > 0
+                      const hasNormalSegments = analysisResult?.text_segments && analysisResult.text_segments.length > 0
+                      const showButton = hasCustomSegments || hasNormalSegments
+                      
+                      return showButton ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowTextView(!showTextView)}
+                          className="h-7 px-3"
+                        >
                           <Eye className="h-3 w-3 mr-1" />
                           Nel Testo
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Overlay dei topic badges in alto a destra */}
-              <div className="absolute top-4 right-4 z-10">
-                <div className="flex flex-wrap gap-1.5 max-w-md justify-end">
-                  {analysisResult.topics.map((topic) => (
-                    <Badge
-                      key={topic.topic_id}
-                      className={`${getTopicColor(topic.topic_id)} text-xs shadow-sm bg-white/90 backdrop-blur-sm`}
-                    >
-                      {topic.description.replace(/\s*\([^)]*\)$/, '')}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-
-              <CardHeader className="pt-16">
-                <CardDescription>
-                  {analysisResult.summary}
-                </CardDescription>
-              </CardHeader>              <CardContent>
+                        </Button>
+                      ) : null
+                    })()}
+                  </div>
+                )}
+              </CardHeader>              <CardContent className="p-0">
                 {!showTextView ? (
-                  <div className="max-h-96 overflow-y-auto space-y-4 pr-2">
-                    {analysisResult.topics.map((topic, index) => (
+                  <div className="space-y-4 p-6 min-h-[300px] max-h-[60vh] overflow-y-auto custom-scrollbar border-2 border-blue-200">
+                    {activeResult?.topics.map((topic, index) => (
                       <div key={topic.topic_id} className="p-4 border rounded-lg">
                         <div className="flex items-start justify-between mb-3">
                           <div>
@@ -695,7 +770,7 @@ Rispondi SOLO con JSON:
                             </h4>
                           </div>
                           <Badge className={getTopicColor(topic.topic_id)}>
-                            {topic.description.replace(/\s*\([^)]*\)$/, '')}
+                            Topic {topic.topic_id}
                           </Badge>
                         </div>
                         
@@ -717,21 +792,66 @@ Rispondi SOLO con JSON:
                     ))}
                   </div>
                 ) : (
-                  <div className="max-h-96 overflow-y-auto pr-2">
-                    <div className="mb-4">
-                      <h4 className="font-medium mb-2">Legenda Topic:</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {analysisResult.topics.map((topic, index) => (
-                          <Badge key={topic.topic_id} className={getTopicColor(topic.topic_id)}>
-                            {topic.description.replace(/\s*\([^)]*\)$/, '')}
-                          </Badge>
-                        ))}
+                  <>
+                    {/* Barra sticky con info topic e legenda - solo per testo evidenziato */}
+                    <div className="sticky top-0 z-30 bg-white border-b shadow-sm p-3 mb-4">
+                      {/* Prima riga: Summary e pulsante Nascondi */}
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm text-gray-600">
+                          {activeResult?.summary}
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowTextView(!showTextView)}
+                          className="h-7 px-3"
+                        >
+                          <EyeOff className="h-3 w-3 mr-1" />
+                          Nascondi
+                        </Button>
+                      </div>
+                      
+                      {/* Seconda riga: Info topic e legenda */}
+                      <div className="flex items-center justify-between">
+                        {/* Info topic a sinistra */}
+                        <div className="flex items-center gap-2">
+                          {customAnalysisResult ? (
+                            <>
+                              <Search className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm font-medium">Topic Personalizzati</span>
+                              <div className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                                {customAnalysisResult.topics.length} topic
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <Brain className="h-4 w-4" />
+                              <span className="text-sm font-medium">Topic Automatici</span>
+                              <div className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                                {analysisResult?.topics.length || 0} topic
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        
+                        {/* Topic badges a destra */}
+                        <div className="flex flex-wrap gap-1.5 max-w-md justify-end">
+                          {activeResult?.topics.map((topic) => (
+                            <Badge
+                              key={topic.topic_id}
+                              className={`${getTopicColor(topic.topic_id)} text-xs shadow-sm`}
+                            >
+                              {topic.description.replace(/\s*\([^)]*\)$/, '')}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
                     </div>
                     
-                    <div className="space-y-2 text-sm leading-relaxed">
-                      {analysisResult.text_segments ? (
-                        analysisResult.text_segments.map((segment, index) => {
+                    <div className="px-3 pb-3">
+                      <div className="space-y-2 text-sm leading-relaxed">
+                      {activeResult?.text_segments ? (
+                        activeResult.text_segments.map((segment, index) => {
                           // Controlla se è un separatore di sessione
                           const isSessionSeparator = segment.text.includes('---') && segment.topic_id === null
                           
@@ -749,22 +869,29 @@ Rispondi SOLO con JSON:
                           return (
                             <span
                               key={index}
-                              className={`inline-block p-1 rounded ${getTopicBackgroundColor(segment.topic_id)} ${
-                                segment.topic_id ? 'border-l-2 border-gray-400' : ''
+                              className={`inline-block p-1 rounded ${
+                                segment.topic_id && segment.confidence >= 0.5 
+                                  ? `${getTopicBackgroundColor(segment.topic_id)} border-l-2 border-gray-400`
+                                  : ''
                               }`}
-                              title={segment.topic_id ? `${analysisResult.topics.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)` : 'Non classificato'}
+                              title={
+                                segment.topic_id 
+                                  ? `${activeResult?.topics.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)${segment.confidence < 0.5 ? ' - Confidence troppo bassa per evidenziare' : ''}`
+                                  : 'Non classificato'
+                              }
                             >
                               {segment.text}
                             </span>
                           )
                         })
-                      ) : (
-                        <p className="text-gray-500 italic">
-                          Classificazione del testo in corso...
-                        </p>
-                      )}
+                        ) : (
+                          <p className="text-gray-500 italic">
+                            Classificazione del testo in corso...
+                          </p>
+                        )}
                     </div>
-                  </div>
+                    </div>
+                  </>
                 )}
               </CardContent></Card>
           )}
