@@ -617,14 +617,96 @@ Rispondi SOLO con JSON:
         </h2>
       </div>
 
-      {/* Main Action Button */}
+      {/* Topic personalizzati - sempre disponibili */}
       <div className="mb-6">
+        <div className="space-y-4">
+          <div className="text-center">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Analisi Topic Personalizzati</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Definisci i tuoi topic specifici per analizzare il contenuto delle sessioni
+            </p>
+          </div>
+          
+          <div className="flex gap-3">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={customTopics}
+                onChange={(e) => setCustomTopics(e.target.value)}
+                className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Topic personalizzati (es: famiglia, lavoro, emozioni, relazioni)..."
+                disabled={isCustomAnalyzing || !combinedTranscript || combinedTranscript.trim().length === 0}
+              />
+              {customTopics && (
+                <button
+                  onClick={() => setCustomTopics("")}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+
+            <Button 
+              onClick={runCustomTopicAnalysis}
+              disabled={isCustomAnalyzing || !customTopics.trim() || !combinedTranscript || combinedTranscript.trim().length === 0}
+              variant="default"
+              className="px-6"
+            >
+              {isCustomAnalyzing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Analizzando...
+                </>
+              ) : (
+                <>
+                  <Search className="h-4 w-4 mr-2" />
+                  Analizza
+                </>
+              )}
+            </Button>
+
+            {customAnalysisResult && (
+              <Button
+                onClick={() => {
+                  setCustomAnalysisResult(null)
+                  setCustomTopics("")
+                }}
+                variant="ghost"
+                size="sm"
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Reset
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Divisore tra le due opzioni */}
+      <div className="flex items-center my-8">
+        <div className="flex-1 border-t border-gray-300"></div>
+        <span className="px-4 text-sm text-gray-500 bg-white">oppure</span>
+        <div className="flex-1 border-t border-gray-300"></div>
+      </div>
+
+      {/* Main Action Button per analisi automatica */}
+      <div className="mb-6">
+        <div className="text-center mb-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Analisi Topic Automatica</h3>
+          <p className="text-sm text-gray-600">
+            Lascia che GPT-3.5 identifichi automaticamente i topic principali
+          </p>
+        </div>
+        
         <div className="flex justify-center">
           <Button 
             onClick={runTopicAnalysis}
             disabled={isAnalyzing || !combinedTranscript || combinedTranscript.trim().length === 0}
             className="px-8 py-3 text-lg"
             size="lg"
+            variant="outline"
           >
             {isAnalyzing ? (
               <>
@@ -634,73 +716,11 @@ Rispondi SOLO con JSON:
             ) : (
               <>
                 <Brain className="h-5 w-5 mr-2" />
-                Avvia Analisi Topic
+                Analisi Automatica
               </>
             )}
           </Button>
         </div>
-
-        {/* Topic personalizzati opzionali - solo se c'è già un'analisi */}
-        {(analysisResult || customAnalysisResult) && (
-          <div className="mt-6 border-t pt-6">
-            <div className="space-y-4">
-              <div className="flex gap-3">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    value={customTopics}
-                    onChange={(e) => setCustomTopics(e.target.value)}
-                    className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Topic personalizzati (es: famiglia, lavoro, emozioni, relazioni)..."
-                    disabled={isCustomAnalyzing}
-                  />
-                  {customTopics && (
-                    <button
-                      onClick={() => setCustomTopics("")}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
-                  )}
-                </div>
-
-                <Button 
-                  onClick={runCustomTopicAnalysis}
-                  disabled={isCustomAnalyzing || !customTopics.trim()}
-                  variant="outline"
-                  className="px-6"
-                >
-                  {isCustomAnalyzing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Classificando...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4 mr-2" />
-                      Ricalcola
-                    </>
-                  )}
-                </Button>
-
-                {customAnalysisResult && (
-                  <Button
-                    onClick={() => {
-                      setCustomAnalysisResult(null)
-                      setCustomTopics("")
-                    }}
-                    variant="ghost"
-                    size="sm"
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    Reset
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {error && (
