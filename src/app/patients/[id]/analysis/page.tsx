@@ -510,7 +510,7 @@ export default function PatientAnalysisPage() {
                       </div>
                     </div>
                   </CardHeader>                  
-                  <CardContent className="h-[800px] overflow-hidden">
+                  <CardContent className="h-[800px] overflow-y-auto">
                     <div className="h-full">
                       {/* Slide 0: Trascrizioni */}
                       {currentSlide === 0 && (
@@ -812,7 +812,7 @@ export default function PatientAnalysisPage() {
                     console.log('🎨 Rendering trends section. emotionAnalysisResults:', emotionAnalysisResults)
                     console.log('🎨 emotionAnalysisResults.length:', emotionAnalysisResults.length)
                     return emotionAnalysisResults.length > 0 ? (
-                      <div className="w-full overflow-hidden">
+                      <div className="w-full overflow-y-auto">
                         <EmotionTrends 
                           analysisData={{ individual_sessions: emotionAnalysisResults }}
                         />

@@ -731,8 +731,7 @@ Rispondi SOLO con JSON:
         <div className="w-full">
           {/* Risultati dell'analisi - normale o personalizzata */}
           {(analysisResult || customAnalysisResult) && (
-            <Card className="relative min-h-0 max-h-[80vh] overflow-y-auto custom-scrollbar">
-
+            <Card className="relative min-h-0 max-h-[80vh] flex flex-col">
               <CardHeader className="pt-4">
                 {!showTextView && (
                   <div className="flex items-center justify-between">
@@ -758,11 +757,22 @@ Rispondi SOLO con JSON:
                     })()}
                   </div>
                 )}
-              </CardHeader>              <CardContent className="p-0">
+              </CardHeader>              <CardContent className="p-0 flex-1 min-h-0">
                 {!showTextView ? (
-                  <div className="space-y-4 p-6 min-h-[300px] max-h-[60vh] overflow-y-auto custom-scrollbar border-2 border-blue-200">
-                    {activeResult?.topics.map((topic, index) => (
-                      <div key={topic.topic_id} className="p-4 border rounded-lg">
+                  <div className="p-6 h-full flex flex-col">
+                    <div 
+                      className="flex-1 min-h-0 border border-gray-200 rounded-lg p-4 force-scroll" 
+                      style={{
+                        overflowY: 'scroll',
+                        scrollbarWidth: 'auto',
+                        msOverflowStyle: 'scrollbar',
+                        WebkitOverflowScrolling: 'touch',
+                        maxHeight: 'calc(80vh - 200px)' // Limita l'altezza massima
+                      }}
+                    >
+                      <div className="space-y-4">
+                        {activeResult?.topics.map((topic, index) => (
+                          <div key={topic.topic_id} className="p-4 border rounded-lg min-h-[200px]">
                         <div className="flex items-start justify-between mb-3">
                           <div>
                             <h4 className="font-medium text-lg">
@@ -784,12 +794,13 @@ Rispondi SOLO con JSON:
                                 className="text-xs"
                               >
                                 {keyword}
-                              </Badge>
-                            ))}
+                              </Badge>                            ))}
                           </div>
                         </div>
                       </div>
-                    ))}
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -893,7 +904,8 @@ Rispondi SOLO con JSON:
                     </div>
                   </>
                 )}
-              </CardContent></Card>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}
