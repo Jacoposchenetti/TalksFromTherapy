@@ -584,7 +584,7 @@ export default function PatientAnalysisPage() {
 
                       {/* Slide 1: Topic Modelling */}
                       {currentSlide === 1 && (
-                        <div className="h-full">
+                        <div className="min-h-full">
                           <TopicAnalysisComponent 
                             selectedSessions={getSelectedSessionsData().map(session => ({
                               id: session.id,

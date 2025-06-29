@@ -84,4 +84,31 @@
     overflow-wrap: break-word;
     word-break: break-word;
   }
+  
+  /* Stili scrollbar personalizzati per browser Webkit */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 12px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 6px;
+    border: 1px solid #64748b;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+  
+  /* Fallback per Firefox */
+  .custom-scrollbar {
+    scrollbar-width: auto;
+    scrollbar-color: #94a3b8 #f1f5f9;
+  }
 }
