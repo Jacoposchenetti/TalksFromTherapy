@@ -121,3 +121,77 @@ Mantieni un linguaggio professionale e clinico, rispettando la confidenzialità 
     throw new Error(`Errore durante l'analisi: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`)
   }
 }
+
+/**
+ * Diarizza una trascrizione utilizzando GPT-3.5-turbo per identificare i diversi interlocutori
+ * @param transcript - Il testo trascritto da diarizzare
+ * @param sessionTitle - Titolo della sessione per contesto
+ * @returns Promise<string> - La trascrizione diarizzata con identificazione degli interlocutori
+ */
+export async function diarizeTranscript(transcript: string, sessionTitle: string): Promise<string> {
+  try {
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === '***REMOVED***your-openai-api-key-here') {
+      throw new Error('OPENAI_API_KEY non configurata o non valida')
+    }
+
+    console.log(`Avvio diarizzazione per sessione: ${sessionTitle}`)
+    console.log(`Lunghezza trascrizione originale: ${transcript.length} caratteri`)
+    
+    const prompt = `
+Analizza la seguente trascrizione di una sessione terapeutica e identifica i diversi interlocutori.
+
+Titolo sessione: ${sessionTitle}
+
+Trascrizione originale:
+${transcript}
+
+Il tuo compito è identificare quanti interlocutori ci sono e chi dice cosa. Tipicamente in una sessione terapeutica ci sono:
+- Il terapeuta (che potresti identificare come "Terapeuta" o "Dottore")
+- Il paziente (che potresti identificare come "Paziente" o il nome se menzionato)
+
+Istruzioni:
+1. Analizza il contenuto per identificare i cambi di interlocutore
+2. Identifica il ruolo di ogni interlocutore (terapeuta vs paziente)
+3. Riformatta la trascrizione aggiungendo prefissi chiari per ogni interlocutore
+4. Mantieni tutto il contenuto originale, solo aggiungi i prefissi
+5. Usa un formato chiaro come "Terapeuta:" o "Paziente:" prima di ogni intervento
+
+Esempio di output desiderato:
+Terapeuta: Buongiorno, come si sente oggi?
+Paziente: Bene, grazie. Ho fatto i compiti che mi aveva dato.
+Terapeuta: Ottimo, mi racconti come è andata?
+
+Restituisci SOLO la trascrizione diarizzata, senza commenti aggiuntivi.
+`
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: 'Sei un assistente specializzato nella diarizzazione di trascrizioni terapeutiche. Il tuo compito è identificare i diversi interlocutori e riformattare la trascrizione aggiungendo prefissi chiari per ogni persona che parla.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.1, // Bassa temperatura per massima consistenza
+      max_tokens: 4000, // Aumentato per gestire trascrizioni lunghe
+    })
+
+    const diarizedTranscript = completion.choices[0]?.message?.content
+    if (!diarizedTranscript) {
+      throw new Error('Nessuna trascrizione diarizzata generata da OpenAI')
+    }
+
+    console.log('Diarizzazione completata con successo')
+    console.log(`Lunghezza trascrizione diarizzata: ${diarizedTranscript.length} caratteri`)
+    
+    return diarizedTranscript
+
+  } catch (error) {
+    console.error('Errore durante la diarizzazione:', error)
+    throw new Error(`Errore durante la diarizzazione: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`)
+  }
+}

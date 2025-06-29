@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp, Download } from "lucide-react"
+import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp, Download, Users } from "lucide-react"
 import { DocumentParser } from "@/lib/document-parser"
 import { NotificationManager } from "@/lib/notification-manager"
 import { useAudioPlayer } from "@/hooks/useAudioPlayer"
@@ -118,6 +118,7 @@ function SessionsPageContent() {
   const [editingTranscriptId, setEditingTranscriptId] = useState<string | null>(null) // sessionId being edited
   const [editingTranscriptText, setEditingTranscriptText] = useState<string>("")
   const [savingTranscript, setSavingTranscript] = useState(false)
+  const [diarizingSessionId, setDiarizingSessionId] = useState<string | null>(null) // sessionId being diarized
   // Audio player state
   const { playSession, currentSession, isPlaying } = useAudioPlayer()
 
@@ -776,10 +777,43 @@ function SessionsPageContent() {
 
   const handleTranscriptKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
-      e.preventDefault()
       handleTranscriptCancel()
     }
-    // Non gestiamo Enter qui perché vogliamo permettere newline nel testo
+  }
+
+  const handleDiarizeTranscript = async (sessionId: string) => {
+    try {
+      setDiarizingSessionId(sessionId)
+      console.log(`🎭 Avvio diarizzazione per sessione: ${sessionId}`)
+      
+      const response = await fetch('/api/diarize-transcript', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sessionId }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Errore durante la diarizzazione')
+      }
+
+      const result = await response.json()
+      console.log('✅ Diarizzazione completata:', result)
+      
+      // Aggiorna la lista delle sessioni per mostrare la nuova trascrizione
+      await fetchSessions()
+      
+      // Mostra notifica di successo
+      NotificationManager.showSuccess('Diarizzazione completata con successo!')
+      
+    } catch (error) {
+      console.error('❌ Errore durante la diarizzazione:', error)
+      NotificationManager.showError(`Errore durante la diarizzazione: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`)
+    } finally {
+      setDiarizingSessionId(null)
+    }
   }
 
   if (status === "loading" || loading) {
@@ -1047,6 +1081,25 @@ function SessionsPageContent() {
                           <FileText className="h-4 w-4 mr-1" />
                           Trascrizione
                         </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleDiarizeTranscript(session.id)}
+                          disabled={diarizingSessionId === session.id}
+                          className="text-purple-600 hover:text-purple-700 border-purple-200 hover:border-purple-300"
+                        >
+                          {diarizingSessionId === session.id ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-1"></div>
+                              Diarizzando...
+                            </>
+                          ) : (
+                            <>
+                              <Users className="h-4 w-4 mr-1" />
+                              Diarizza
+                            </>
+                          )}
+                        </Button>
                         <div className="relative">
                           <Button 
                             variant="outline" 
@@ -1059,7 +1112,8 @@ function SessionsPageContent() {
                             <ChevronDown className="h-3 w-3 ml-1" />
                           </Button>
                           {exportMenuOpen === session.id && (
-                            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 min-w-[120px]">                              <button
+                            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 min-w-[120px]">
+                              <button
                                 onClick={() => handleExportTranscript(session.id, session.title, 'txt')}
                                 className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100"
                               >
@@ -1083,49 +1137,6 @@ function SessionsPageContent() {
                             </div>
                           )}
                         </div>
-                      </>
-                    )}{session.status === "ANALYZED" && (
-                      <>
-                        <Button variant="outline" size="sm">
-                          <BarChart3 className="h-4 w-4 mr-1" />
-                          Analisi
-                        </Button>                        {session.transcript && (
-                          <div className="relative">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => setExportMenuOpen(exportMenuOpen === session.id ? null : session.id)}
-                              className="text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300"
-                            >
-                              <Download className="h-4 w-4 mr-1" />
-                              Export
-                              <ChevronDown className="h-3 w-3 ml-1" />
-                            </Button>
-                            {exportMenuOpen === session.id && (
-                              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 min-w-[120px]">
-                                <button
-                                  onClick={() => handleExportTranscript(session.id, session.title, 'txt')}
-                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100"
-                                >
-                                  <FileText className="h-4 w-4 mr-2 inline" />
-                                  TXT
-                                </button>                                <button
-                                  onClick={() => handleExportTranscript(session.id, session.title, 'pdf')}
-                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100"
-                                >
-                                  <FileText className="h-4 w-4 mr-2 inline" />
-                                  PDF
-                                </button>
-                                <button
-                                  onClick={() => handleExportTranscript(session.id, session.title, 'docx')}
-                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                                >
-                                  <FileText className="h-4 w-4 mr-2 inline" />
-                                  DOCX
-                                </button>
-                              </div>
-                            )}
-                          </div>                        )}
                       </>
                     )}
                     
