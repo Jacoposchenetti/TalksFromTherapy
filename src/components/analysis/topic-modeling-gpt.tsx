@@ -537,37 +537,75 @@ Rispondi SOLO con JSON:
   }
 
   return (
-    <div className="h-full space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Brain className="h-5 w-5" />
-            Analisi Topic GPT-3.5
-          </h3>
-          <p className="text-sm text-gray-600">
-            {selectedSessions.length > 0 
-              ? `${selectedSessions.length} sessioni selezionate` 
-              : 'Nessuna sessione selezionata'}
-          </p>
+    <div className="h-full flex flex-col">
+      {/* Header Section - Consistent with Sentiment Analysis */}
+      <div className="flex flex-col items-center justify-center mb-8">
+        <div className="mb-6">
+          <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mb-4 mx-auto">
+            <Brain className="w-8 h-8 text-white" />
+          </div>
         </div>
         
-        <Button 
-          onClick={runTopicAnalysis}
-          disabled={isAnalyzing || !combinedTranscript || combinedTranscript.trim().length === 0}
-          className="flex items-center gap-2"
-        >
-          {isAnalyzing ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Analizzando...
-            </>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">
+          Analisi dei Topic Semantici
+        </h2>
+        
+        <p className="text-gray-600 text-center max-w-2xl">
+          Identifica automaticamente i temi principali e le aree semantiche nelle sessioni selezionate
+        </p>
+      </div>
+
+      {/* Sessions Section */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold text-gray-700 mb-3 text-center">
+          Sessioni da Analizzare:
+        </h3>
+        
+        <div className="bg-gray-50 rounded-lg p-4 mb-4">
+          {selectedSessions.length > 0 ? (
+            <div className="space-y-2">
+              {selectedSessions.map((session, index) => (
+                <div key={session.id} className="flex justify-between items-center text-sm">
+                  <span className="font-medium">{session.title}</span>
+                  <span className="text-gray-500">
+                    {session.transcript ? `${Math.round(session.transcript.split(' ').length)} parole` : 'No transcript'}
+                  </span>
+                </div>
+              ))}
+            </div>
           ) : (
-            <>
-              <Brain className="h-4 w-4" />
-              Avvia Analisi Topic
-            </>
+            <p className="text-gray-500 text-center">Nessuna sessione selezionata</p>
           )}
-        </Button>
+        </div>
+        
+        <div className="flex justify-center">
+          <Button 
+            onClick={runTopicAnalysis}
+            disabled={isAnalyzing || !combinedTranscript || combinedTranscript.trim().length === 0}
+            className="px-8 py-3 text-lg"
+            size="lg"
+          >
+            {isAnalyzing ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                Analizzando Topic...
+              </>
+            ) : (
+              <>
+                <Brain className="h-5 w-5 mr-2" />
+                Avvia Analisi Topic
+              </>
+            )}
+          </Button>
+        </div>
+        
+        {/* Additional Info */}
+        <div className="text-center mt-4">
+          <p className="text-sm text-gray-600">
+            L'analisi utilizza GPT-3.5 per identificare temi principali, parole chiave<br/>
+            e aree semantiche con classificazione automatica del testo.
+          </p>
+        </div>
       </div>
 
       {error && (
@@ -595,23 +633,8 @@ Rispondi SOLO con JSON:
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6">
-          {/* Informazioni sulla trascrizione */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Informazioni Trascrizione</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="font-medium">Lunghezza:</span> {combinedTranscript.length} caratteri
-                </div>
-                <div>
-                  <span className="font-medium">Parole:</span> {combinedTranscript.split(' ').length} parole
-                </div>
-              </div>
-            </CardContent>
-          </Card>          {/* Risultati dell'analisi */}
+        <div className="flex-1">
+          {/* Risultati dell'analisi */}
           {analysisResult && (
             <Card className="relative">
               {/* Overlay del titolo in alto a sinistra */}

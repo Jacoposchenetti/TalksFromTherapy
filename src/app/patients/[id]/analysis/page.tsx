@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp, Network } from "lucide-react"
+import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp, Network, Search, X } from "lucide-react"
 import { SentimentAnalysis } from "@/components/sentiment-analysis"
 import { EmotionTrends } from "@/components/emotion-trends"
 import TopicAnalysisComponent from "@/components/analysis/topic-modeling-gpt"
@@ -57,6 +57,9 @@ export default function PatientAnalysisPage() {
   const [semanticFrameLoading, setSemanticFrameLoading] = useState(false)
   const [semanticFrameResult, setSemanticFrameResult] = useState<any>(null)
   const [semanticFrameError, setSemanticFrameError] = useState<string | null>(null)
+  
+  // Transcript search state
+  const [searchTerm, setSearchTerm] = useState("")
 
   useEffect(() => {
     if (status === "loading") return
@@ -173,6 +176,38 @@ export default function PatientAnalysisPage() {
     } finally {
       setSavingNote(false)
     }
+  }
+
+  // Function to highlight search terms in text
+  const highlightSearchTerm = (text: string, searchTerm: string) => {
+    if (!searchTerm.trim()) return text
+    
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+    const parts = text.split(regex)
+    
+    return parts.map((part, index) => {
+      if (regex.test(part)) {
+        return `<mark key="${index}" class="bg-yellow-200 px-1 rounded">${part}</mark>`
+      }
+      return part
+    }).join('')
+  }
+
+  // Function to count search term occurrences
+  const countSearchOccurrences = (searchTerm: string) => {
+    if (!searchTerm.trim()) return 0
+    
+    const regex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+    let totalCount = 0
+    
+    getSelectedSessionsData().forEach(session => {
+      if (session.transcript) {
+        const matches = session.transcript.match(regex)
+        totalCount += matches ? matches.length : 0
+      }
+    })
+    
+    return totalCount
   }
 
   // Handle session selection for checkboxes
@@ -481,13 +516,42 @@ export default function PatientAnalysisPage() {
                       {currentSlide === 0 && (
                         <div className="h-full">
                           <div className="mb-4">
-                            <h3 className="text-lg font-semibold">
+                            <h3 className="text-lg font-semibold mb-3">
                               Trascrizioni - {selectedSessions.size > 0 ? 
                                 `${selectedSessions.size} sessioni selezionate` : 
                                 'Nessuna Sessione Selezionata'}
                             </h3>
+                            
+                            {/* Search Box */}
+                            {selectedSessions.size > 0 && (
+                              <div className="relative mb-4">
+                                <div className="relative">
+                                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                  <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                    placeholder="Cerca parole nelle trascrizioni..."
+                                  />
+                                  {searchTerm && (
+                                    <button
+                                      onClick={() => setSearchTerm("")}
+                                      className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                </div>
+                                {searchTerm && (
+                                  <div className="mt-2 text-xs text-gray-500">
+                                    {countSearchOccurrences(searchTerm)} risultati trovati
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <div className="h-[720px] overflow-y-auto bg-gray-50 p-4 rounded text-sm space-y-4">
+                          <div className="h-[660px] overflow-y-auto bg-gray-50 p-4 rounded text-sm space-y-4">
                             {selectedSessions.size > 0 ? (
                               getSelectedSessionsData().map((session, index) => (
                                 <div key={session.id} className="border-b pb-3 last:border-b-0">
@@ -495,7 +559,13 @@ export default function PatientAnalysisPage() {
                                     {session.title} - {new Date(session.createdAt).toLocaleDateString('it-IT')}
                                   </div>
                                   <div className="text-gray-700">
-                                    {session.transcript || (
+                                    {session.transcript ? (
+                                      <div 
+                                        dangerouslySetInnerHTML={{
+                                          __html: highlightSearchTerm(session.transcript, searchTerm)
+                                        }}
+                                      />
+                                    ) : (
                                       <span className="text-gray-400 italic">
                                         Trascrizione non disponibile (Status: {session.status})
                                       </span>
@@ -529,7 +599,8 @@ export default function PatientAnalysisPage() {
                         </div>
                       )}                      {/* Slide 2: Sentiment Analysis */}
                       {currentSlide === 2 && (
-                        <div className="h-full">                          <SentimentAnalysis 
+                        <div className="h-full pt-6">
+                          <SentimentAnalysis 
                             selectedSessions={getSelectedSessionsData().map(session => ({
                               id: session.id,
                               title: session.title,
@@ -665,105 +736,7 @@ export default function PatientAnalysisPage() {
                                   </div>
                                 )}
 
-                                {/* Analysis Results */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  {/* Frame Statistics */}
-                                  <div className="bg-white rounded-lg border p-4">
-                                    <h4 className="font-semibold mb-3 text-gray-700">Statistiche Frame</h4>
-                                    <div className="space-y-2 text-sm">
-                                      <div className="flex justify-between">
-                                        <span>Parole connesse:</span>
-                                        <span className="font-medium">{semanticFrameResult.semantic_frame?.frame_size || 0}</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span>Connessioni totali:</span>
-                                        <span className="font-medium">{semanticFrameResult.semantic_frame?.total_connections || 0}</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span>Valenza emotiva:</span>
-                                        <span className={`font-medium ${
-                                          (semanticFrameResult.semantic_frame?.emotional_valence || 0) > 0 
-                                            ? 'text-green-600' 
-                                            : 'text-red-600'
-                                        }`}>
-                                          {(semanticFrameResult.semantic_frame?.emotional_valence || 0).toFixed(3)}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Significant Emotions */}
-                                  <div className="bg-white rounded-lg border p-4">
-                                    <h4 className="font-semibold mb-3 text-gray-700">Emozioni Significative</h4>
-                                    {semanticFrameResult.semantic_frame?.significant_emotions && 
-                                     Object.keys(semanticFrameResult.semantic_frame.significant_emotions).length > 0 ? (
-                                      <div className="space-y-2 text-sm">
-                                        {Object.entries(semanticFrameResult.semantic_frame.significant_emotions)
-                                          .sort(([,a], [,b]) => Math.abs(b as number) - Math.abs(a as number))
-                                          .slice(0, 5)
-                                          .map(([emotion, score]) => (
-                                            <div key={emotion} className="flex justify-between items-center">
-                                              <span className="capitalize">{emotion}:</span>
-                                              <span className={`font-medium ${
-                                                (score as number) > 0 ? 'text-green-600' : 'text-red-600'
-                                              }`}>
-                                                {(score as number).toFixed(2)}
-                                              </span>
-                                            </div>
-                                          ))}
-                                      </div>
-                                    ) : (
-                                      <p className="text-gray-500 text-sm">Nessuna emozione significativa rilevata</p>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Connected Words */}
-                                {semanticFrameResult.semantic_frame?.connected_words && 
-                                 semanticFrameResult.semantic_frame.connected_words.length > 0 && (
-                                  <div className="bg-white rounded-lg border p-4">
-                                    <h4 className="font-semibold mb-3 text-gray-700">
-                                      Parole Connesse
-                                      <span className="text-xs text-gray-500 ml-2 font-normal">(clicca per analizzare)</span>
-                                    </h4>
-                                    <div className="flex flex-wrap gap-2">
-                                      {semanticFrameResult.semantic_frame.connected_words.map((word: string, index: number) => (
-                                        <button
-                                          key={index}
-                                          onClick={() => analyzeConnectedWord(word)}
-                                          disabled={semanticFrameLoading}
-                                          className={`
-                                            text-xs font-medium px-2.5 py-0.5 rounded transition-all duration-200
-                                            ${semanticFrameLoading 
-                                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                                              : 'bg-blue-100 text-blue-800 hover:bg-blue-200 hover:text-blue-900 cursor-pointer hover:shadow-sm'
-                                            }
-                                          `}
-                                          title={`Clicca per analizzare il frame semantico di "${word}"`}
-                                        >
-                                          {word}
-                                        </button>
-                                      ))}
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-2">
-                                      💡 Clicca su una parola per esplorare il suo frame semantico nelle sessioni selezionate
-                                    </p>
-                                  </div>
-                                )}
-
                                 {/* Semantic Network Visualization */}
-                                <div className="bg-yellow-50 p-3 rounded border mb-4">
-                                  <h5 className="font-semibold text-sm">🔍 Debug - Struttura Dati API:</h5>
-                                  <div className="text-xs mt-2">
-                                    <div><strong>Success:</strong> {String(semanticFrameResult.success)}</div>
-                                    <div><strong>Target Word:</strong> {semanticFrameResult.target_word || 'N/A'}</div>
-                                    <div><strong>Network Plot Present:</strong> {semanticFrameResult.network_plot ? 'YES' : 'NO'}</div>
-                                    {semanticFrameResult.network_plot && (
-                                      <div><strong>Network Plot Length:</strong> {semanticFrameResult.network_plot.length}</div>
-                                    )}
-                                    <div><strong>Available Keys:</strong> {Object.keys(semanticFrameResult).join(', ')}</div>
-                                  </div>
-                                </div>
 
                                 {semanticFrameResult.network_plot && (
                                   <div className="bg-white rounded-lg border p-4 mb-4">
