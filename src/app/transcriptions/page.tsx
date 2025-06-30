@@ -12,8 +12,9 @@ interface Session {
   transcript?: string
   sessionDate: string
   duration?: number
-  status: string
-  patient: {
+  patientId?: string
+  status?: string
+  patient?: {
     id: string
     initials: string
   }
@@ -36,15 +37,17 @@ export default function TranscriptionsPage() {
 
   const fetchTranscriptions = async () => {
     try {
-      const response = await fetch("/api/sessions")
+      const response = await fetch("/api/transcriptions")
       if (response.ok) {
-        const data = await response.json()
-        // Filter only sessions with transcripts
-        const transcribedSessions = data.filter((s: Session) => s.transcript && s.transcript.trim().length > 0)
-        setSessions(transcribedSessions)
+        const { data } = await response.json()
+        console.log("[Supabase] Transcriptions API response:", data)
+        setSessions(data || [])
+      } else {
+        const errorText = await response.text()
+        console.error("[Supabase] API error:", errorText)
       }
     } catch (error) {
-      console.error("Error fetching transcriptions:", error)
+      console.error("[Supabase] Network or fetch error:", error)
     } finally {
       setLoading(false)
     }
@@ -98,10 +101,10 @@ export default function TranscriptionsPage() {
                       {session.title}
                     </CardTitle>
                     <CardDescription className="flex items-center gap-4 mt-2">
-                      <span>{session.patient.initials}</span>
+                      <span>{session.patient?.initials || session.patientId || ""}</span>
                       <span className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" />
-                        {new Date(session.sessionDate).toLocaleDateString()}
+                        {session.sessionDate ? new Date(session.sessionDate).toLocaleDateString() : ""}
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock className="h-4 w-4" />
