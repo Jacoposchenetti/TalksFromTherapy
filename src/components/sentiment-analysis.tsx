@@ -235,7 +235,6 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
             <CardContent className="p-4">
               <EmotionVisualizer 
                 data={transformEmoAtlasData(analysis.combined_analysis.analysis)}
-                title={`🌸 Analisi Combinata (${analysis.total_sessions} sessioni)`}
                 showDetails={false}
                 flowerPlot={analysis.combined_analysis.flower_plot}
               />
@@ -243,7 +242,8 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
           </Card>
         )}
 
-        {/* Individual Sessions */}
+        {/* Individual Sessions - Commented out to remove redundant boxes */}
+        {/* 
         {analysis.individual_sessions && analysis.individual_sessions.length > 0 && (          <div className="space-y-4">
             <div className="flex items-center gap-2">
               <div className="h-px bg-gray-300 flex-1"></div>
@@ -282,8 +282,10 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
             </div>
           </div>
         )}
+        */}
 
-        {/* Statistics */}
+        {/* Statistics - Commented out to clean up the interface */}
+        {/*
         <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded">
           <div><strong>Sessioni processate:</strong> {analysis.total_sessions}</div>
           <div><strong>Parole totali analizzate:</strong> {
@@ -292,6 +294,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
           }</div>
           <div><strong>Metodo:</strong> EmoAtlas con Z-score statistico</div>
         </div>
+        */}
       </div>
     )
   }
