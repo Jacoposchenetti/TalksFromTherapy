@@ -25,11 +25,22 @@ try:
     import matplotlib
     matplotlib.use('Agg')  # Use non-interactive backend
     import matplotlib.pyplot as plt
+    import spacy
     EMOATLAS_AVAILABLE = True
     print("✅ EmoAtlas successfully imported")
+    
+    # Load Italian spacy model for lemmatization
+    try:
+        nlp_it = spacy.load("it_core_news_lg")
+        print("✅ Italian Spacy model loaded for lemmatization")
+    except OSError:
+        nlp_it = None
+        print("⚠️ Italian Spacy model not available for lemmatization")
+        
 except ImportError as e:
     print(f"❌ EmoAtlas not available: {e}")
     EMOATLAS_AVAILABLE = False
+    nlp_it = None
 
 app = FastAPI(title="Single Document Analysis Service", version="1.0.0")
 
@@ -40,6 +51,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def lemmatize_word(word: str, language: str = 'italian') -> str:
+    """Lemmatize a word using Spacy to match EmoAtlas normalization"""
+    try:
+        if language == 'italian' and nlp_it is not None:
+            doc = nlp_it(word.lower())
+            if len(doc) > 0:
+                lemmatized = doc[0].lemma_
+                print(f"🔤 Spacy lemmatization: '{word}' -> '{lemmatized}'")
+                return lemmatized
+        
+        # Fallback: return the word as-is
+        print(f"⚠️ No lemmatization available, returning original word: '{word}'")
+        return word.lower()
+        
+    except Exception as e:
+        print(f"❌ Error in lemmatization: {e}")
+        return word.lower()
 
 class SingleDocumentRequest(BaseModel):
     session_id: str
@@ -87,6 +116,7 @@ class EmotionTrendsResponse(BaseModel):
     success: bool
     error: Optional[str] = None
     individual_sessions: List[SessionAnalysis]
+    combined_analysis: Optional[Dict] = None
     trends: Optional[Dict] = None
     summary: Optional[Dict] = None
 
@@ -230,21 +260,69 @@ class EmoAtlasAnalysisService:
                 'flower_plot': flower_plot,
                 'word_count': len(text.split()),
                 'emotion_words': emotion_words,
-                'significant_emotions': significant_emotions
+                'significant_emotions': significant_emotions,
+                'original_text': text  # Store original text for combined analysis
             }
             
         except Exception as e:
             print(f"❌ EmoAtlas analysis error: {e}")
             return self._generate_fallback_analysis(text)
     
-    def _generate_flower_plot(self, emo_scores, z_scores: Dict) -> Optional[str]:
-        """Generate the emotion flower plot as base64 string"""
+    def _generate_flower_plot(self, emo_scores, z_scores: Dict, text: str = None) -> Optional[str]:
+        """Generate the native EmoAtlas emotion flower plot as base64 string"""
         try:
-            # Create a simple radar chart for emotions
+            if not EMOATLAS_AVAILABLE or emo_scores is None:
+                print("❌ EmoAtlas not available for flower plot generation")
+                return self._generate_fallback_flower_plot(z_scores)
+            
+            # Use native EmoAtlas flower plot generation
+            print("🌸 Generating native EmoAtlas flower plot")
+            
+            # Create a temporary figure to capture the EmoAtlas plot
+            import matplotlib.pyplot as plt
+            plt.switch_backend('Agg')  # Ensure non-interactive backend
+            
+            # Clear any existing plots
+            plt.clf()
+            plt.close('all')
+            
+            # Create new figure
+            fig, ax = plt.subplots(figsize=(8, 8))
+            
+            # Use the native EmoAtlas draw_plutchik method with z_scores
+            emo_scores.draw_plutchik(
+                scores=z_scores,
+                ax=ax,
+                title="Emotional Flower Analysis",
+                reject_range=(-1.96, 1.96),  # Show statistically significant emotions
+                fontsize=12,
+                show_coordinates=True
+            )
+            
+            # Convert to base64
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format='png', bbox_inches='tight', dpi=150, 
+                       facecolor='white', edgecolor='none', pad_inches=0.2)
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.getvalue()).decode()
+            plt.close(fig)
+            plt.clf()  # Clear the figure
+            
+            print("✅ Native EmoAtlas flower plot generated successfully")
+            return image_base64
+            
+        except Exception as e:
+            print(f"❌ Error generating native EmoAtlas flower plot: {e}")
+            # Fallback to simple visualization
+            return self._generate_fallback_flower_plot(z_scores)
+    
+    def _generate_fallback_flower_plot(self, z_scores: Dict) -> Optional[str]:
+        """Generate a fallback flower plot when EmoAtlas native plot fails"""
+        try:
+            import matplotlib.pyplot as plt
+            
             emotions = list(z_scores.keys())
             values = list(z_scores.values())
-            
-            import matplotlib.pyplot as plt
             
             fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
             
@@ -268,7 +346,7 @@ class EmoAtlasAnalysisService:
             
             # Set y-axis limits
             ax.set_ylim(-4, 4)
-            ax.set_title('Emotional Flower Plot', size=16, pad=20)
+            ax.set_title('Emotional Flower Plot (Fallback)', size=16, pad=20)
             
             # Convert to base64
             buffer = io.BytesIO()
@@ -280,7 +358,7 @@ class EmoAtlasAnalysisService:
             return image_base64
             
         except Exception as e:
-            print(f"❌ Error generating flower plot: {e}")
+            print(f"❌ Error generating fallback flower plot: {e}")
             return None
     
     def _extract_emotion_words(self, emo_scores, language: str) -> Dict[str, List[str]]:
@@ -447,6 +525,9 @@ async def analyze_emotion_trends(request: EmotionAnalysisRequest):
         if not individual_sessions:
             raise HTTPException(status_code=400, detail="No valid sessions to analyze")
         
+        # Generate combined analysis with flower plot
+        combined_analysis = generate_combined_analysis(individual_sessions, request.language)
+        
         # Calculate trends across sessions
         trends = calculate_emotion_trends(individual_sessions)
         summary = generate_analysis_summary(individual_sessions)
@@ -457,6 +538,7 @@ async def analyze_emotion_trends(request: EmotionAnalysisRequest):
         return EmotionTrendsResponse(
             success=True,
             individual_sessions=individual_sessions,
+            combined_analysis=combined_analysis,
             trends=trends,
             summary=summary
         )
@@ -578,13 +660,74 @@ async def semantic_frame_analysis(request: Dict):
         # Extract semantic frame for the target word
         print(f"🎯 Extracting semantic frame for '{target_word}'...")
         try:
-            fmnt_word = emo.extract_word_from_formamentis(fmnt, target_word)
+            # Check if word exists in the full network first
+            print(f"🔍 Checking if '{target_word}' exists in full network...")
+            if hasattr(fmnt, 'vertices'):
+                all_words = list(fmnt.vertices)
+                print(f"📝 Total words in network: {len(all_words)}")
+                word_found = target_word in all_words
+                print(f"🎯 Word '{target_word}' found in network: {word_found}")
+                
+                # Debug: show similar words in the network
+                similar_words = [w for w in all_words if target_word.lower() in w.lower() or w.lower() in target_word.lower()]
+                print(f"🔍 Similar words in network: {similar_words[:10]}")
+                
+                # If not found, try to lemmatize the target word
+                actual_target_word = target_word
+                if not word_found:
+                    print(f"🔧 Word not found, attempting lemmatization...")
+                    lemmatized_word = lemmatize_word(target_word, language)
+                    print(f"📝 Lemmatized '{target_word}' -> '{lemmatized_word}'")
+                    
+                    if lemmatized_word in all_words:
+                        actual_target_word = lemmatized_word
+                        print(f"✅ Found lemmatized word '{lemmatized_word}' in network!")
+                    else:
+                        # Try case-insensitive search for both original and lemmatized
+                        similar_words = [w for w in all_words if w.lower() == target_word.lower()]
+                        lemmatized_similar = [w for w in all_words if w.lower() == lemmatized_word.lower()]
+                        print(f"🔤 Case-insensitive matches for '{target_word}': {similar_words}")
+                        print(f"🔤 Case-insensitive matches for '{lemmatized_word}': {lemmatized_similar}")
+                        
+                        # Use the first match found
+                        if similar_words:
+                            actual_target_word = similar_words[0]
+                            print(f"🎯 Using case-insensitive match: '{actual_target_word}'")
+                        elif lemmatized_similar:
+                            actual_target_word = lemmatized_similar[0]
+                            print(f"🎯 Using lemmatized case-insensitive match: '{actual_target_word}'")
+                else:
+                    print(f"✅ Word '{target_word}' found directly in network")
+            
+            print(f"🔍 Final target word to extract: '{actual_target_word}'")
+            
+            # Debug: check edges in full network that involve our target word
+            if hasattr(fmnt, 'edges'):
+                related_edges = [edge for edge in fmnt.edges if actual_target_word in edge]
+                print(f"🕸️ Edges in full network involving '{actual_target_word}': {len(related_edges)}")
+                print(f"🕸️ Related edges: {related_edges[:5]}...")  # Show first 5
+            
+            fmnt_word = emo.extract_word_from_formamentis(fmnt, actual_target_word)
+            print(f"🎭 Extracted subnetwork type: {type(fmnt_word)}")
+            print(f"🎭 Subnetwork object: {fmnt_word}")
+            
+            # Debug: check edges in extracted subnetwork
+            if hasattr(fmnt_word, 'edges'):
+                print(f"🔗 Edges in extracted subnetwork: {len(fmnt_word.edges)}")
+                print(f"🔗 Subnetwork edges: {list(fmnt_word.edges)}")
             
             # Get connected words (vertices in the semantic frame)
             connected_words = list(fmnt_word.vertices) if hasattr(fmnt_word, 'vertices') else []
+            print(f"🔗 Connected words found: {len(connected_words)}")
+            print(f"🔗 Connected words list: {connected_words[:10]}...")  # Show first 10
             
             # Create semantic frame text for emotion analysis
             sem_frame_text = " ".join(connected_words)
+            
+            # If no connections found, fallback to context analysis
+            if len(connected_words) == 0:
+                print(f"⚠️ No direct connections found for '{actual_target_word}'. Using context analysis...")
+                return generate_fallback_semantic_analysis(text, target_word, session_id, language)
             
             # Analyze emotions of the semantic frame
             frame_emo = EmoScores(language=language)
@@ -619,12 +762,13 @@ async def semantic_frame_analysis(request: Dict):
             
             # Generate semantic network visualization using EmoAtlas
             # Pass the extracted subnetwork instead of the full network
-            network_plot = generate_semantic_network_plot(fmnt_word, target_word, connected_words, frame_z_scores)
+            network_plot = generate_semantic_network_plot(fmnt_word, actual_target_word, connected_words, frame_z_scores)
             
             return {
                 "success": True,
                 "session_id": session_id,
-                "target_word": target_word,
+                "target_word": target_word,  # Keep original for user display
+                "actual_target_word": actual_target_word,  # Add the lemmatized version used
                 "semantic_frame": {
                     "connected_words": connected_words,
                     "frame_text": sem_frame_text,
@@ -755,25 +899,32 @@ def generate_fallback_network_plot(target_word: str, connected_words: list, fram
         G.add_node(target_word, node_type='target')
         
         # Add connected words as nodes
-        for word in connected_words[:20]:  # Limit to first 20 for readability
+        limited_words = connected_words[:20]  # Limit to first 20 for readability
+        for word in limited_words:
             G.add_node(word, node_type='connected')
             G.add_edge(target_word, word)
         
-        # Create layout with target word in center
-        pos = nx.spring_layout(G, k=3, iterations=50)
+        # If no connected words, create a single node graph
+        if len(limited_words) == 0:
+            print(f"⚠️ No connected words for NetworkX fallback. Creating single-node graph.")
+            pos = {target_word: (0, 0)}
+        else:
+            # Create layout with target word in center
+            pos = nx.spring_layout(G, k=3, iterations=50)
         
         # Ensure target word is centered
         if target_word in pos:
             center_x, center_y = 0, 0
             pos[target_word] = (center_x, center_y)
             
-            # Arrange other nodes in a circle around the center
-            angle_step = 2 * np.pi / len(connected_words[:20])
-            for i, word in enumerate(connected_words[:20]):
-                if word in pos:
-                    angle = i * angle_step
-                    radius = 0.8
-                    pos[word] = (center_x + radius * np.cos(angle), center_y + radius * np.sin(angle))
+            # Arrange other nodes in a circle around the center only if we have connected words
+            if len(limited_words) > 0:
+                angle_step = 2 * np.pi / len(limited_words)
+                for i, word in enumerate(limited_words):
+                    if word in pos:
+                        angle = i * angle_step
+                        radius = 0.8
+                        pos[word] = (center_x + radius * np.cos(angle), center_y + radius * np.sin(angle))
         
         # Color nodes based on emotional valence
         node_colors = []
@@ -797,7 +948,10 @@ def generate_fallback_network_plot(target_word: str, connected_words: list, fram
         
         # Draw network
         nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=node_sizes, alpha=0.8)
-        nx.draw_networkx_edges(G, pos, edge_color='gray', alpha=0.5, width=1)
+        
+        # Only draw edges if we have connected words
+        if len(limited_words) > 0:
+            nx.draw_networkx_edges(G, pos, edge_color='gray', alpha=0.5, width=1)
         
         # Add labels with better positioning
         labels = {}
@@ -840,6 +994,75 @@ def generate_fallback_network_plot(target_word: str, connected_words: list, fram
         print(f"❌ Error generating fallback network plot: {e}")
         return None
 
+def generate_no_frame_placeholder_image(target_word: str) -> str:
+    """Generate a placeholder image when no semantic frame is found"""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import io
+        import base64
+        
+        # Create a clean figure
+        plt.figure(figsize=(12, 8), dpi=100)
+        
+        # Set up the plot with a clean background
+        plt.gca().set_facecolor('#f8f9fa')
+        
+        # Add main message
+        plt.text(0.5, 0.6, '🔍 Nessun Frame Semantico', 
+                ha='center', va='center', transform=plt.gca().transAxes,
+                fontsize=24, fontweight='bold', color='#495057')
+        
+        plt.text(0.5, 0.5, 'Significativo Trovato', 
+                ha='center', va='center', transform=plt.gca().transAxes,
+                fontsize=24, fontweight='bold', color='#495057')
+        
+        # Add target word info
+        plt.text(0.5, 0.35, f'Parola analizzata: "{target_word}"', 
+                ha='center', va='center', transform=plt.gca().transAxes,
+                fontsize=16, color='#6c757d')
+        
+        # Add explanation
+        plt.text(0.5, 0.25, 'La parola non presenta connessioni sintattiche', 
+                ha='center', va='center', transform=plt.gca().transAxes,
+                fontsize=14, color='#6c757d')
+        
+        plt.text(0.5, 0.2, 'significative nel testo analizzato', 
+                ha='center', va='center', transform=plt.gca().transAxes,
+                fontsize=14, color='#6c757d')
+        
+        # Add border
+        for spine in plt.gca().spines.values():
+            spine.set_edgecolor('#dee2e6')
+            spine.set_linewidth(2)
+        
+        # Remove axes
+        plt.gca().set_xticks([])
+        plt.gca().set_yticks([])
+        
+        # Set limits
+        plt.xlim(0, 1)
+        plt.ylim(0, 1)
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        # Convert to base64
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100, 
+                   facecolor='#f8f9fa', edgecolor='none')
+        buffer.seek(0)
+        image_base64 = base64.b64encode(buffer.getvalue()).decode()
+        plt.close()
+        
+        print(f"✅ Placeholder image generated for '{target_word}'")
+        return image_base64
+        
+    except Exception as e:
+        print(f"❌ Error generating placeholder image: {e}")
+        return None
+
 def generate_fallback_semantic_analysis(text: str, target_word: str, session_id: str, language: str) -> Dict:
     """Generate fallback semantic analysis when EmoAtlas is not available or word is not found"""
     print(f"🔧 Using fallback semantic analysis for '{target_word}'")
@@ -855,6 +1078,9 @@ def generate_fallback_semantic_analysis(text: str, target_word: str, session_id:
     
     # Remove duplicates and the target word itself
     connected_words = list(set([w.strip('.,!?;:') for w in target_contexts if w.lower() != target_word.lower()]))
+    
+    # Generate placeholder image for no semantic frame
+    placeholder_image = generate_no_frame_placeholder_image(target_word)
     
     # Generate mock but realistic emotion scores
     import random
@@ -904,8 +1130,77 @@ def generate_fallback_semantic_analysis(text: str, target_word: str, session_id:
         },
         "language": language,
         "timestamp": datetime.now().isoformat(),
+        "network_plot": placeholder_image,
         "note": "Fallback analysis - EmoAtlas not available or word not found in network"
     }
+
+def generate_combined_analysis(sessions: List[SessionAnalysis], language: str = 'italian') -> Dict:
+    """Generate combined analysis with averaged emotions and flower plot"""
+    if not sessions:
+        return None
+    
+    try:
+        print(f"🌸 Generating combined analysis for {len(sessions)} sessions")
+        
+        # Calculate average z-scores across all sessions
+        emotions = ['joy', 'trust', 'fear', 'surprise', 'sadness', 'disgust', 'anger', 'anticipation']
+        combined_z_scores = {}
+        
+        for emotion in emotions:
+            scores = [s.analysis['z_scores'][emotion] for s in sessions]
+            combined_z_scores[emotion] = sum(scores) / len(scores)
+        
+        # Calculate combined metrics
+        combined_valence = sum(s.analysis['emotional_valence'] for s in sessions) / len(sessions)
+        combined_positive = sum(s.analysis['positive_score'] for s in sessions) / len(sessions)
+        combined_negative = sum(s.analysis['negative_score'] for s in sessions) / len(sessions)
+        total_words = sum(s.analysis['word_count'] for s in sessions)
+        
+        # Get significant emotions (|z-score| >= 1.96)
+        significant_emotions = {
+            emotion: score for emotion, score in combined_z_scores.items() 
+            if abs(score) >= 1.96
+        }
+        
+        # Create dominant emotions list sorted by absolute z-score
+        dominant_emotions = sorted(
+            combined_z_scores.items(), 
+            key=lambda x: abs(x[1]), 
+            reverse=True
+        )
+        
+        # Generate flower plot for combined analysis
+        try:
+            if EMOATLAS_AVAILABLE:
+                emo = EmoScores(language=language)
+                flower_plot = emoatlas_service._generate_flower_plot(emo, combined_z_scores)
+            else:
+                flower_plot = emoatlas_service._generate_fallback_flower_plot(combined_z_scores)
+        except Exception as e:
+            print(f"❌ Error generating combined flower plot: {e}")
+            flower_plot = emoatlas_service._generate_fallback_flower_plot(combined_z_scores)
+        
+        combined_analysis = {
+            'analysis': {
+                'z_scores': combined_z_scores,
+                'significant_emotions': significant_emotions,
+                'dominant_emotions': dominant_emotions,
+                'emotional_valence': combined_valence,
+                'positive_score': combined_positive,
+                'negative_score': combined_negative,
+                'text_length': total_words,
+                'language': language,
+                'emotion_words': emoatlas_service._extract_emotion_words(None, language)
+            },
+            'flower_plot': flower_plot
+        }
+        
+        print(f"✅ Combined analysis generated with {len(significant_emotions)} significant emotions")
+        return combined_analysis
+        
+    except Exception as e:
+        print(f"❌ Error generating combined analysis: {e}")
+        return None
 
 if __name__ == "__main__":
     import uvicorn
