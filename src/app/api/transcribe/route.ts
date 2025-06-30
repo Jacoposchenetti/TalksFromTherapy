@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 import { transcribeAudio, diarizeTranscript } from "@/lib/openai"
 import { join } from "path"
 
 export const runtime = 'nodejs'
 
 // POST /api/transcribe - Avvia trascrizione di una sessione
-export async function POST(request: NextRequest) {  try {
+export async function POST(request: NextRequest) {
+  try {
     const session = await getServerSession(authOptions)
     
     console.log("POST /api/transcribe - Inizio richiesta", { 
@@ -38,37 +39,32 @@ export async function POST(request: NextRequest) {  try {
     console.log(`🔍 Ricerca sessione con ID: ${sessionId}`)
     console.log(`👤 User ID: ${session.user.id}`)
 
-    const sessionRecord = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: session.user.id,
-        isActive: true
-      },
-      select: {
-        id: true,
-        userId: true,
-        status: true,
-        audioFileName: true,
-        audioUrl: true,
-        title: true
-      }    })
+    // Cerca la sessione su Supabase
+    const { data: sessionRecord, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id, userId, status, audioFileName, audioUrl, title')
+      .eq('id', sessionId)
+      .eq('userId', session.user.id)
+      .eq('isActive', true)
+      .single()
 
-    console.log("Query database completata", { 
+    console.log("Query Supabase completata", { 
       found: !!sessionRecord, 
       sessionId,
       status: sessionRecord?.status,
-      audioFileName: sessionRecord?.audioFileName
+      audioFileName: sessionRecord?.audioFileName,
+      error: sessionError
     })
 
-    if (!sessionRecord) {
-      console.log(`❌ Sessione non trovata`)
+    if (sessionError || !sessionRecord) {
+      console.log(`❌ Sessione non trovata su Supabase:`, sessionError)
       return NextResponse.json(
         { error: "Sessione non trovata" },
         { status: 404 }
       )
     }
 
-    console.log(`✅ Sessione trovata:`, {
+    console.log(`✅ Sessione trovata su Supabase:`, {
       id: sessionRecord.id,
       title: sessionRecord.title,
       status: sessionRecord.status,
@@ -95,13 +91,22 @@ export async function POST(request: NextRequest) {  try {
       )
     }
 
-    // Aggiorna lo stato a TRANSCRIBING
-    await prisma.session.update({      where: { id: sessionId },
-      data: { 
+    // Aggiorna lo stato a TRANSCRIBING su Supabase
+    const { error: updateError } = await supabase
+      .from('sessions')
+      .update({ 
         status: "TRANSCRIBING",
         updatedAt: new Date()
-      }
-    })
+      })
+      .eq('id', sessionId)
+
+    if (updateError) {
+      console.error('[Supabase] Error updating session status to TRANSCRIBING:', updateError)
+      return NextResponse.json(
+        { error: "Errore nell'aggiornamento dello stato sessione" },
+        { status: 500 }
+      )
+    }
 
     try {
       // Costruisce il percorso completo del file audio
@@ -139,15 +144,20 @@ export async function POST(request: NextRequest) {  try {
       console.log(`🎭 Diarizzazione completata: "${diarizedTranscript.substring(0, 100)}..."`)
       console.log(`📏 Lunghezza trascrizione diarizzata: ${diarizedTranscript.length} caratteri`)
       
-      // Aggiorna la sessione con la trascrizione diarizzata completata
-      await prisma.session.update({
-        where: { id: sessionId },
-        data: { 
+      // Aggiorna la sessione con la trascrizione diarizzata completata su Supabase
+      const { error: finalUpdateError } = await supabase
+        .from('sessions')
+        .update({
           status: "TRANSCRIBED",
           transcript: diarizedTranscript,
           updatedAt: new Date()
-        }
-      })
+        })
+        .eq('id', sessionId)
+
+      if (finalUpdateError) {
+        console.error('[Supabase] Error updating session with transcript:', finalUpdateError)
+        throw new Error('Errore nel salvataggio della trascrizione su Supabase')
+      }
 
       console.log(`✅ Processo completo (trascrizione + diarizzazione) completato per sessione ${sessionId}`)
 
@@ -165,15 +175,19 @@ export async function POST(request: NextRequest) {  try {
     } catch (error) {
       console.error("❌ Errore durante la trascrizione:", error)
       
-      // In caso di errore, aggiorna lo stato a ERROR
-      await prisma.session.update({
-        where: { id: sessionId },
-        data: { 
+      // In caso di errore, aggiorna lo stato a ERROR su Supabase
+      const { error: errorUpdateError } = await supabase
+        .from('sessions')
+        .update({
           status: "ERROR",
           errorMessage: error instanceof Error ? error.message : "Errore sconosciuto",
           updatedAt: new Date()
-        }
-      })
+        })
+        .eq('id', sessionId)
+
+      if (errorUpdateError) {
+        console.error('[Supabase] Error updating session status to ERROR:', errorUpdateError)
+      }
 
       return NextResponse.json({
         error: "Errore durante la trascrizione",

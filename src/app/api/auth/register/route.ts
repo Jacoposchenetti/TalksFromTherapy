@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 import { hashPassword } from "@/lib/password"
 
 export const runtime = 'nodejs'
@@ -34,9 +34,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Controlla se l'email esiste già
-    const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
-    })
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .single()
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('[Supabase] User check error:', checkError)
+      return NextResponse.json(
+        { error: "Errore durante il controllo utente" },
+        { status: 500 }
+      )
+    }
 
     if (existingUser) {
       return NextResponse.json(
@@ -48,22 +58,27 @@ export async function POST(request: NextRequest) {
     // Hash della password
     const hashedPassword = await hashPassword(password)
 
-    // Crea l'utente
-    const user = await prisma.user.create({
-      data: {
+    // Crea l'utente su Supabase
+    const { data: user, error: createError } = await supabase
+      .from('users')
+      .insert([{
         name,
         email: email.toLowerCase(),
         password: hashedPassword,
         licenseNumber: licenseNumber || null
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        licenseNumber: true,
-        createdAt: true
-      }
-    })
+      }])
+      .select('id, name, email, licenseNumber, createdAt')
+      .single()
+
+    if (createError) {
+      console.error('[Supabase] User creation error:', createError)
+      return NextResponse.json(
+        { error: "Errore durante la creazione utente" },
+        { status: 500 }
+      )
+    }
+
+    console.log('[Supabase] User created successfully:', user.id)
 
     return NextResponse.json(
       { 
