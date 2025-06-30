@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from typing import List, Optional
 from typing import List, Optional, Dict
 import numpy as np
-import random
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import NMF
 from datetime import datetime
@@ -235,24 +234,28 @@ class EmoAtlasAnalysisService:
                 'anticipation': float(z_scores_data.get('anticipation', 0))
             }
             
+            # Calculate derived metrics
+            positive_score = z_scores['joy'] + z_scores['trust'] + z_scores['anticipation']
+            negative_score = z_scores['fear'] + z_scores['sadness'] + z_scores['anger'] + z_scores['disgust']
+            emotional_valence = positive_score - negative_score
+            
             # Get significant emotions (|z-score| >= 1.96)
             significant_emotions = {
                 emotion: score for emotion, score in z_scores.items() 
                 if abs(score) >= 1.96
             }
             
-            # Generate interpretative legend for z-scores
-            interpretative_legend = self._generate_interpretative_legend(z_scores)
-            
             # Generate flower plot as base64
-            flower_plot = self._generate_flower_plot(emo, text)
+            flower_plot = self._generate_flower_plot(emo, z_scores)
             
             # Extract emotion words (if available in EmoAtlas)
             emotion_words = self._extract_emotion_words(emo, language)
             
             return {
                 'z_scores': z_scores,
-                'interpretative_legend': interpretative_legend,
+                'emotional_valence': emotional_valence,
+                'positive_score': positive_score,
+                'negative_score': negative_score,
                 'language': language,
                 'flower_plot': flower_plot,
                 'word_count': len(text.split()),
@@ -265,37 +268,36 @@ class EmoAtlasAnalysisService:
             print(f"❌ EmoAtlas analysis error: {e}")
             return self._generate_fallback_analysis(text)
     
-    def _generate_flower_plot(self, emo_scores, text: str) -> Optional[str]:
+    def _generate_flower_plot(self, emo_scores, z_scores: Dict, text: str = None) -> Optional[str]:
         """Generate the native EmoAtlas emotion flower plot as base64 string"""
         try:
             if not EMOATLAS_AVAILABLE or emo_scores is None:
                 print("❌ EmoAtlas not available for flower plot generation")
-                return None
+                return self._generate_fallback_flower_plot(z_scores)
             
             # Use native EmoAtlas flower plot generation
-            print("🌸 Generating native EmoAtlas flower plot using draw_formamentis_flower")
+            print("🌸 Generating native EmoAtlas flower plot")
             
-            # Ensure matplotlib uses non-interactive backend
-            import matplotlib
-            matplotlib.use('Agg')
+            # Create a temporary figure to capture the EmoAtlas plot
             import matplotlib.pyplot as plt
-            import io
-            import base64
+            plt.switch_backend('Agg')  # Ensure non-interactive backend
             
             # Clear any existing plots
             plt.clf()
             plt.close('all')
             
-            # Use the native EmoAtlas draw_formamentis_flower method
-            # This is the correct method according to the documentation
-            emo_scores.draw_formamentis_flower(
-                text=text,
-                title="Analisi Emotiva - Fiore Emotivo",
-                reject_range=(-1.96, 1.96)  # Show statistically significant emotions
-            )
+            # Create new figure
+            fig, ax = plt.subplots(figsize=(8, 8))
             
-            # Get the current figure that was created by EmoAtlas
-            fig = plt.gcf()
+            # Use the native EmoAtlas draw_plutchik method with z_scores
+            emo_scores.draw_plutchik(
+                scores=z_scores,
+                ax=ax,
+                title="Emotional Flower Analysis",
+                reject_range=(-1.96, 1.96),  # Show statistically significant emotions
+                fontsize=12,
+                show_coordinates=True
+            )
             
             # Convert to base64
             buffer = io.BytesIO()
@@ -303,46 +305,16 @@ class EmoAtlasAnalysisService:
                        facecolor='white', edgecolor='none', pad_inches=0.2)
             buffer.seek(0)
             image_base64 = base64.b64encode(buffer.getvalue()).decode()
-            
-            # Clean up
             plt.close(fig)
-            plt.clf()
+            plt.clf()  # Clear the figure
             
             print("✅ Native EmoAtlas flower plot generated successfully")
             return image_base64
             
         except Exception as e:
             print(f"❌ Error generating native EmoAtlas flower plot: {e}")
-            print(f"❌ Will try alternative method: draw_statistically_significant_emotions")
-            
-            # Try alternative method for statistically significant emotions
-            try:
-                plt.clf()
-                plt.close('all')
-                
-                # Use alternative EmoAtlas method
-                emo_scores.draw_statistically_significant_emotions(text)
-                
-                # Get the current figure
-                fig = plt.gcf()
-                
-                # Convert to base64
-                buffer = io.BytesIO()
-                plt.savefig(buffer, format='png', bbox_inches='tight', dpi=150, 
-                           facecolor='white', edgecolor='none', pad_inches=0.2)
-                buffer.seek(0)
-                image_base64 = base64.b64encode(buffer.getvalue()).decode()
-                
-                # Clean up
-                plt.close(fig)
-                plt.clf()
-                
-                print("✅ EmoAtlas statistically significant emotions plot generated successfully")
-                return image_base64
-                
-            except Exception as e2:
-                print(f"❌ Error with alternative method: {e2}")
-                return None
+            # Fallback to simple visualization
+            return self._generate_fallback_flower_plot(z_scores)
     
     def _generate_fallback_flower_plot(self, z_scores: Dict) -> Optional[str]:
         """Generate a fallback flower plot when EmoAtlas native plot fails"""
@@ -431,129 +403,24 @@ class EmoAtlasAnalysisService:
             'anticipation': random.uniform(-2, 2)
         }
         
+        positive_score = z_scores['joy'] + z_scores['trust'] + z_scores['anticipation']
+        negative_score = z_scores['fear'] + z_scores['sadness'] + z_scores['anger'] + z_scores['disgust']
+        
         significant_emotions = {
             emotion: score for emotion, score in z_scores.items() 
             if abs(score) >= 1.96
         }
         
-        # Generate interpretative legend for fallback
-        interpretative_legend = self._generate_interpretative_legend(z_scores)
-        
         return {
             'z_scores': z_scores,
-            'interpretative_legend': interpretative_legend,
+            'emotional_valence': positive_score - negative_score,
+            'positive_score': positive_score,
+            'negative_score': negative_score,
             'language': 'italian',
             'flower_plot': None,
             'word_count': len(text.split()),
             'emotion_words': self._extract_emotion_words(None, 'italian'),
             'significant_emotions': significant_emotions
-        }
-
-    def _generate_interpretative_legend(self, z_scores: Dict) -> Dict:
-        """Generate interpretative legend for z-scores with clinical ranges"""
-        
-        # Define interpretative ranges for z-scores
-        def interpret_zscore(score: float) -> Dict:
-            abs_score = abs(score)
-            if abs_score >= 3.0:
-                intensity = "MOLTO ELEVATA"
-                clinical_note = "Emozione dominante"
-                color = "#d32f2f" if score < 0 else "#388e3c"
-            elif abs_score >= 2.0:
-                intensity = "ELEVATA" 
-                clinical_note = "Emozione significativa"
-                color = "#f57c00" if score < 0 else "#689f38"
-            elif abs_score >= 1.96:
-                intensity = "SIGNIFICATIVA"
-                clinical_note = "Statisticamente rilevante"
-                color = "#fbc02d" if score < 0 else "#7cb342"
-            elif abs_score >= 1.0:
-                intensity = "MODERATA"
-                clinical_note = "Presente nel discorso"
-                color = "#757575"
-            else:
-                intensity = "BASSA"
-                clinical_note = "Poco presente"
-                color = "#bdbdbd"
-            
-            return {
-                "intensity": intensity,
-                "clinical_note": clinical_note,
-                "color": color,
-                "raw_score": round(score, 2),
-                "direction": "negativa" if score < 0 else "positiva" if score > 0 else "neutra"
-            }
-        
-        # Generate interpretation for each emotion
-        emotion_interpretations = {}
-        emotion_names_it = {
-            'joy': 'Gioia',
-            'trust': 'Fiducia', 
-            'fear': 'Paura',
-            'surprise': 'Sorpresa',
-            'sadness': 'Tristezza',
-            'disgust': 'Disgusto',
-            'anger': 'Rabbia',
-            'anticipation': 'Anticipazione'
-        }
-        
-        for emotion, score in z_scores.items():
-            italian_name = emotion_names_it.get(emotion, emotion.capitalize())
-            emotion_interpretations[emotion] = {
-                "name_it": italian_name,
-                "interpretation": interpret_zscore(score)
-            }
-        
-        # Generate overall clinical summary
-        significant_count = len([s for s in z_scores.values() if abs(s) >= 1.96])
-        dominant_emotions = sorted(z_scores.items(), key=lambda x: abs(x[1]), reverse=True)[:3]
-        
-        clinical_summary = {
-            "emotional_richness": {
-                "significant_emotions": significant_count,
-                "total_emotions": len(z_scores),
-                "richness_level": (
-                    "ALTA" if significant_count >= 5 else
-                    "MODERATA" if significant_count >= 3 else
-                    "BASSA"
-                ),
-                "clinical_note": (
-                    "Ricchezza espressiva elevata - paziente emotivamente attivo" if significant_count >= 5 else
-                    "Espressione emotiva equilibrata" if significant_count >= 3 else
-                    "Espressione emotiva contenuta"
-                )
-            },
-            "dominant_emotions": [
-                {
-                    "emotion": emotion_names_it.get(emotion, emotion),
-                    "score": round(score, 2),
-                    "rank": i + 1
-                } for i, (emotion, score) in enumerate(dominant_emotions)
-            ]
-        }
-        
-        # Clinical interpretation ranges for reference
-        interpretation_ranges = {
-            "ranges": {
-                "molto_elevata": {"min": 3.0, "description": "Emozione dominante nel discorso"},
-                "elevata": {"min": 2.0, "description": "Emozione chiaramente presente"},
-                "significativa": {"min": 1.96, "description": "Statisticamente rilevante (p<0.05)"},
-                "moderata": {"min": 1.0, "description": "Presente ma non dominante"},
-                "bassa": {"min": 0.0, "description": "Poco rilevante"}
-            },
-            "clinical_notes": [
-                "Z-score positivi: emozione più intensa del normale",
-                "Z-score negativi: emozione meno intensa del normale", 
-                "Soglia significatività: |z| ≥ 1.96 (p < 0.05)",
-                "Range tipico: da -3 a +3"
-            ]
-        }
-        
-        return {
-            "emotion_interpretations": emotion_interpretations,
-            "clinical_summary": clinical_summary,
-            "interpretation_ranges": interpretation_ranges,
-            "methodology_note": "Analisi basata su z-score rispetto ai normali pattern linguistici italiani"
         }
 
 # Initialize EmoAtlas service
@@ -704,13 +571,13 @@ def calculate_emotion_trends(sessions: List[SessionAnalysis]) -> Dict:
                 'trend': 'stable'  # Could implement trend calculation
             }
         
-        # Calculate overall trends based on significant emotions
-        significant_counts = [len(s.analysis['significant_emotions']) for s in sessions]
+        # Calculate overall trends
+        valence_scores = [s.analysis['emotional_valence'] for s in sessions]
         trends['overall'] = {
-            'significant_emotions_trend': {
-                'values': significant_counts,
-                'average': sum(significant_counts) / len(significant_counts),
-                'trend': 'increasing' if significant_counts[-1] > significant_counts[0] else 'decreasing'
+            'emotional_valence': {
+                'values': valence_scores,
+                'average': sum(valence_scores) / len(valence_scores),
+                'trend': 'improving' if valence_scores[-1] > valence_scores[0] else 'declining'
             },
             'session_count': len(sessions)
         }
@@ -728,7 +595,7 @@ def generate_analysis_summary(sessions: List[SessionAnalysis]) -> Dict:
     
     try:
         total_words = sum(s.analysis['word_count'] for s in sessions)
-        avg_significant = sum(len(s.analysis['significant_emotions']) for s in sessions) / len(sessions)
+        avg_valence = sum(s.analysis['emotional_valence'] for s in sessions) / len(sessions)
         
         # Find most significant emotions across all sessions
         all_significant = {}
@@ -739,7 +606,7 @@ def generate_analysis_summary(sessions: List[SessionAnalysis]) -> Dict:
                 all_significant[emotion].append(abs(score))
         
         # Calculate average significance for each emotion
-        avg_significant_scores = {
+        avg_significant = {
             emotion: sum(scores) / len(scores) 
             for emotion, scores in all_significant.items()
         }
@@ -748,9 +615,9 @@ def generate_analysis_summary(sessions: List[SessionAnalysis]) -> Dict:
             'total_sessions': len(sessions),
             'total_words': total_words,
             'average_words_per_session': total_words / len(sessions),
-            'average_significant_emotions': avg_significant,
+            'average_emotional_valence': avg_valence,
             'most_significant_emotions': sorted(
-                avg_significant_scores.items(), 
+                avg_significant.items(), 
                 key=lambda x: x[1], 
                 reverse=True
             )[:3],
@@ -1284,6 +1151,9 @@ def generate_combined_analysis(sessions: List[SessionAnalysis], language: str = 
             combined_z_scores[emotion] = sum(scores) / len(scores)
         
         # Calculate combined metrics
+        combined_valence = sum(s.analysis['emotional_valence'] for s in sessions) / len(sessions)
+        combined_positive = sum(s.analysis['positive_score'] for s in sessions) / len(sessions)
+        combined_negative = sum(s.analysis['negative_score'] for s in sessions) / len(sessions)
         total_words = sum(s.analysis['word_count'] for s in sessions)
         
         # Get significant emotions (|z-score| >= 1.96)
@@ -1298,9 +1168,6 @@ def generate_combined_analysis(sessions: List[SessionAnalysis], language: str = 
             key=lambda x: abs(x[1]), 
             reverse=True
         )
-        
-        # Generate interpretative legend for combined analysis
-        interpretative_legend = emoatlas_service._generate_interpretative_legend(combined_z_scores)
         
         # Generate flower plot for combined analysis
         try:
@@ -1318,7 +1185,9 @@ def generate_combined_analysis(sessions: List[SessionAnalysis], language: str = 
                 'z_scores': combined_z_scores,
                 'significant_emotions': significant_emotions,
                 'dominant_emotions': dominant_emotions,
-                'interpretative_legend': interpretative_legend,
+                'emotional_valence': combined_valence,
+                'positive_score': combined_positive,
+                'negative_score': combined_negative,
                 'text_length': total_words,
                 'language': language,
                 'emotion_words': emoatlas_service._extract_emotion_words(None, language)

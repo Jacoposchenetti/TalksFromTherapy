@@ -68,38 +68,31 @@ export function EmotionVisualizer({ data, title, showDetails = false, flowerPlot
         </div>
       )}
 
-      {/* Interpretazione Z-Score */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h6 className="font-semibold text-blue-800 mb-3 flex items-center">
-          📊 Come Interpretare i Punteggi
-        </h6>
-        <div className="text-sm text-blue-900 space-y-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="font-medium">🎯 Valori Z-Score:</p>
-              <ul className="text-xs space-y-1 mt-1">
-                <li><strong>0 a ±1:</strong> Intensità normale</li>
-                <li><strong>±1 a ±2:</strong> Emozione presente</li>
-                <li><strong>±2 a ±3:</strong> Emozione forte</li>
-                <li><strong>oltre ±3:</strong> Emozione dominante</li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-medium">⭐ Significatività:</p>
-              <ul className="text-xs space-y-1 mt-1">
-                <li><strong>|Z| ≥ 2:</strong> Statisticamente rilevante</li>
-                <li><strong>Positivo (+):</strong> Più intenso del normale</li>
-                <li><strong>Negativo (−):</strong> Meno intenso del normale</li>
-                <li><strong>Emozioni significative:</strong> {Object.keys(data.significant_emotions).length}/8</li>
-              </ul>
-            </div>
+      {/* Summary Stats */}
+      <div className="grid grid-cols-4 gap-3 text-center">
+        <div>
+          <div className="text-lg font-bold text-green-600">
+            {data.positive_score.toFixed(1)}
           </div>
-          <div className="border-t pt-2 mt-3">
-            <p className="text-xs text-blue-700">
-              <strong>💡 Per il terapeuta:</strong> I valori Z misurano quanto un'emozione si discosta dalla norma. 
-              Valori alti indicano che quella specifica emozione è particolarmente presente (o assente) nel discorso del paziente.
-            </p>
+          <div className="text-xs text-gray-600">Positivo</div>
+        </div>
+        <div>
+          <div className="text-lg font-bold text-red-600">
+            {data.negative_score.toFixed(1)}
           </div>
+          <div className="text-xs text-gray-600">Negativo</div>
+        </div>
+        <div>
+          <div className={`text-lg font-bold ${getValenceColor(data.emotional_valence)}`}>
+            {data.emotional_valence.toFixed(1)}
+          </div>
+          <div className="text-xs text-gray-600">Valenza</div>
+        </div>
+        <div>
+          <div className="text-lg font-bold text-blue-600">
+            {Object.keys(data.significant_emotions).length}
+          </div>
+          <div className="text-xs text-gray-600">Significative</div>
         </div>
       </div>
 

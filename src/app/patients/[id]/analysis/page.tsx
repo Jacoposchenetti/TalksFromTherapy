@@ -643,6 +643,13 @@ export default function PatientAnalysisPage() {
                               Esplora il contesto cognitivo ed emotivo di una parola chiave nelle sessioni selezionate.<br/>
                               Inserisci una parola e visualizza la sua rete semantica e il profilo emotivo associato.
                             </p>
+                            
+                            {/* Descrizione metodologica */}
+                            <div className="text-xs text-gray-500 mt-3 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                              <p>
+                                <strong>💡 Cos'è?</strong> La Semantic Frame Analysis permette di esplorare le associazioni cognitive ed emotive di una parola chiave nel testo, utile per analisi narrative, metafore, ruoli e insight clinici.
+                              </p>
+                            </div>
                           </div>
                           
                           {/* Input Controls */}
@@ -758,14 +765,6 @@ export default function PatientAnalysisPage() {
                                         }}
                                       />
                                     </div>
-                                    <div className="mt-3 text-center">
-                                      <p className="text-sm text-gray-600 font-medium">
-                                        📊 Grafico generato da EmoAtlas con NetworkX
-                                      </p>
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        Parola analizzata: "<strong>{targetWord}</strong>" | Dimensione: {Math.round(semanticFrameResult.network_plot.length / 1024)}KB
-                                      </p>
-                                    </div>
                                   </div>
                                 )}
                               </div>
@@ -783,12 +782,6 @@ export default function PatientAnalysisPage() {
                                 </span>
                               </div>
                             )}
-                          </div>
-
-                          <div className="text-xs text-gray-500 mt-4">
-                            <p>
-                              <strong>Cos'è?</strong> La Semantic Frame Analysis permette di esplorare le associazioni cognitive ed emotive di una parola chiave nel testo, utile per analisi narrative, metafore, ruoli e insight clinici.
-                            </p>
                           </div>
                         </div>
                       )}
