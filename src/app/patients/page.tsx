@@ -60,7 +60,7 @@ export default function PatientsPage() {
   }
 
   const handleDeletePatient = async (patientId: string) => {
-    if (!confirm("Sei sicuro di voler eliminare questo paziente?")) return
+    if (!confirm("Are you sure you want to delete this patient?")) return
 
     try {
       const response = await fetch(`/api/patients/${patientId}`, {
@@ -96,17 +96,17 @@ export default function PatientsPage() {
             className="mb-6"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Torna ai Pazienti
+            Back to Patients
           </Button>
           <Card>
             <CardHeader>
               <CardTitle>
-                {editingPatient ? "Modifica Paziente" : "Nuovo Paziente"}
+                {editingPatient ? "Edit Patient" : "New Patient"}
               </CardTitle>
               <CardDescription>
                 {editingPatient
-                  ? "Modifica i dati del paziente"
-                  : "Inserisci i dati del nuovo paziente"}
+                  ? "Edit patient details"
+                  : "Enter new patient details"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -128,14 +128,14 @@ export default function PatientsPage() {
     <div className="container mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Pazienti</h1>
+          <h1 className="text-3xl font-bold">Patients</h1>
           <p className="text-muted-foreground">
-            Gestisci i tuoi pazienti e le loro informazioni
+            Manage your patients and their information
           </p>
         </div>
         <Button onClick={() => setShowForm(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Nuovo Paziente
+          New Patient
         </Button>
       </div>      <PatientList
         patients={patients}
