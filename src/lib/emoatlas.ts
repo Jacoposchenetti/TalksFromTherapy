@@ -38,6 +38,20 @@ export interface SessionData {
     success: boolean
     error?: string
     individual_sessions: SessionAnalysis[]
+    combined_analysis?: {
+      analysis: {
+        z_scores: EmotionScores
+        emotional_valence: number
+        positive_score: number
+        negative_score: number
+        language: string
+        text_length: number
+        emotion_words: Record<string, string[]>
+        significant_emotions: Record<string, number>
+        dominant_emotions: [string, number][]
+      }
+      flower_plot?: string
+    }
     trends?: Record<string, any>
     summary?: Record<string, any>
   }
