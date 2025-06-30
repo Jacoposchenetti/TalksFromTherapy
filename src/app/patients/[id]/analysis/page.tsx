@@ -5,10 +5,11 @@ import { useSession } from "next-auth/react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp, Network, Search, X } from "lucide-react"
+import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp, Network, Search, X, RefreshCw, Database } from "lucide-react"
 import { SentimentAnalysis } from "@/components/sentiment-analysis"
 import { EmotionTrends } from "@/components/emotion-trends"
 import TopicAnalysisComponent from "@/components/analysis/topic-modeling-gpt"
+import { useMultiSessionAnalysis } from "@/hooks/useMultiSessionAnalysis"
 
 interface Session {
   id: string
@@ -57,9 +58,27 @@ export default function PatientAnalysisPage() {
   const [semanticFrameLoading, setSemanticFrameLoading] = useState(false)
   const [semanticFrameResult, setSemanticFrameResult] = useState<any>(null)
   const [semanticFrameError, setSemanticFrameError] = useState<string | null>(null)
+  const [pastAnalyses, setPastAnalyses] = useState<{[key: string]: any}>({})
+  const [selectedPastAnalysis, setSelectedPastAnalysis] = useState<string>("")
   
   // Transcript search state
   const [searchTerm, setSearchTerm] = useState("")
+
+  // Multi-session analysis hook for caching
+  const {
+    analyses,
+    loading: analysisLoading,
+    error: analysisError,
+    loadAllAnalyses,
+    saveSessionAnalysis,
+    hasAllSentimentAnalyses,
+    hasAllTopicAnalyses,
+    getSentimentData,
+    getTopicData
+  } = useMultiSessionAnalysis({ 
+    sessionIds: Array.from(selectedSessions),
+    autoLoad: false  // We'll load manually when sessions are selected
+  })
 
   useEffect(() => {
     if (status === "loading") return
@@ -70,63 +89,78 @@ export default function PatientAnalysisPage() {
     fetchPatientData()
   }, [session, status, router, patientId])
 
+  // Carica analisi esistenti quando cambiano le sessioni selezionate
+  useEffect(() => {
+    if (selectedSessions.size > 0) {
+      loadAllAnalyses()
+    }
+  }, [selectedSessions, loadAllAnalyses])
+
+  // Aggiorna i risultati dell'emotion analysis quando cambiano le analisi
+  useEffect(() => {
+    if (hasAllSentimentAnalyses && selectedSessions.size > 0) {
+      const sentimentData = getSentimentData()
+      setEmotionAnalysisResults(sentimentData)
+    }
+  }, [hasAllSentimentAnalyses, selectedSessions.size]) // Rimuoviamo getSentimentData per evitare loop
+
+  // Carica analisi semantic frame passate quando cambiano le sessioni selezionate o le analisi
+  useEffect(() => {
+    if (selectedSessions.size > 0) {
+      loadPastSemanticFrameAnalyses()
+    }
+  }, [selectedSessions, analyses])
+
+  const loadPastSemanticFrameAnalyses = async () => {
+    if (selectedSessions.size === 0) return
+    
+    const firstSessionId = Array.from(selectedSessions)[0]
+    const analysis = analyses[firstSessionId]
+    
+    if (analysis?.semanticFrames) {
+      setPastAnalyses(analysis.semanticFrames)
+    } else {
+      setPastAnalyses({})
+    }
+    // Reset selezione quando cambiano le sessioni
+    setSelectedPastAnalysis("")
+  }
+
   const fetchPatientData = async () => {
     try {
       setError(null)
-      console.log('Fetching patient data for ID:', patientId)
       
       // Fetch patient info
       const patientResponse = await fetch(`/api/patients/${patientId}`)
-      console.log('Patient response status:', patientResponse.status)
       
       if (patientResponse.ok) {
         const patientData = await patientResponse.json()
-        console.log('Patient data received:', patientData)
         setPatient(patientData)
       } else {
         const errorText = await patientResponse.text()
         console.error('Patient API error:', errorText)
         setError('Errore nel caricamento dei dati del paziente: ' + patientResponse.status)
-        return      }
+        return
+      }
 
       // Fetch patient sessions
       const sessionsResponse = await fetch(`/api/sessions?patientId=${patientId}`)
       if (sessionsResponse.ok) {
         const sessionsData = await sessionsResponse.json()
-        console.log('Sessions data received:', sessionsData)
-        console.log('Sessions with transcript:', sessionsData?.filter((s: Session) => s.transcript))
         
-        // TEMP: Show all sessions to debug transcription issue
-        console.log('All sessions for patient:', sessionsData)
-        sessionsData?.forEach((session: Session, index: number) => {
-          console.log(`Session ${index + 1}:`, {
-            id: session.id,
-            title: session.title,
-            status: session.status,
-            transcript: session.transcript,
-            transcriptLength: session.transcript?.length,
-            transcriptType: typeof session.transcript,
-            createdAt: session.createdAt,
-            updatedAt: session.updatedAt
-          })
-        })
+        // Filter sessions with transcripts for analysis
+        const transcribedSessions = sessionsData?.filter((s: Session) => 
+          s.transcript && 
+          typeof s.transcript === 'string' && 
+          s.transcript.trim().length > 0
+        ) || []
         
-        // Show ALL sessions temporarily to see what we have
-        setSessions(sessionsData || [])
-          // This is the problematic filter - we'll fix it after seeing the data
-        /*
-        const transcribedSessions = sessionsData?.filter((s: Session) => {
-          const hasTranscription = s.transcription && 
-                                 typeof s.transcription === 'string' && 
-                                 s.transcription.trim().length > 0
-          console.log(`Session ${s.id}: transcription="${s.transcription}", status="${s.status}", hasTranscription=${hasTranscription}`)
-          return hasTranscription
-        }) || []
-        */
-          // Auto-select first session if available (using all sessions for now)
-        if (sessionsData && sessionsData.length > 0) {
-          setActiveSessionForNote(sessionsData[0])
-          fetchSessionNote(sessionsData[0].id)
+        setSessions(transcribedSessions)
+        
+        // Auto-select first session if available
+        if (transcribedSessions.length > 0) {
+          setActiveSessionForNote(transcribedSessions[0])
+          fetchSessionNote(transcribedSessions[0].id)
         }
       } else {
         setError('Errore nel caricamento delle sessioni')
@@ -264,6 +298,13 @@ export default function PatientAnalysisPage() {
       return
     }
 
+    // Prima verifica se abbiamo già questa analisi nella cache
+    const firstSessionId = getSelectedSessionsData()[0]?.id
+    if (firstSessionId && analyses[firstSessionId]?.semanticFrames?.[wordToAnalyze]) {
+      setSemanticFrameResult(analyses[firstSessionId].semanticFrames[wordToAnalyze])
+      return
+    }
+
     setSemanticFrameLoading(true)
     setSemanticFrameError(null)
     setSemanticFrameResult(null)
@@ -277,7 +318,7 @@ export default function PatientAnalysisPage() {
         body: JSON.stringify({
           text: combinedTranscript,
           targetWord: wordToAnalyze,
-          sessionId: getSelectedSessionsData()[0]?.id || null,
+          sessionId: firstSessionId,
           language: 'italian'
         }),
       })
@@ -287,6 +328,12 @@ export default function PatientAnalysisPage() {
       if (data.success) {
         setSemanticFrameResult(data)
         console.log('Semantic Frame Analysis successful:', data)
+        
+        // Salva il risultato nella cache per la prima sessione
+        if (firstSessionId) {
+          await saveSessionAnalysis(firstSessionId, 'semantic_frame', data)
+          console.log('✅ Semantic frame salvato nella cache')
+        }
       } else {
         setSemanticFrameError(data.error || 'Errore durante l\'analisi semantica')
         console.error('Semantic Frame Analysis error:', data.error)
@@ -310,8 +357,16 @@ export default function PatientAnalysisPage() {
   // Slide navigation
   const slides = [
     { title: "Trascrizioni", icon: FileText },
-    { title: "Topic Modelling", icon: BarChart3 },
-    { title: "Sentiment Analysis", icon: Heart },
+    { 
+      title: "Topic Modelling", 
+      icon: BarChart3,
+      hasCachedData: hasAllTopicAnalyses
+    },
+    { 
+      title: "Sentiment Analysis", 
+      icon: Heart,
+      hasCachedData: hasAllSentimentAnalyses
+    },
     { title: "Analisi Semantica", icon: Network }
   ]
 
@@ -478,7 +533,7 @@ export default function PatientAnalysisPage() {
                             <button
                               key={index}
                               onClick={() => goToSlide(index)}
-                              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all relative ${
                                 currentSlide === index
                                   ? "bg-blue-100 text-blue-700 font-medium"
                                   : "text-gray-600 hover:bg-gray-100"
@@ -486,11 +541,26 @@ export default function PatientAnalysisPage() {
                             >
                               <Icon className="h-4 w-4" />
                               {slide.title}
+                              {slide.hasCachedData && selectedSessions.size > 0 && (
+                                <Database className="h-3 w-3 text-green-600" title="Dati in cache disponibili" />
+                              )}
                             </button>
                           )
                         })}
                       </div>
                       <div className="flex items-center gap-2">
+                        {selectedSessions.size > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={loadAllAnalyses}
+                            disabled={analysisLoading}
+                            className="h-8"
+                            title="Ricarica analisi dalla cache"
+                          >
+                            <RefreshCw className={`h-3 w-3 ${analysisLoading ? 'animate-spin' : ''}`} />
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -585,6 +655,47 @@ export default function PatientAnalysisPage() {
                       {/* Slide 1: Topic Modelling */}
                       {currentSlide === 1 && (
                         <div className="min-h-full">
+                          {/* Cache Status Indicator - only show if no cached data available */}
+                          {selectedSessions.size > 0 && !hasAllTopicAnalyses && (
+                            <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                              <div className="flex items-center gap-2">
+                                <BarChart3 className="h-4 w-4 text-gray-500" />
+                                <span className="text-sm text-gray-600">
+                                  Clicca "Analizza Topic" per eseguire nuove analisi
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Show recalculate button when cached data is available */}
+                          {hasAllTopicAnalyses && (
+                            <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Database className="h-4 w-4 text-green-600" />
+                                  <span className="text-sm text-green-700 font-medium">
+                                    Analisi topic caricate dalla cache
+                                  </span>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    // Pulisci cache per topic analysis
+                                    selectedSessions.forEach(sessionId => {
+                                      fetch(`/api/analyses?sessionId=${sessionId}&analysisType=topics`, {
+                                        method: 'DELETE'
+                                      })
+                                    })
+                                  }}
+                                  className="text-xs"
+                                >
+                                  Ricalcola
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
                           <TopicAnalysisComponent 
                             selectedSessions={getSelectedSessionsData().map(session => ({
                               id: session.id,
@@ -592,14 +703,69 @@ export default function PatientAnalysisPage() {
                               transcript: session.transcript || ""
                             }))}
                             combinedTranscript={getCombinedTranscript()}
-                            onAnalysisComplete={(result) => {
+                            onAnalysisComplete={async (result) => {
                               console.log('Topic analysis completed:', result)
+                              
+                              // Salva nella cache se abbiamo risultati
+                              if (result && getSelectedSessionsData().length > 0) {
+                                const firstSessionId = getSelectedSessionsData()[0].id
+                                await saveSessionAnalysis(firstSessionId, 'topics', result)
+                                console.log('✅ Analisi topic salvata nella cache')
+                              }
                             }}
+                            cachedData={(() => {
+                              const topicData = hasAllTopicAnalyses ? getTopicData() : undefined
+                              console.log('🎯 Topic cached data being passed:', topicData)
+                              console.log('🎯 hasAllTopicAnalyses:', hasAllTopicAnalyses)
+                              return topicData
+                            })()}
                           />
                         </div>
                       )}                      {/* Slide 2: Sentiment Analysis */}
                       {currentSlide === 2 && (
                         <div className="h-full pt-6">
+                          {/* Cache Status Indicator - only show if no cached data available */}
+                          {selectedSessions.size > 0 && !hasAllSentimentAnalyses && (
+                            <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                              <div className="flex items-center gap-2">
+                                <Heart className="h-4 w-4 text-gray-500" />
+                                <span className="text-sm text-gray-600">
+                                  Clicca "Analizza Emozioni" per eseguire nuove analisi
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Show recalculate button when cached data is available */}
+                          {hasAllSentimentAnalyses && (
+                            <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Database className="h-4 w-4 text-green-600" />
+                                  <span className="text-sm text-green-700 font-medium">
+                                    Analisi caricate dalla cache
+                                  </span>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    // Pulisci cache e forza ricalcolo
+                                    setEmotionAnalysisResults([])
+                                    selectedSessions.forEach(sessionId => {
+                                      fetch(`/api/analyses?sessionId=${sessionId}&analysisType=sentiment`, {
+                                        method: 'DELETE'
+                                      })
+                                    })
+                                  }}
+                                  className="text-xs"
+                                >
+                                  Ricalcola
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                          
                           <SentimentAnalysis 
                             selectedSessions={getSelectedSessionsData().map(session => ({
                               id: session.id,
@@ -607,26 +773,23 @@ export default function PatientAnalysisPage() {
                               transcript: session.transcript || "",
                               sessionDate: session.sessionDate
                             }))}
-                            onAnalysisComplete={(result) => {
+                            onAnalysisComplete={async (result) => {
                               console.log('🎯 Sentiment analysis completed:', result)
-                              console.log('🎯 Result type:', typeof result)
-                              console.log('🎯 Result.success:', result.success)
-                              console.log('🎯 Result.analysis:', result.analysis)
-                              console.log('🎯 Individual sessions type:', typeof result.analysis?.individual_sessions)
-                              console.log('🎯 Individual sessions:', result.analysis?.individual_sessions)
                               
                               // Transform data for EmotionTrends component
                               if (result.success && result.analysis?.individual_sessions) {
                                 console.log('🔄 Setting emotionAnalysisResults:', result.analysis.individual_sessions)
                                 setEmotionAnalysisResults(result.analysis.individual_sessions)
-                                console.log('📊 State should be updated now')
-                              } else {
-                                console.log('❌ Conditions not met:', {
-                                  success: result.success,
-                                  hasIndividualSessions: !!result.analysis?.individual_sessions
-                                })
+                                
+                                // Salva ogni sessione nella cache
+                                const sessions = result.analysis.individual_sessions
+                                for (const session of sessions) {
+                                  await saveSessionAnalysis(session.session_id, 'sentiment', session.analysis)
+                                }
+                                console.log('✅ Analisi sentiment salvate nella cache')
                               }
                             }}
+                            cachedData={hasAllSentimentAnalyses ? getSentimentData() : undefined}
                           />
                         </div>
                       )}
@@ -650,7 +813,66 @@ export default function PatientAnalysisPage() {
                                 <strong>💡 Cos'è?</strong> La Semantic Frame Analysis permette di esplorare le associazioni cognitive ed emotive di una parola chiave nel testo, utile per analisi narrative, metafore, ruoli e insight clinici.
                               </p>
                             </div>
+
+                            {/* Cache Status per Semantic Frame */}
+                            {selectedSessions.size > 0 && analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames && Object.keys(analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames || {}).length > 0 && (
+                              <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                                <div className="flex items-center gap-2">
+                                  <Database className="h-4 w-4 text-green-600" />
+                                  <span className="text-sm text-green-700 font-medium">
+                                    Analisi semantic frame disponibili per: {Object.keys(analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames || {}).join(', ')}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
                           </div>
+                          
+                          {/* Menu Analisi Passate */}
+                          {Object.keys(pastAnalyses).length > 0 && (
+                            <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
+                              <h4 className="text-md font-medium mb-3 flex items-center gap-2">
+                                <Database className="h-4 w-4 text-blue-600" />
+                                Analisi Passate
+                              </h4>
+                              <div className="flex gap-3 items-center">
+                                <select
+                                  value={selectedPastAnalysis}
+                                  onChange={(e) => {
+                                    setSelectedPastAnalysis(e.target.value)
+                                    if (e.target.value && pastAnalyses[e.target.value]) {
+                                      setSemanticFrameResult(pastAnalyses[e.target.value])
+                                      setTargetWord(e.target.value)
+                                      setSemanticFrameError(null)
+                                    }
+                                  }}
+                                  className="border rounded px-3 py-2 bg-white min-w-[200px] focus:ring-2 focus:ring-blue-400"
+                                >
+                                  <option value="">Seleziona un'analisi passata</option>
+                                  {Object.keys(pastAnalyses).map(word => (
+                                    <option key={word} value={word}>
+                                      {word} (analizzata in precedenza)
+                                    </option>
+                                  ))}
+                                </select>
+                                {selectedPastAnalysis && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedPastAnalysis("")
+                                      setSemanticFrameResult(null)
+                                      setTargetWord("")
+                                    }}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mt-2">
+                                Seleziona un'analisi precedente per visualizzarla nuovamente, o inserisci una nuova parola sotto.
+                              </p>
+                            </div>
+                          )}
                           
                           {/* Input Controls */}
                           <div className="flex flex-col md:flex-row gap-4 items-start">

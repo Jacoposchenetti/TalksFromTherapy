@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -36,12 +36,14 @@ interface TopicAnalysisProps {
   selectedSessions: Session[]
   combinedTranscript: string
   onAnalysisComplete?: (result: AnalysisResult) => void
+  cachedData?: AnalysisResult
 }
 
 export default function TopicAnalysisComponent({ 
   selectedSessions, 
   combinedTranscript, 
-  onAnalysisComplete 
+  onAnalysisComplete,
+  cachedData 
 }: TopicAnalysisProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
@@ -52,6 +54,26 @@ export default function TopicAnalysisComponent({
   const [customTopics, setCustomTopics] = useState("")
   const [isCustomAnalyzing, setIsCustomAnalyzing] = useState(false)
   const [customAnalysisResult, setCustomAnalysisResult] = useState<AnalysisResult | null>(null)
+
+  // Effect to load cached data when available
+  useEffect(() => {
+    if (cachedData) {
+      console.log('🔄 Loading cached topic data:', cachedData)
+      console.log('🔄 CachedData type:', typeof cachedData)
+      console.log('🔄 CachedData keys:', Object.keys(cachedData))
+      setAnalysisResult(cachedData)
+      setError(null)
+    } else {
+      console.log('🔄 No cached topic data available')
+    }
+  }, [cachedData])
+
+  // Debug log for analysisResult
+  useEffect(() => {
+    console.log('🎯 TopicAnalysis analysisResult changed:', analysisResult)
+    console.log('🎯 TopicAnalysis customAnalysisResult:', customAnalysisResult)
+    console.log('🎯 TopicAnalysis activeResult:', customAnalysisResult || analysisResult)
+  }, [analysisResult, customAnalysisResult])
 
   const runTopicAnalysis = async () => {
     if (!combinedTranscript || combinedTranscript.trim().length === 0) {
@@ -791,7 +813,7 @@ Rispondi SOLO con JSON:
                       }}
                     >
                       <div className="space-y-4">
-                        {activeResult?.topics.map((topic, index) => (
+                        {activeResult?.topics?.map((topic, index) => (
                           <div key={topic.topic_id} className="p-4 border rounded-lg min-h-[200px]">
                         <div className="flex items-start justify-between mb-3">
                           <div>
@@ -851,7 +873,7 @@ Rispondi SOLO con JSON:
                               <Search className="h-4 w-4 text-blue-600" />
                               <span className="text-sm font-medium">Topic Personalizzati</span>
                               <div className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                                {customAnalysisResult.topics.length} topic
+                                {customAnalysisResult.topics?.length || 0} topic
                               </div>
                             </>
                           ) : (
@@ -867,7 +889,7 @@ Rispondi SOLO con JSON:
                         
                         {/* Topic badges a destra */}
                         <div className="flex flex-wrap gap-1.5 max-w-md justify-end">
-                          {activeResult?.topics.map((topic) => (
+                          {activeResult?.topics?.map((topic) => (
                             <Badge
                               key={topic.topic_id}
                               className={`${getTopicColor(topic.topic_id)} text-xs shadow-sm`}
@@ -907,7 +929,7 @@ Rispondi SOLO con JSON:
                               }`}
                               title={
                                 segment.topic_id 
-                                  ? `${activeResult?.topics.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)${segment.confidence < 0.5 ? ' - Confidence troppo bassa per evidenziare' : ''}`
+                                  ? `${activeResult?.topics?.find(t => t.topic_id === segment.topic_id)?.description?.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)${segment.confidence < 0.5 ? ' - Confidence troppo bassa per evidenziare' : ''}`
                                   : 'Non classificato'
                               }
                             >

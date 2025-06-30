@@ -16,6 +16,7 @@ interface Session {
 interface SentimentAnalysisProps {
   selectedSessions: Session[]
   onAnalysisComplete?: (result: any) => void
+  cachedData?: any[]
 }
 
 interface EmotionAnalysisResult {
@@ -55,15 +56,35 @@ interface EmotionAnalysisResult {
   error?: string
 }
 
-export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: SentimentAnalysisProps) {
+export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cachedData }: SentimentAnalysisProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<EmotionAnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Effect to load cached data when available
+  useEffect(() => {
+    if (cachedData && cachedData.length > 0) {
+      console.log('🔄 Loading cached sentiment data:', cachedData)
+      // Transform cached data to match the expected format
+      const transformedResult: EmotionAnalysisResult = {
+        success: true,
+        analysis: {
+          individual_sessions: cachedData,
+          combined_analysis: null, // Could be computed if needed
+          total_sessions: cachedData.length
+        },
+        processed_sessions: cachedData.length
+      }
+      setAnalysisResult(transformedResult)
+      setError(null)
+    }
+  }, [cachedData])
 
   // Add logging to understand what's happening
   console.log('🔍 SentimentAnalysis render:', {
     selectedSessionsCount: selectedSessions.length,
     hasAnalysisResult: !!analysisResult,
+    hasCachedData: !!(cachedData && cachedData.length > 0),
     isAnalyzing,
     error: !!error
   })
@@ -168,7 +189,26 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
 
   // Function to transform EmoAtlas data to EmotionVisualizer format
   function transformEmoAtlasData(sessionAnalysis: any) {
-    const { z_scores, significant_emotions, emotional_valence, positive_score, negative_score, word_count } = sessionAnalysis
+    // Add safety checks for required properties
+    if (!sessionAnalysis) {
+      console.warn('⚠️ sessionAnalysis is undefined')
+      return null
+    }
+
+    const { 
+      z_scores = {}, 
+      significant_emotions = {}, 
+      emotional_valence = 0, 
+      positive_score = 0, 
+      negative_score = 0, 
+      word_count = 0 
+    } = sessionAnalysis
+
+    // Ensure z_scores is an object
+    if (!z_scores || typeof z_scores !== 'object') {
+      console.warn('⚠️ z_scores is not valid:', z_scores)
+      return null
+    }
 
     // Convert z_scores to emotions (using absolute values for intensity)
     const emotions = Object.fromEntries(
@@ -233,12 +273,25 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
         {analysis.combined_analysis && (
           <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
             <CardContent className="p-4">
-              <EmotionVisualizer 
-                data={transformEmoAtlasData(analysis.combined_analysis.analysis)}
-                title={`🌸 Analisi Combinata (${analysis.total_sessions} sessioni)`}
-                showDetails={false}
-                flowerPlot={analysis.combined_analysis.flower_plot}
-              />
+              {(() => {
+                const transformedData = transformEmoAtlasData(analysis.combined_analysis.analysis)
+                if (!transformedData) {
+                  return (
+                    <div className="text-center text-gray-500 py-4">
+                      <AlertCircle className="w-8 h-8 mx-auto mb-2" />
+                      <p>Dati di analisi combinata non validi</p>
+                    </div>
+                  )
+                }
+                return (
+                  <EmotionVisualizer 
+                    data={transformedData}
+                    title={`🌸 Analisi Combinata (${analysis.total_sessions} sessioni)`}
+                    showDetails={false}
+                    flowerPlot={analysis.combined_analysis.flower_plot}
+                  />
+                )
+              })()}
             </CardContent>
           </Card>
         )}
@@ -266,18 +319,34 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete }: Sent
                     hasFlowerPlot: !!sessionAnalysis.flower_plot
                   })
                 })
-                return analysis.individual_sessions.map((sessionAnalysis) => (
-                  <Card key={sessionAnalysis.session_id} className="border-l-4 border-l-blue-500">
-                    <CardContent className="p-3">
-                      <EmotionVisualizer 
-                        data={transformEmoAtlasData(sessionAnalysis.analysis)}
-                        title={sessionAnalysis.session_title}
-                        showDetails={false}
-                        flowerPlot={sessionAnalysis.flower_plot}
-                      />
-                    </CardContent>
-                  </Card>
-                ))
+                return analysis.individual_sessions.map((sessionAnalysis) => {
+                  const transformedData = transformEmoAtlasData(sessionAnalysis.analysis)
+                  if (!transformedData) {
+                    return (
+                      <Card key={sessionAnalysis.session_id} className="border-l-4 border-l-red-500">
+                        <CardContent className="p-3">
+                          <div className="text-center text-gray-500 py-4">
+                            <AlertCircle className="w-6 h-6 mx-auto mb-2" />
+                            <p className="font-medium">{sessionAnalysis.session_title}</p>
+                            <p className="text-sm">Dati di analisi non validi</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  }
+                  return (
+                    <Card key={sessionAnalysis.session_id} className="border-l-4 border-l-blue-500">
+                      <CardContent className="p-3">
+                        <EmotionVisualizer 
+                          data={transformedData}
+                          title={sessionAnalysis.session_title}
+                          showDetails={false}
+                          flowerPlot={sessionAnalysis.flower_plot}
+                        />
+                      </CardContent>
+                    </Card>
+                  )
+                })
               })()}
             </div>
           </div>

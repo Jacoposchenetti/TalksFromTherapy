@@ -68,34 +68,6 @@ export function EmotionVisualizer({ data, title, showDetails = false, flowerPlot
         </div>
       )}
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-3 text-center">
-        <div>
-          <div className="text-lg font-bold text-green-600">
-            {data.positive_score.toFixed(1)}
-          </div>
-          <div className="text-xs text-gray-600">Positivo</div>
-        </div>
-        <div>
-          <div className="text-lg font-bold text-red-600">
-            {data.negative_score.toFixed(1)}
-          </div>
-          <div className="text-xs text-gray-600">Negativo</div>
-        </div>
-        <div>
-          <div className={`text-lg font-bold ${getValenceColor(data.emotional_valence)}`}>
-            {data.emotional_valence.toFixed(1)}
-          </div>
-          <div className="text-xs text-gray-600">Valenza</div>
-        </div>
-        <div>
-          <div className="text-lg font-bold text-blue-600">
-            {Object.keys(data.significant_emotions).length}
-          </div>
-          <div className="text-xs text-gray-600">Significative</div>
-        </div>
-      </div>
-
       {/* Detailed Scores */}
       {showDetails && (
         <div className="text-xs text-gray-600 space-y-1">
