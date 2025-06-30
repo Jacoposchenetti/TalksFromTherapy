@@ -8,20 +8,20 @@ export default function Home() {
             TalksFromTherapy
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Trascrizione automatica e analisi intelligente delle sessioni terapeutiche
+            Automatic transcription and intelligent analysis of therapy sessions
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a 
               href="/register"
               className="inline-flex items-center justify-center bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg"
             >
-              Inizia Gratis
+              Get Started Free
             </a>
             <a 
               href="/login"
               className="inline-flex items-center justify-center border-2 border-gray-300 text-gray-700 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-gray-50 transition-colors"
             >
-              Accedi
+              Log In
             </a>
           </div>
         </div>
@@ -34,9 +34,9 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
               </svg>
             </div>
-            <h3 className="text-xl font-semibold mb-3">Trascrizione Automatica</h3>
+            <h3 className="text-xl font-semibold mb-3">Automatic Transcription</h3>
             <p className="text-gray-600">
-              Converti automaticamente le tue sessioni audio in testo accurato utilizzando l'intelligenza artificiale avanzata.
+              Automatically convert your audio sessions into accurate text using advanced artificial intelligence.
             </p>
           </div>
 
@@ -46,9 +46,9 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </div>
-            <h3 className="text-xl font-semibold mb-3">Analisi Intelligente</h3>
+            <h3 className="text-xl font-semibold mb-3">Intelligent Analysis</h3>
             <p className="text-gray-600">
-              Ottieni insights automatici su sentiment, emozioni e progressi terapeutici per migliorare il follow-up.
+              Get automatic insights on sentiment, emotions, and therapeutic progress to improve follow-up.
             </p>
           </div>
 
@@ -58,9 +58,9 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
-            <h3 className="text-xl font-semibold mb-3">Privacy e Sicurezza</h3>
+            <h3 className="text-xl font-semibold mb-3">Privacy & Security</h3>
             <p className="text-gray-600">
-              I tuoi dati sono protetti con crittografia end-to-end e conformità GDPR per la massima sicurezza.
+              Your data is protected with end-to-end encryption and GDPR compliance for maximum security.
             </p>
           </div>
         </div>
@@ -69,7 +69,7 @@ export default function Home() {
         <div className="bg-white rounded-2xl p-12 shadow-lg">
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">
-              Perché scegliere TalksFromTherapy?
+              Why choose TalksFromTherapy?
             </h2>
             <div className="grid md:grid-cols-2 gap-8 text-left">
               <div className="flex items-start gap-4">
@@ -79,8 +79,9 @@ export default function Home() {
                   </svg>
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-2">Risparmio di Tempo</h4>
-                  <p className="text-gray-600">Elimina ore di trascrizione manuale e concentrati sui tuoi pazienti.</p>
+                  <h4 className="font-semibold mb-2">Time Saving</h4>
+                  <p className="text-gray-600">Eliminate hours of manual transcription and focus on your patients.</p>
+                  <p className="text-gray-600">Eliminate hours of manual transcription and focus on your patients.</p>
                 </div>
               </div>
               
@@ -91,8 +92,9 @@ export default function Home() {
                   </svg>
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-2">Migliore Documentazione</h4>
-                  <p className="text-gray-600">Mantieni record accurati e dettagliati di ogni sessione terapeutica.</p>
+                  <h4 className="font-semibold mb-2">Better Documentation</h4>
+                  <p className="text-gray-600">Keep accurate and detailed records of every therapy session.</p>
+                  <p className="text-gray-600">Keep accurate and detailed records of every therapy session.</p>
                 </div>
               </div>
               
@@ -103,8 +105,9 @@ export default function Home() {
                   </svg>
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-2">Insights Clinici</h4>
-                  <p className="text-gray-600">Scopri pattern e progressi che potresti aver perso durante la sessione.</p>
+                  <h4 className="font-semibold mb-2">Clinical Insights</h4>
+                  <p className="text-gray-600">Discover patterns and progress you might have missed during the session.</p>
+                  <p className="text-gray-600">Discover patterns and progress you might have missed during the session.</p>
                 </div>
               </div>
               
@@ -115,8 +118,9 @@ export default function Home() {
                   </svg>
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-2">Facile da Usare</h4>
-                  <p className="text-gray-600">Interfaccia intuitiva progettata specificamente per i professionisti della salute mentale.</p>
+                  <h4 className="font-semibold mb-2">Easy to Use</h4>
+                  <p className="text-gray-600">Intuitive interface designed specifically for mental health professionals.</p>
+                  <p className="text-gray-600">Intuitive interface designed specifically for mental health professionals.</p>
                 </div>
               </div>
             </div>

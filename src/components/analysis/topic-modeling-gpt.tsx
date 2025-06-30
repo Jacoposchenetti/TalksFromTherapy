@@ -58,7 +58,7 @@ export default function TopicAnalysisComponent({
 
   const runTopicAnalysis = async () => {
     if (!combinedTranscript || combinedTranscript.trim().length === 0) {
-      setError("Nessuna trascrizione disponibile per l'analisi")
+      setError("No transcript available for analysis")
       return
     }
 
@@ -136,7 +136,7 @@ export default function TopicAnalysisComponent({
         })
 
         if (!response.ok) {
-          throw new Error(`Errore API: ${response.status} ${response.statusText}`)
+          throw new Error(`API Error: ${response.status} ${response.statusText}`)
         }
 
         const result = await response.json()
@@ -165,7 +165,7 @@ export default function TopicAnalysisComponent({
 
     } catch (error) {
       console.error('Errore durante l\'analisi:', error)
-      setError(error instanceof Error ? error.message : 'Errore sconosciuto durante l\'analisi')
+      setError(error instanceof Error ? error.message : 'Unknown error during analysis')
     } finally {
       setIsAnalyzing(false)
     }
@@ -532,12 +532,12 @@ Rispondi SOLO con JSON:
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Brain className="h-5 w-5" />
-            Analisi Topic GPT-3.5
+            GPT-3.5 Topic Analysis
           </h3>
           <p className="text-sm text-gray-600">
             {selectedSessions.length > 0 
-              ? `${selectedSessions.length} sessioni selezionate` 
-              : 'Nessuna sessione selezionata'}
+              ? `${selectedSessions.length} sessions selected` 
+              : 'No session selected'}
           </p>
         </div>
         
@@ -549,12 +549,12 @@ Rispondi SOLO con JSON:
           {isAnalyzing ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Analizzando...
+              Analyzing...
             </>
           ) : (
             <>
               <Brain className="h-4 w-4" />
-              Avvia Analisi Topic
+              Start Topic Analysis
             </>
           )}
         </Button>
@@ -565,7 +565,7 @@ Rispondi SOLO con JSON:
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-red-800">
               <AlertCircle className="h-4 w-4" />
-              <span className="font-medium">Errore:</span>
+              <span className="font-medium">Error:</span>
               <span>{error}</span>
             </div>
           </CardContent>
@@ -577,10 +577,10 @@ Rispondi SOLO con JSON:
           <CardContent className="flex flex-col items-center justify-center py-12">
             <MessageCircle className="h-12 w-12 text-gray-400 mb-4" />
             <h4 className="text-lg font-medium text-gray-900 mb-2">
-              Nessuna trascrizione selezionata
+              No transcript selected
             </h4>
             <p className="text-gray-600 text-center">
-              Seleziona una o più sessioni per avviare l'analisi dei topic.
+              Select one or more sessions to start topic analysis.
             </p>
           </CardContent>
         </Card>
@@ -589,15 +589,15 @@ Rispondi SOLO con JSON:
           {/* Informazioni sulla trascrizione */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Informazioni Trascrizione</CardTitle>
+              <CardTitle className="text-sm">Transcript Information</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="font-medium">Lunghezza:</span> {combinedTranscript.length} caratteri
+                  <span className="font-medium">Length:</span> {combinedTranscript.length} characters
                 </div>
                 <div>
-                  <span className="font-medium">Parole:</span> {combinedTranscript.split(' ').length} parole
+                  <span className="font-medium">Words:</span> {combinedTranscript.split(' ').length} words
                 </div>
               </div>
             </CardContent>
@@ -608,7 +608,7 @@ Rispondi SOLO con JSON:
               <div className="absolute top-4 left-4 z-10">
                 <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border shadow-sm">
                   <Brain className="h-4 w-4" />
-                  <span className="text-sm font-medium">Topic Identificati</span>
+                  <span className="text-sm font-medium">Identified Topics</span>
                   {analysisResult.text_segments && (
                     <Button
                       variant="outline"
@@ -619,12 +619,12 @@ Rispondi SOLO con JSON:
                       {showTextView ? (
                         <>
                           <EyeOff className="h-3 w-3 mr-1" />
-                          Nascondi
+                          Hide
                         </>
                       ) : (
                         <>
                           <Eye className="h-3 w-3 mr-1" />
-                          Nel Testo
+                          In Text
                         </>
                       )}
                     </Button>
@@ -667,7 +667,7 @@ Rispondi SOLO con JSON:
                         </div>
                         
                         <div>
-                          <p className="text-sm text-gray-600 mb-2">Parole chiave:</p>
+                          <p className="text-sm text-gray-600 mb-2">Keywords:</p>
                           <div className="flex flex-wrap gap-2">
                             {topic.keywords.map((keyword, keywordIndex) => (
                               <Badge 
@@ -686,7 +686,7 @@ Rispondi SOLO con JSON:
                 ) : (
                   <div className="max-h-96 overflow-y-auto pr-2">
                     <div className="mb-4">
-                      <h4 className="font-medium mb-2">Legenda Topic:</h4>
+                      <h4 className="font-medium mb-2">Topic Legend:</h4>
                       <div className="flex flex-wrap gap-2">
                         {analysisResult.topics.map((topic, index) => (
                           <Badge key={topic.topic_id} className={getTopicColor(topic.topic_id)}>
@@ -719,7 +719,7 @@ Rispondi SOLO con JSON:
                               className={`inline-block p-1 rounded ${getTopicBackgroundColor(segment.topic_id)} ${
                                 segment.topic_id ? 'border-l-2 border-gray-400' : ''
                               }`}
-                              title={segment.topic_id ? `${analysisResult.topics.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)` : 'Non classificato'}
+                              title={segment.topic_id ? `${analysisResult.topics.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)` : 'Unclassified'}
                             >
                               {segment.text}
                             </span>
@@ -727,7 +727,7 @@ Rispondi SOLO con JSON:
                         })
                       ) : (
                         <p className="text-gray-500 italic">
-                          Classificazione del testo in corso...
+                          Text classification in progress...
                         </p>
                       )}
                     </div>
