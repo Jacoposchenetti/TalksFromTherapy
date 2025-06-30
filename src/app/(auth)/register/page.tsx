@@ -30,23 +30,23 @@ export default function RegisterPage() {
 
   const validateForm = () => {
     if (!formData.name || !formData.email || !formData.password) {
-      setError("Tutti i campi obbligatori devono essere compilati")
+      setError("All required fields must be filled")
       return false
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError("Le password non corrispondono")
+      setError("Passwords do not match")
       return false
     }
 
     if (formData.password.length < 8) {
-      setError("La password deve essere di almeno 8 caratteri")
+      setError("Password must be at least 8 characters")
       return false
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(formData.email)) {
-      setError("Inserisci un indirizzo email valido")
+      setError("Please enter a valid email address")
       return false
     }
 
@@ -78,14 +78,14 @@ export default function RegisterPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || "Si è verificato un errore durante la registrazione")
+        setError(data.error || "An error occurred during registration")
         return
       }
 
       // Registrazione completata, reindirizza al login
       router.push("/login?message=Registrazione completata! Ora puoi accedere.")
     } catch (error) {
-      setError("Si è verificato un errore durante la registrazione")
+      setError("An error occurred during registration")
     } finally {
       setIsLoading(false)
     }
@@ -96,21 +96,21 @@ export default function RegisterPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">
-            Registrazione
+            Register
           </CardTitle>
           <CardDescription className="text-center">
-            Crea il tuo account per iniziare
+            Create your account to get started
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Nome completo *</Label>
+              <Label htmlFor="name">Full Name *</Label>
               <Input
                 id="name"
                 name="name"
                 type="text"
-                placeholder="Il tuo nome"
+                placeholder="Your name"
                 value={formData.name}
                 onChange={handleChange}
                 required
@@ -124,7 +124,7 @@ export default function RegisterPage() {
                 id="email"
                 name="email"
                 type="email"
-                placeholder="il-tuo-email@esempio.com"
+                placeholder="your-email@example.com"
                 value={formData.email}
                 onChange={handleChange}
                 required
@@ -133,12 +133,12 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="licenseNumber">Numero Ordine Professionale</Label>
+              <Label htmlFor="licenseNumber">Professional License Number</Label>
               <Input
                 id="licenseNumber"
                 name="licenseNumber"
                 type="text"
-                placeholder="Es: 12345 (opzionale)"
+                placeholder="E.g.: 12345 (optional)"
                 value={formData.licenseNumber}
                 onChange={handleChange}
                 disabled={isLoading}
@@ -151,7 +151,7 @@ export default function RegisterPage() {
                 id="password"
                 name="password"
                 type="password"
-                placeholder="Almeno 8 caratteri"
+                placeholder="At least 8 characters"
                 value={formData.password}
                 onChange={handleChange}
                 required
@@ -160,12 +160,12 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Conferma Password *</Label>
+              <Label htmlFor="confirmPassword">Confirm Password *</Label>
               <Input
                 id="confirmPassword"
                 name="confirmPassword"
                 type="password"
-                placeholder="Ripeti la password"
+                placeholder="Repeat the password"
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 required
@@ -184,17 +184,17 @@ export default function RegisterPage() {
               className="w-full" 
               disabled={isLoading}
             >
-              {isLoading ? "Registrazione in corso..." : "Registrati"}
+              {isLoading ? "Registering..." : "Register"}
             </Button>
           </form>
 
           <div className="mt-6 text-center text-sm">
-            <span className="text-gray-600">Hai già un account? </span>
+            <span className="text-gray-600">Already have an account? </span>
             <Link 
               href="/login" 
               className="font-medium text-primary hover:text-primary/80"
             >
-              Accedi qui
+              Log in here
             </Link>
           </div>
         </CardContent>
