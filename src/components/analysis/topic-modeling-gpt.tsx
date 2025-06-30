@@ -116,7 +116,7 @@ export default function TopicAnalysisComponent({
           }
         }
 
-        // Se abbiamo troppi topic, consolida quelli simili
+        // If there are too many topics, consolidate similar ones
         if (allTopics.length > 8) {
           console.log(`Consolidating ${allTopics.length} topics`)
           allTopics = await consolidateTopics(allTopics)
@@ -240,7 +240,7 @@ Rispondi SOLO con JSON:
       console.error('Topic consolidation failed:', error)
     }
 
-    // Fallback: prendi i primi 8 topic
+    // Fallback: take the first 8 topics
     console.log('Using fallback: taking first 8 topics')
     return topics.slice(0, 8)
   }
@@ -296,7 +296,7 @@ Rispondi SOLO con JSON:
         const patientContent = extractPatientContent(session.transcript)
         console.log(`📊 Sessione ${session.id}: ${session.transcript.length} → ${patientContent.length} caratteri`)
 
-        // Dividi il testo del paziente in frasi
+        // Split patient text into sentences
         const allSentences = patientContent
           .split(/[.!?]+/)
           .map(s => s.trim())
@@ -309,7 +309,7 @@ Rispondi SOLO con JSON:
           continue
         }
 
-        // Aggiungi un separatore tra le sessioni se non è la prima
+        // Add a separator between sessions if not the first
         if (i > 0) {
           allSegments.push({
             text: `\n--- ${session.title} ---\n`,
@@ -318,11 +318,11 @@ Rispondi SOLO con JSON:
           })
         }
 
-        // Classificazione sequenziale con contesto crescente
+        // Sequential classification with growing context
         const sessionSegments = await classifyWithContext(allSentences, topicList, session.id)
         allSegments.push(...sessionSegments)
 
-        // Pausa tra le sessioni per evitare rate limiting
+        // Pause between sessions to avoid rate limiting
         if (i < sessions.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 500))
         }
@@ -501,11 +501,11 @@ Rispondi SOLO con JSON:
         console.error(`Context classification failed for context size ${contextSize}:`, error)
       }
 
-      // Piccola pausa tra i tentativi
+      // Small pause between attempts
       await new Promise(resolve => setTimeout(resolve, 200))
     }
 
-    // Se tutti i tentativi falliscono, cerca di ereditare il topic dalla frase precedente se ha senso
+    // If all attempts fail, try to inherit the topic from the previous sentence if it makes sense
     const lastSegmentWithTopic = previousSegments.slice().reverse().find(seg => seg.topic_id !== null)
     
     if (lastSegmentWithTopic && previousSegments.length > 0) {
@@ -513,11 +513,11 @@ Rispondi SOLO con JSON:
       return {
         text: sentence,
         topic_id: lastSegmentWithTopic.topic_id,
-        confidence: 0.2 // Bassa confidence per topic ereditato
+        confidence: 0.2 // Low confidence for inherited topic
       }
     }
 
-    // Ultimo fallback: non classificato
+    // Last fallback: unclassified
     console.log(`No classification possible for sentence ${sentenceIndex + 1}`)
     return {
       text: sentence,

@@ -139,7 +139,7 @@ export default function PatientAnalysisPage() {
       } else {
         const errorText = await patientResponse.text()
         console.error('Patient API error:', errorText)
-        setError('Errore nel caricamento dei dati del paziente: ' + patientResponse.status)
+        setError('Error loading patient data: ' + patientResponse.status)
         return
       }
 
@@ -163,11 +163,11 @@ export default function PatientAnalysisPage() {
           fetchSessionNote(transcribedSessions[0].id)
         }
       } else {
-        setError('Errore nel caricamento delle sessioni')
+        setError('Error loading sessions')
       }
     } catch (error) {
       console.error("Error fetching patient data:", error)
-      setError('Errore di connessione')
+      setError('Connection error')
     } finally {
       setLoading(false)
     }
@@ -201,12 +201,12 @@ export default function PatientAnalysisPage() {
 
       if (response.ok) {
         setEditingNote(false)
-        alert("Nota salvata con successo!")
+        alert("Note saved successfully!")
       } else {
-        alert("Errore durante il salvataggio della nota")
+        alert("Error saving note")
       }    } catch (error) {
       console.error("Error saving note:", error)
-      alert("Errore durante il salvataggio della nota")
+      alert("Error saving note")
     } finally {
       setSavingNote(false)
     }
@@ -356,7 +356,7 @@ export default function PatientAnalysisPage() {
   }
   // Slide navigation
   const slides = [
-    { title: "Trascrizioni", icon: FileText },
+    { title: "Transcripts", icon: FileText },
     { 
       title: "Topic Modelling", 
       icon: BarChart3,
@@ -398,7 +398,7 @@ export default function PatientAnalysisPage() {
           <p className="text-gray-600 mt-2">{error}</p>
           <Button onClick={() => router.push("/patients")} className="mt-4">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Torna ai Pazienti
+            Back to Patients
           </Button>
         </div>
       </div>
@@ -412,7 +412,7 @@ export default function PatientAnalysisPage() {
           <h1 className="text-2xl font-bold text-red-600">Paziente non trovato</h1>
           <Button onClick={() => router.push("/patients")} className="mt-4">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Torna ai Pazienti
+            Back to Patients
           </Button>
         </div>
       </div>
@@ -431,14 +431,14 @@ export default function PatientAnalysisPage() {
                 onClick={() => router.push("/patients")}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Torna ai Pazienti
+                Back to Patients
               </Button>
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">
-                  Analisi - {patient.initials}
+                  Analysis - {patient.initials}
                 </h1>
                 <p className="text-gray-600">
-                  Analisi delle sessioni terapeutiche e trascrizioni
+                  Analysis of therapy sessions and transcriptions
                 </p>
               </div>
             </div>
@@ -453,11 +453,11 @@ export default function PatientAnalysisPage() {
             <CardContent className="flex flex-col items-center justify-center py-12">
               <FileText className="h-12 w-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Nessuna sessione trascritta
+                No transcribed sessions
               </h3>
               <p className="text-gray-600 text-center">
-                Non ci sono sessioni trascritte per questo paziente. 
-                Carica e trascrivi delle sessioni per iniziare l'analisi.
+                There are no transcribed sessions for this patient. 
+                Upload and transcribe sessions to start the analysis.
               </p>
             </CardContent>
           </Card>
@@ -470,7 +470,7 @@ export default function PatientAnalysisPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <FileText className="h-5 w-5" />
-                      Sessioni e Trascrizioni
+                      Sessions and Transcriptions
                     </CardTitle>
                     <div className="flex items-center gap-2 pt-2">
                       <input
@@ -481,7 +481,7 @@ export default function PatientAnalysisPage() {
                         className="rounded border-gray-300"
                       />
                       <label htmlFor="select-all" className="text-sm text-gray-600">
-                        Seleziona tutto
+                        Mark all
                       </label>
                     </div>
                   </CardHeader>
@@ -542,7 +542,7 @@ export default function PatientAnalysisPage() {
                               <Icon className="h-4 w-4" />
                               {slide.title}
                               {slide.hasCachedData && selectedSessions.size > 0 && (
-                                <Database className="h-3 w-3 text-green-600" title="Dati in cache disponibili" />
+                                <Database className="h-3 w-3 text-green-600" />
                               )}
                             </button>
                           )
@@ -588,8 +588,8 @@ export default function PatientAnalysisPage() {
                           <div className="mb-4">
                             <h3 className="text-lg font-semibold mb-3">
                               Trascrizioni - {selectedSessions.size > 0 ? 
-                                `${selectedSessions.size} sessioni selezionate` : 
-                                'Nessuna Sessione Selezionata'}
+                                `${selectedSessions.size} sessions selected` : 
+                                'No session selected'}
                             </h3>
                             
                             {/* Search Box */}
@@ -602,7 +602,7 @@ export default function PatientAnalysisPage() {
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                    placeholder="Cerca parole nelle trascrizioni..."
+                                    placeholder="Search words in transcripts..."
                                   />
                                   {searchTerm && (
                                     <button
@@ -615,7 +615,7 @@ export default function PatientAnalysisPage() {
                                 </div>
                                 {searchTerm && (
                                   <div className="mt-2 text-xs text-gray-500">
-                                    {countSearchOccurrences(searchTerm)} risultati trovati
+                                    {countSearchOccurrences(searchTerm)} results found
                                   </div>
                                 )}
                               </div>
@@ -637,7 +637,7 @@ export default function PatientAnalysisPage() {
                                       />
                                     ) : (
                                       <span className="text-gray-400 italic">
-                                        Trascrizione non disponibile (Status: {session.status})
+                                        Transcript not available (Status: {session.status})
                                       </span>
                                     )}
                                   </div>
@@ -645,7 +645,7 @@ export default function PatientAnalysisPage() {
                               ))
                             ) : (
                               <div className="h-full flex items-center justify-center text-gray-500">
-                                Seleziona una o più sessioni per visualizzare le trascrizioni
+                                Select one or more sessions to view the transcripts
                               </div>
                             )}
                           </div>
@@ -661,7 +661,7 @@ export default function PatientAnalysisPage() {
                               <div className="flex items-center gap-2">
                                 <BarChart3 className="h-4 w-4 text-gray-500" />
                                 <span className="text-sm text-gray-600">
-                                  Clicca "Analizza Topic" per eseguire nuove analisi
+                                  Click "Analyze Topics" to run new analyses
                                 </span>
                               </div>
                             </div>
@@ -674,7 +674,7 @@ export default function PatientAnalysisPage() {
                                 <div className="flex items-center gap-2">
                                   <Database className="h-4 w-4 text-green-600" />
                                   <span className="text-sm text-green-700 font-medium">
-                                    Analisi topic caricate dalla cache
+                                    Topic analysis loaded from cache
                                   </span>
                                 </div>
                                 <Button
@@ -690,7 +690,7 @@ export default function PatientAnalysisPage() {
                                   }}
                                   className="text-xs"
                                 >
-                                  Ricalcola
+                                  Recalculate
                                 </Button>
                               </div>
                             </div>
@@ -713,12 +713,6 @@ export default function PatientAnalysisPage() {
                                 console.log('✅ Analisi topic salvata nella cache')
                               }
                             }}
-                            cachedData={(() => {
-                              const topicData = hasAllTopicAnalyses ? getTopicData() : undefined
-                              console.log('🎯 Topic cached data being passed:', topicData)
-                              console.log('🎯 hasAllTopicAnalyses:', hasAllTopicAnalyses)
-                              return topicData
-                            })()}
                           />
                         </div>
                       )}                      {/* Slide 2: Sentiment Analysis */}
@@ -730,7 +724,7 @@ export default function PatientAnalysisPage() {
                               <div className="flex items-center gap-2">
                                 <Heart className="h-4 w-4 text-gray-500" />
                                 <span className="text-sm text-gray-600">
-                                  Clicca "Analizza Emozioni" per eseguire nuove analisi
+                                  Click "Analyze Emotions" to run new analyses
                                 </span>
                               </div>
                             </div>
@@ -743,7 +737,7 @@ export default function PatientAnalysisPage() {
                                 <div className="flex items-center gap-2">
                                   <Database className="h-4 w-4 text-green-600" />
                                   <span className="text-sm text-green-700 font-medium">
-                                    Analisi caricate dalla cache
+                                    Analysis loaded from cache
                                   </span>
                                 </div>
                                 <Button
@@ -760,7 +754,7 @@ export default function PatientAnalysisPage() {
                                   }}
                                   className="text-xs"
                                 >
-                                  Ricalcola
+                                  Recalculate
                                 </Button>
                               </div>
                             </div>
@@ -800,17 +794,17 @@ export default function PatientAnalysisPage() {
                           <div className="mb-2">
                             <h3 className="text-lg font-semibold flex items-center gap-2">
                               <Network className="h-5 w-5 text-blue-700" />
-                              Analisi Semantica (Semantic Frame)
+                              Semantic Analysis (Semantic Frame)
                             </h3>
                             <p className="text-gray-600 text-sm mt-1">
-                              Esplora il contesto cognitivo ed emotivo di una parola chiave nelle sessioni selezionate.<br/>
-                              Inserisci una parola e visualizza la sua rete semantica e il profilo emotivo associato.
+                              Explore the cognitive and emotional context of a keyword in the selected sessions.<br/>
+                              Enter a word and view its semantic network and associated emotional profile.
                             </p>
                             
                             {/* Descrizione metodologica */}
                             <div className="text-xs text-gray-500 mt-3 bg-blue-50 p-3 rounded-lg border border-blue-200">
                               <p>
-                                <strong>💡 Cos'è?</strong> La Semantic Frame Analysis permette di esplorare le associazioni cognitive ed emotive di una parola chiave nel testo, utile per analisi narrative, metafore, ruoli e insight clinici.
+                                <strong>💡 What is it?</strong> The Semantic Frame Analysis allows you to explore the cognitive and emotional associations of a keyword in the text, useful for narrative analysis, metaphors, roles, and clinical insights.
                               </p>
                             </div>
 
@@ -820,7 +814,7 @@ export default function PatientAnalysisPage() {
                                 <div className="flex items-center gap-2">
                                   <Database className="h-4 w-4 text-green-600" />
                                   <span className="text-sm text-green-700 font-medium">
-                                    Analisi semantic frame disponibili per: {Object.keys(analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames || {}).join(', ')}
+                                    Semantic frame analyses available for: {Object.keys(analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames || {}).join(', ')}
                                   </span>
                                 </div>
                               </div>
@@ -832,7 +826,7 @@ export default function PatientAnalysisPage() {
                             <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
                               <h4 className="text-md font-medium mb-3 flex items-center gap-2">
                                 <Database className="h-4 w-4 text-blue-600" />
-                                Analisi Passate
+                                Past Analyses
                               </h4>
                               <div className="flex gap-3 items-center">
                                 <select
@@ -847,10 +841,10 @@ export default function PatientAnalysisPage() {
                                   }}
                                   className="border rounded px-3 py-2 bg-white min-w-[200px] focus:ring-2 focus:ring-blue-400"
                                 >
-                                  <option value="">Seleziona un'analisi passata</option>
+                                  <option value="">Select a past analysis</option>
                                   {Object.keys(pastAnalyses).map(word => (
                                     <option key={word} value={word}>
-                                      {word} (analizzata in precedenza)
+                                      {word} (previously analyzed)
                                     </option>
                                   ))}
                                 </select>
@@ -869,7 +863,7 @@ export default function PatientAnalysisPage() {
                                 )}
                               </div>
                               <p className="text-xs text-gray-500 mt-2">
-                                Seleziona un'analisi precedente per visualizzarla nuovamente, o inserisci una nuova parola sotto.
+                                Select a previous analysis to view it again, or enter a new word below.
                               </p>
                             </div>
                           )}
@@ -881,7 +875,7 @@ export default function PatientAnalysisPage() {
                               value={targetWord}
                               onChange={(e) => setTargetWord(e.target.value)}
                               className="border rounded px-3 py-2 w-full md:w-64 focus:ring-2 focus:ring-blue-400"
-                              placeholder="Es: madre, lavoro, amore..."
+                              placeholder="E.g.: mother, work, love..."
                               disabled={semanticFrameLoading}
                               onKeyPress={(e) => {
                                 if (e.key === 'Enter' && !semanticFrameLoading) {
@@ -898,12 +892,12 @@ export default function PatientAnalysisPage() {
                               {semanticFrameLoading ? (
                                 <>
                                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                  Analizzando...
+                                  Analyzing...
                                 </>
                               ) : (
                                 <>
                                   <Network className="mr-2 h-4 w-4" />
-                                  Analizza Frame
+                                  Analyze Frame
                                 </>
                               )}
                             </Button>
@@ -912,7 +906,7 @@ export default function PatientAnalysisPage() {
                           {/* Error Message */}
                           {semanticFrameError && (
                             <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                              <strong>Errore:</strong> {semanticFrameError}
+                              <strong>Error:</strong> {semanticFrameError}
                             </div>
                           )}
 
@@ -925,12 +919,12 @@ export default function PatientAnalysisPage() {
                                   <div className="bg-white rounded-lg border p-4">
                                     <h4 className="font-semibold mb-3 flex items-center gap-2">
                                       <Network className="h-5 w-5 text-blue-600" />
-                                      Rete Semantica per "{semanticFrameResult.target_word}"
+                                      Semantic Network for "{semanticFrameResult.target_word}"
                                     </h4>
                                     <div className="flex justify-center mb-4">
                                       <img 
                                         src={`data:image/png;base64,${semanticFrameResult.visualization.frame_plot}`}
-                                        alt={`Rete semantica per ${semanticFrameResult.target_word}`}
+                                        alt={`Semantic network for ${semanticFrameResult.target_word}`}
                                         className="max-w-full h-auto rounded border"
                                         style={{ maxHeight: '500px' }}
                                       />
@@ -938,28 +932,28 @@ export default function PatientAnalysisPage() {
                                     
                                     {/* Legend */}
                                     <div className="bg-gray-50 rounded-lg p-3 mt-4">
-                                      <h5 className="text-sm font-medium text-gray-700 mb-2">📋 Legenda Colori</h5>
+                                      <h5 className="text-sm font-medium text-gray-700 mb-2">📋 Color Legend</h5>
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                                         <div className="flex items-center gap-2">
                                           <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                                          <span><strong>Rosso:</strong> Parole con valenza negativa</span>
+                                          <span><strong>Red:</strong> Words with negative valence</span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                           <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                                          <span><strong>Verde:</strong> Parole con valenza positiva</span>
+                                          <span><strong>Green:</strong> Words with positive valence</span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                           <div className="w-3 h-3 rounded-full bg-gray-500"></div>
-                                          <span><strong>Grigio:</strong> Parole neutrali</span>
+                                          <span><strong>Gray:</strong> Neutral words</span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                           <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                                          <span><strong>Viola:</strong> Connessioni contrastive</span>
+                                          <span><strong>Purple:</strong> Contrastive connections</span>
                                         </div>
                                       </div>
                                       <div className="mt-2 text-xs text-gray-600">
-                                        <p><strong>Dimensione font:</strong> Proporzionale alla centralità/importanza della parola nel testo</p>
-                                        <p><strong>Connessioni:</strong> Linee indicano relazioni sintattiche tra le parole</p>
+                                        <p><strong>Font size:</strong> Proportional to the centrality/importance of the word in the text</p>
+                                        <p><strong>Connections:</strong> Lines indicate syntactic relationships between words</p>
                                       </div>
                                     </div>
                                   </div>
@@ -971,12 +965,12 @@ export default function PatientAnalysisPage() {
                                   <div className="bg-white rounded-lg border p-4 mb-4">
                                     <h4 className="font-semibold mb-3 text-gray-700 flex items-center gap-2">
                                       <Network className="w-5 h-5 text-green-600" />
-                                      🎯 Rete Semantica Generata da EmoAtlas
+                                      🎯 Semantic Network Generated by EmoAtlas
                                     </h4>
                                     <div className="flex justify-center bg-gray-50 p-4 rounded-lg">
                                       <img 
                                         src={`data:image/png;base64,${semanticFrameResult.network_plot}`}
-                                        alt={`Rete semantica per la parola "${targetWord}"`}
+                                        alt={`Semantic network for the word "${targetWord}"`}
                                         className="max-w-full h-auto rounded-lg shadow-lg border-2 border-blue-200"
                                         style={{ maxHeight: '600px', maxWidth: '100%' }}
                                         onLoad={() => console.log('✅ Network plot image loaded successfully!')}
@@ -997,8 +991,8 @@ export default function PatientAnalysisPage() {
                                   <span className="block font-medium">Visualizzazione frame semantico</span>
                                   <span className="block text-sm mt-1">
                                     {selectedSessions.size === 0 
-                                      ? "Seleziona delle sessioni e inserisci una parola per iniziare l'analisi"
-                                      : "Inserisci una parola chiave e clicca 'Analizza Frame'"
+                                      ? "Select sessions and enter a word to start the analysis"
+                                      : "Enter a keyword and click 'Analyze Frame'"
                                     }
                                   </span>
                                 </span>
@@ -1016,10 +1010,10 @@ export default function PatientAnalysisPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="h-5 w-5" />
-                    Storico Sentiment - Andamento Emozioni nel Tempo
+                    Sentiment History - Emotion Trends Over Time
                   </CardTitle>
                   <CardDescription>
-                    Evoluzione delle 8 emozioni fondamentali attraverso le sessioni di terapia
+                    Evolution of the 8 core emotions throughout therapy sessions
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="min-h-[500px] max-h-none overflow-auto">
@@ -1035,12 +1029,12 @@ export default function PatientAnalysisPage() {
                       <div className="min-h-[500px] flex items-center justify-center text-gray-400">
                         <div className="text-center">
                           <TrendingUp className="h-16 w-16 mx-auto mb-4" />
-                          <p className="text-lg mb-2">Grafico Storico Sentiment</p>
+                          <p className="text-lg mb-2">Sentiment History Chart</p>
                           <p className="text-sm">
-                            Esegui prima l'analisi sentiment per visualizzare il grafico
+                            Run the sentiment analysis first to view the chart
                           </p>
                           <p className="text-xs mt-2 text-gray-500">
-                            Vai al tab "Sentiment Analysis" e analizza le sessioni selezionate
+                            Go to the "Sentiment Analysis" tab and analyze the selected sessions
                           </p>
                         </div>
                       </div>
@@ -1056,9 +1050,9 @@ export default function PatientAnalysisPage() {
                 <CardTitle className="text-lg flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-5 w-5" />
-                    Note Terapeutiche - {activeSessionForNote ? 
+                    Therapeutic Notes - {activeSessionForNote ? 
                       `${activeSessionForNote.title}` : 
-                      'Seleziona una sessione'}
+                      'Select a session'}
                   </div>
                   <div className="flex gap-2">
                     {!editingNote ? (
@@ -1069,7 +1063,7 @@ export default function PatientAnalysisPage() {
                         disabled={!activeSessionForNote}
                       >
                         <Edit className="h-3 w-3 mr-1" />
-                        Modifica
+                        Edit
                       </Button>
                     ) : (
                       <Button 
@@ -1078,7 +1072,7 @@ export default function PatientAnalysisPage() {
                         disabled={savingNote}
                       >
                         <Save className="h-3 w-3 mr-1" />
-                        Salva
+                        Save
                       </Button>
                     )}
                   </div>
@@ -1090,7 +1084,7 @@ export default function PatientAnalysisPage() {
                     <textarea
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
-                      placeholder="Qui il terapeuta può scrivere note personali e appunti liberamente"
+                      placeholder="Here the therapist can freely write personal notes and remarks"
                       className="w-full h-32 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                     <div className="flex gap-2 justify-end">
@@ -1102,7 +1096,7 @@ export default function PatientAnalysisPage() {
                           fetchSessionNote(activeSessionForNote?.id || "")
                         }}
                       >
-                        Annulla
+                        Cancel
                       </Button>
                       <Button 
                         size="sm" 
@@ -1110,7 +1104,7 @@ export default function PatientAnalysisPage() {
                         disabled={savingNote}
                       >
                         <Save className="h-3 w-3 mr-1" />
-                        {savingNote ? "Salvando..." : "Salva"}
+                        {savingNote ? "Saving..." : "Save"}
                       </Button>
                     </div>
                   </div>
@@ -1119,7 +1113,7 @@ export default function PatientAnalysisPage() {
                     <div className="h-32 overflow-y-auto bg-gray-50 p-3 rounded text-sm">
                       {note || (
                         <span className="text-gray-500 italic">
-                          Qui il terapeuta può scrivere note personali e appunti liberamente
+                          Here the therapist can freely write personal notes and remarks
                         </span>
                       )}
                     </div>
@@ -1130,8 +1124,7 @@ export default function PatientAnalysisPage() {
                         onClick={() => setEditingNote(true)}
                         disabled={!activeSessionForNote}
                       >
-                        <Edit className="h-3 w-3 mr-1" />
-                        Modifica
+                        Edit
                       </Button>
                     </div>
                   </div>                )}

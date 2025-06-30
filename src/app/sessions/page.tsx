@@ -237,19 +237,19 @@ function SessionsPageContent() {
     // Use selected patient or current patientId
     const targetPatientId = selectedPatientForUpload || patientId
     if (!targetPatientId) {
-      NotificationManager.showWarning("Seleziona un paziente prima di caricare il file audio")
+      NotificationManager.showWarning("Seleziona un patient before uploading audio file")
       event.target.value = ""
       return
     }    setUploading(true)
     
-    // Trova il nome del paziente per il titolo
+    // Trova il nome del patient for the title
     const selectedPatient = patients.find(p => p.id === targetPatientId)
-    const patientName = selectedPatient?.initials || "Paziente"
+    const patientName = selectedPatient?.initials || "Patient"
     
     const formData = new FormData()
     formData.append("audio", file)
     formData.append("patientId", targetPatientId)
-    formData.append("title", `Sessione ${patientName} - ${new Date().toLocaleDateString()}`)
+    formData.append("title", `Session - ${patientName} - ${new Date().toLocaleDateString()}`)
 
     try {
       const response = await fetch("/api/sessions", {
@@ -260,7 +260,7 @@ function SessionsPageContent() {
       if (response.ok) {
         fetchSessions()
         event.target.value = ""
-        NotificationManager.showSuccess("File audio caricato con successo!")
+        NotificationManager.showSuccess("File audio uploaded successfully!")
       } else {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error || "Errore durante il caricamento del file audio"
@@ -300,7 +300,7 @@ function SessionsPageContent() {
     // Use selected patient or current patientId
     const targetPatientId = selectedPatientForUpload || patientId
     if (!targetPatientId) {
-      NotificationManager.showWarning("Seleziona un paziente prima di caricare il file di testo")
+      NotificationManager.showWarning("Seleziona un patient before uploading text file")
       event.target.value = ""
       return
     }
@@ -314,9 +314,9 @@ function SessionsPageContent() {
       if (!parsedDocument.text || parsedDocument.text.trim().length === 0) {
         throw new Error("Il documento sembra essere vuoto o non è stato possibile estrarre il testo")      }
       
-      // Trova il nome del paziente per il titolo
+      // Trova il nome del patient for the title
       const selectedPatient = patients.find(p => p.id === targetPatientId)
-      const patientName = selectedPatient?.initials || "Paziente"
+      const patientName = selectedPatient?.initials || "Patient"
       
       // Crea una sessione con il testo già trascritto
       const response = await fetch("/api/sessions", {
@@ -326,7 +326,7 @@ function SessionsPageContent() {
         },
         body: JSON.stringify({
           patientId: targetPatientId,
-          title: `Sessione ${patientName} - ${new Date().toLocaleDateString()} (${parsedDocument.metadata?.format?.toUpperCase()})`,
+          title: `Session - ${patientName} - ${new Date().toLocaleDateString()} (${parsedDocument.metadata?.format?.toUpperCase()})`,
           transcript: parsedDocument.text,
           status: "TRANSCRIBED",
           metadata: parsedDocument.metadata
@@ -339,10 +339,10 @@ function SessionsPageContent() {
         
         const wordCount = parsedDocument.metadata?.wordCount || 0
         const pages = parsedDocument.metadata?.pages
-        let successMessage = "File di testo caricato con successo!"
+        let successMessage = "File di testo uploaded successfully!"
         if (wordCount > 0) {
-          successMessage += ` (${wordCount} parole`
-          if (pages) successMessage += `, ${pages} pagine`
+          successMessage += ` (${wordCount} words`
+          if (pages) successMessage += `, ${pages} pages`
           successMessage += ")"
         }
         
@@ -363,32 +363,32 @@ function SessionsPageContent() {
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       UPLOADED: { 
-        label: "Caricato", 
+        label: "Uploaded", 
         className: "bg-gray-100 text-gray-800",
         icon: "📁"
       },
       TRANSCRIBING: { 
-        label: "Trascrivendo", 
+        label: "Transcribing", 
         className: "bg-blue-100 text-blue-800",
         icon: "⏳"
       },
       TRANSCRIBED: { 
-        label: "Trascritto", 
+        label: "Transcribed", 
         className: "bg-green-100 text-green-800",
         icon: "✅"
       },
       ANALYZING: { 
-        label: "Analizzando", 
+        label: "Analyzing", 
         className: "bg-yellow-100 text-yellow-800",
         icon: "🔍"
       },
       ANALYZED: { 
-        label: "Analizzato", 
+        label: "Analyzed", 
         className: "bg-green-100 text-green-800",
         icon: "📊"
       },
       ERROR: { 
-        label: "Errore", 
+        label: "Error", 
         className: "bg-red-100 text-red-800",
         icon: "❌"
       },
@@ -427,11 +427,11 @@ function SessionsPageContent() {
       }
       
       if (metadata.wordCount) {
-        parts.push(`${metadata.wordCount} parole`)
+        parts.push(`${metadata.wordCount} words`)
       }
       
       if (metadata.pages) {
-        parts.push(`${metadata.pages} pagine`)
+        parts.push(`${metadata.pages} pages`)
       }
       
       return parts.join(' • ')
@@ -463,7 +463,7 @@ function SessionsPageContent() {
         
         // Se la trascrizione è completata immediatamente, mostra un messaggio
         if (result.status === "TRANSCRIBED") {
-          NotificationManager.showSuccess("Trascrizione completata con successo!")
+          NotificationManager.showSuccess("Trascrizione completed successfully!")
         }
       } else {
         const error = await response.json()
@@ -578,7 +578,7 @@ function SessionsPageContent() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
       
-      NotificationManager.showSuccess(`Trascrizione esportata in ${format.toUpperCase()} con successo!`)
+      NotificationManager.showSuccess(`Trascrizione esportata in ${format.toUpperCase()} with success!`)
     } catch (error) {
       console.error("Errore export trascrizione:", error)
       NotificationManager.showError(`Errore durante l'export della trascrizione in ${format.toUpperCase()}: ${(error as Error).message}`)
@@ -834,27 +834,26 @@ function SessionsPageContent() {
             onClick={() => router.push("/patients")}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Torna ai Pazienti
+            Back to Patients
           </Button>
         )}        <div>
           <h1 className="text-3xl font-bold">
-            {(() => {              // Se stiamo ancora caricando, mostra solo "Sessioni"
+            {(() => {
               if (loading) {
-                return "Sessioni"
+                return "Sessions"
               }
-              
               if (patient && patient.initials) {
-                return `Sessioni - ${patient.initials}`
+                return `Sessions - ${patient.initials}`
               } else if (patientId && patients.length > 0) {
                 const foundPatient = patients.find(p => p.id === patientId)
-                return foundPatient && foundPatient.initials ? `Sessioni - ${foundPatient.initials}` : "Sessioni"
+                return foundPatient && foundPatient.initials ? `Sessions - ${foundPatient.initials}` : "Sessions"
               } else {
-                return "Sessioni"
+                return "Sessions"
               }
             })()}
           </h1>
           <p className="text-muted-foreground">
-            Gestisci le sessioni terapeutiche e le trascrizioni
+            Manage therapy sessions and transcriptions
           </p>
         </div>
       </div>      {/* Upload card - always visible */}
@@ -862,9 +861,9 @@ function SessionsPageContent() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Carica Nuova Sessione
+            Upload New Session
           </CardTitle>          <CardDescription>
-            Carica un file audio per iniziare la trascrizione automatica o un file di testo già trascritto
+            Upload an audio file to start automatic transcription or a pre-transcribed text file
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -873,7 +872,7 @@ function SessionsPageContent() {
             {!patientId && (
               <div>
                 <label htmlFor="patient-select" className="block text-sm font-medium text-gray-700 mb-2">
-                  Seleziona Paziente
+                  Select Patient
                 </label>                <select
                   id="patient-select"
                   value={selectedPatientForUpload}
@@ -881,7 +880,7 @@ function SessionsPageContent() {
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   disabled={uploading}
                 >
-                  <option value="">-- Seleziona un paziente --</option>
+                  <option value="">-- Select a patient --</option>
                   {patients && patients.length > 0 ? (
                     patients.map((patient) => (
                       <option key={patient.id} value={patient.id}>
@@ -889,7 +888,7 @@ function SessionsPageContent() {
                       </option>
                     ))
                   ) : (
-                    <option disabled>Caricamento pazienti...</option>
+                    <option disabled>Loading patients...</option>
                   )}
                 </select>
               </div>
@@ -898,7 +897,7 @@ function SessionsPageContent() {
             <div className="space-y-4">              {/* Audio file input */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Carica File Audio
+                  Upload Audio File
                 </label>
                 <div className="flex items-center gap-4">
                   <input
@@ -911,19 +910,19 @@ function SessionsPageContent() {
                   {uploading && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                      Caricamento audio...
+                      Uploading audio...
                     </div>
                   )}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Formati supportati: MP3, WAV, M4A, OGG • Dimensione massima: 50MB
+                  Supported formats: MP3, WAV, M4A, OGG • Max size: 50MB
                 </p>
               </div>
 
               {/* Text file input */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Carica File di Testo
+                  Upload Text File
                 </label>
                 <div className="flex items-center gap-4">
                   <input
@@ -936,19 +935,19 @@ function SessionsPageContent() {
                   {uploadingText && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                      Elaborazione documento...
+                      Processing document...
                     </div>
                   )}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Formati supportati: {DocumentParser.getSupportedFormats().map(f => f.toUpperCase()).join(', ')} • Dimensione massima: 10MB
+                  Supported formats: {DocumentParser.getSupportedFormats().map(f => f.toUpperCase()).join(', ')} • Max size: 10MB
                 </p>
               </div>
             </div>
               {/* Helper text */}
             {!patientId && !selectedPatientForUpload && (
               <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                ⚠️ Seleziona un paziente prima di caricare file audio o di testo
+                ⚠️ Select a patient before uploading audio or text files
               </p>
             )}
           </div>
@@ -958,13 +957,13 @@ function SessionsPageContent() {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Nessuna sessione trovata</h3>
+              <h3 className="text-lg font-semibold mb-2">No sessions found</h3>
               <p className="text-muted-foreground text-center">
                 {patientId 
-                  ? "Carica il primo file audio per iniziare"
+                  ? "Upload the first audio file to get started"
                   : selectedPatientForUpload 
-                    ? "Questo paziente non ha ancora sessioni. Carica il primo file audio per iniziare."
-                    : "Seleziona un paziente per visualizzare le sue sessioni"
+                    ? "This patient has no sessions yet. Upload the first audio file to get started."
+                    : "Select a patient to view their sessions"
                 }
               </p>
             </CardContent>
@@ -1004,7 +1003,7 @@ function SessionsPageContent() {
                         <span 
                           className="truncate cursor-pointer hover:text-blue-600 transition-colors"
                           onClick={() => handleTitleClick(session.id, session.title)}
-                          title="Clicca per modificare il titolo"
+                          title="Click to edit title"
                         >
                           {session.title}
                         </span>
@@ -1053,7 +1052,7 @@ function SessionsPageContent() {
                         onClick={() => handleStartTranscription(session.id)}
                       >
                         <FileText className="h-4 w-4 mr-1" />
-                        Avvia Trascrizione
+                        Start Transcription
                       </Button>
                     )}
                     {session.status === "TRANSCRIBING" && (
@@ -1063,7 +1062,7 @@ function SessionsPageContent() {
                         disabled
                       >
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-1"></div>
-                        Trascrivendo...
+                        Transcribing...
                       </Button>
                     )}
                     {session.status === "ERROR" && (
@@ -1073,13 +1072,13 @@ function SessionsPageContent() {
                         onClick={() => handleStartTranscription(session.id)}
                       >
                         <FileText className="h-4 w-4 mr-1" />
-                        Riprova Trascrizione
+                        Retry Transcription
                       </Button>
                     )}                    {session.transcript && session.status === "TRANSCRIBED" && (
                       <>
                         <Button variant="outline" size="sm">
                           <FileText className="h-4 w-4 mr-1" />
-                          Trascrizione
+                          Transcription
                         </Button>
                         <Button 
                           variant="outline" 
@@ -1091,12 +1090,12 @@ function SessionsPageContent() {
                           {diarizingSessionId === session.id ? (
                             <>
                               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-1"></div>
-                              Diarizzando...
+                              Diarizing...
                             </>
                           ) : (
                             <>
                               <Users className="h-4 w-4 mr-1" />
-                              Diarizza
+                              Diarize
                             </>
                           )}
                         </Button>
@@ -1199,7 +1198,7 @@ function SessionsPageContent() {
                         // Modalità visualizzazione
                         <div 
                           className="cursor-pointer hover:bg-gray-50 rounded p-2 -m-2 transition-colors group"                          onClick={() => handleTranscriptClick(session.id, session.transcript || "")}
-                          title="Clicca per modificare la trascrizione"
+                          title="Click to edit transcription"
                         >
                           <p className={`text-sm whitespace-pre-wrap break-words w-full ${
                             expandedSessions.has(session.id) ? '' : 'line-clamp-3'
@@ -1207,7 +1206,7 @@ function SessionsPageContent() {
                             {session.transcript}
                           </p>
                           <div className="opacity-0 group-hover:opacity-100 transition-opacity mt-2">
-                            <span className="text-xs text-gray-500 italic">✏️ Clicca per modificare</span>
+                            <span className="text-xs text-gray-500 italic">✏️ Click to edit</span>
                           </div>
                         </div>
                       )}
@@ -1229,12 +1228,12 @@ function SessionsPageContent() {
                           {expandedSessions.has(session.id) ? (
                             <>
                               <ChevronUp className="h-3 w-3" />
-                              Mostra meno
+                              Show less
                             </>
                           ) : (
                             <>
                               <ChevronDown className="h-3 w-3" />
-                              Leggi tutto
+                              Read more
                             </>
                           )}
                         </button>

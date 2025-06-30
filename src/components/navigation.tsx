@@ -28,8 +28,8 @@ export function Navigation() {
   }
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Pazienti", href: "/patients", icon: Users },
-    { name: "Sessioni", href: "/sessions", icon: FileAudio },
+    { name: "Patients", href: "/patients", icon: Users },
+    { name: "Sessions", href: "/sessions", icon: FileAudio },
   ]
 
   const handleLogout = async () => {
@@ -69,7 +69,7 @@ export function Navigation() {
           <div className="hidden sm:ml-6 sm:flex sm:items-center">
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-700">
-                Ciao, {session.user?.name}
+                Hi, {session.user?.name}
               </span>
               <Button
                 variant="outline"
@@ -78,7 +78,7 @@ export function Navigation() {
                 className="inline-flex items-center"
               >
                 <LogOut className="h-4 w-4 mr-2" />
-                Esci
+                Log Out
               </Button>
             </div>
           </div>
@@ -142,7 +142,7 @@ export function Navigation() {
                   className="inline-flex items-center"
                 >
                   <LogOut className="h-4 w-4 mr-2" />
-                  Esci
+                  Log Out
                 </Button>
               </div>
             </div>

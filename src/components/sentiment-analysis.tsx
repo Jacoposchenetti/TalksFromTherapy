@@ -339,7 +339,6 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
                       <CardContent className="p-3">
                         <EmotionVisualizer 
                           data={transformedData}
-                          title={sessionAnalysis.session_title}
                           showDetails={false}
                           flowerPlot={sessionAnalysis.flower_plot}
                         />
@@ -351,16 +350,6 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
             </div>
           </div>
         )}
-
-        {/* Statistics */}
-        <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded">
-          <div><strong>Sessioni processate:</strong> {analysis.total_sessions}</div>
-          <div><strong>Parole totali analizzate:</strong> {
-            analysis.combined_analysis?.analysis.text_length || 
-            analysis.individual_sessions.reduce((sum, s) => sum + s.analysis.text_length, 0)
-          }</div>
-          <div><strong>Metodo:</strong> EmoAtlas con Z-score statistico</div>
-        </div>
       </div>
     )
   }

@@ -89,7 +89,7 @@ export default function DashboardPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="text-gray-600">Caricamento sessione...</p>
+          <p className="text-gray-600">Loading session...</p>
         </div>
       </div>
     )
@@ -99,10 +99,10 @@ export default function DashboardPage() {
   if (error) {    return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Errore</h1>
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
           <p className="text-gray-600 mb-4">{error}</p>
           <Button onClick={() => window.location.reload()}>
-            Ricarica Pagina
+            Reload Page
           </Button>
         </div>
       </div>
@@ -119,44 +119,44 @@ export default function DashboardPage() {
         <div className="mb-8">
           <div className="flex items-center justify-between">            <div>
               <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-              <p className="text-gray-600">Benvenuto, {session.user?.name}</p>
+              <p className="text-gray-600">Welcome, {session.user?.name}</p>
             </div>
           </div>
         </div>        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push("/patients")}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pazienti</CardTitle>
+              <CardTitle className="text-sm font-medium">Patients</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>            <CardContent>
               <div className="text-2xl font-bold">{stats.patientsCount}</div>
               <p className="text-xs text-muted-foreground">
-                {stats.patientsCount === 0 ? "Nessun paziente registrato" : "Pazienti registrati"}
+                {stats.patientsCount === 0 ? "No patients registered" : "Registered patients"}
               </p>
             </CardContent>
           </Card>
 
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push("/sessions")}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Sessioni</CardTitle>
+              <CardTitle className="text-sm font-medium">Sessions</CardTitle>
               <FileAudio className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.sessionsCount}</div>
               <p className="text-xs text-muted-foreground">
-                {stats.sessionsCount === 0 ? "Nessuna sessione caricata" : "Sessioni registrate"}
+                {stats.sessionsCount === 0 ? "No sessions uploaded" : "Registered sessions"}
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Trascrizioni</CardTitle>
+              <CardTitle className="text-sm font-medium">Transcriptions</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.transcriptionsCount}</div>
               <p className="text-xs text-muted-foreground">
-                {stats.transcriptionsCount === 0 ? "In attesa di trascrizioni" : "Trascrizioni completate"}
+                {stats.transcriptionsCount === 0 ? "Awaiting transcriptions" : "Completed transcriptions"}
               </p>
             </CardContent>
           </Card>
@@ -167,10 +167,10 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Plus className="h-5 w-5" />
-                Azioni Rapide
+                Quick Actions
               </CardTitle>
               <CardDescription>
-                Accedi rapidamente alle funzioni principali
+                Quickly access main features
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -180,7 +180,7 @@ export default function DashboardPage() {
                 variant="outline"
               >
                 <Users className="mr-2 h-4 w-4" />
-                Gestisci Pazienti
+                Manage Patients
               </Button>
               <Button 
                 onClick={() => router.push("/sessions")} 
@@ -188,7 +188,7 @@ export default function DashboardPage() {
                 variant="outline"
               >
                 <FileAudio className="mr-2 h-4 w-4" />
-                Visualizza Sessioni
+                View Sessions
               </Button>
               <Button 
                 className="w-full justify-start"
@@ -196,24 +196,24 @@ export default function DashboardPage() {
                 disabled
               >
                 <BarChart3 className="mr-2 h-4 w-4" />
-                Report e Analisi (Presto)
+                Reports & Analysis (Coming Soon)
               </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Informazioni Account</CardTitle>
+              <CardTitle>Account Information</CardTitle>
               <CardDescription>
-                Dettagli del tuo account TalksFromTherapy
+                Your TalksFromTherapy account details
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <p><strong>Nome:</strong> {session.user?.name}</p>
+                <p><strong>Name:</strong> {session.user?.name}</p>
                 <p><strong>Email:</strong> {session.user?.email}</p>
                 <p className="text-xs text-muted-foreground mt-4">
-                  Account attivo dal {new Date().toLocaleDateString()}
+                  Account active since {new Date().toLocaleDateString()}
                 </p>
               </div>
             </CardContent>
