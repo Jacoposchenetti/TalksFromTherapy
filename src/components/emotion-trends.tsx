@@ -53,17 +53,17 @@ const EMOTION_COLORS = {
 }
 
 const EMOTION_LABELS = {
-  joy: 'Gioia',
-  trust: 'Fiducia',
-  fear: 'Paura', 
-  surprise: 'Sorpresa',
-  sadness: 'Tristezza',
-  disgust: 'Disgusto',
-  anger: 'Rabbia',
-  anticipation: 'Anticipazione',
-  emotional_valence: 'Valenza Emotiva',
-  positive_score: 'Punteggio Positivo',
-  negative_score: 'Punteggio Negativo'
+  joy: 'Joy',
+  trust: 'Trust',
+  fear: 'Fear',
+  surprise: 'Surprise',
+  sadness: 'Sadness',
+  disgust: 'Disgust',
+  anger: 'Anger',
+  anticipation: 'Anticipation',
+  emotional_valence: 'Emotional Valence',
+  positive_score: 'Positive Score',
+  negative_score: 'Negative Score'
 }
 
 export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
@@ -78,13 +78,13 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg font-semibold">
-            📈 Storico Sentiment - Andamento Emozioni nel Tempo
+            📈 Sentiment History - Emotion Trends Over Time
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center text-gray-500 py-8">
-            <p className="text-lg mb-2">Nessun dato disponibile</p>
-            <p className="text-sm">Seleziona più sessioni per visualizzare l'andamento nel tempo</p>
+            <p className="text-lg mb-2">No data available</p>
+            <p className="text-sm">Select more sessions to view the trend over time</p>
           </div>
         </CardContent>
       </Card>
@@ -98,21 +98,21 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg font-semibold">
-            📈 Storico Sentiment - Andamento Emozioni nel Tempo
+            📈 Sentiment History - Emotion Trends Over Time
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center text-gray-500 py-8">
-            <p className="text-lg mb-2">📊 Sessione Singola Analizzata</p>
+            <p className="text-lg mb-2">📊 Single Session Analyzed</p>
             <p className="text-sm mb-4">
-              Hai analizzato 1 sessione: <strong>{analysisData.individual_sessions[0].session_title}</strong>
+              You analyzed 1 session: <strong>{analysisData.individual_sessions[0].session_title}</strong>
             </p>
             <p className="text-sm">
-              Per visualizzare l'andamento nel tempo, seleziona e analizza almeno 2 sessioni
+              To view the trend over time, select and analyze at least 2 sessions
             </p>
             <div className="mt-4 p-4 bg-blue-50 rounded-lg">
               <p className="text-xs text-blue-700">
-                💡 <strong>Suggerimento:</strong> Torna al tab "Sentiment Analysis", seleziona più sessioni con i checkbox e clicca "Analizza Sentiment"
+                💡 <strong>Tip:</strong> Go back to the "Sentiment Analysis" tab, select multiple sessions with the checkboxes and click "Analyze Sentiment"
               </p>
             </div>
           </div>
@@ -160,16 +160,17 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
       const data = payload[0].payload
       return (
         <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-          <p className="font-semibold mb-2">{`Sessione ${label}: ${data.sessionTitle}`}</p>              {payload.map((entry: any, index: number) => (
-                <p key={index} style={{ color: entry.color }} className="text-sm">
-                  {`${EMOTION_LABELS[entry.dataKey as keyof typeof EMOTION_LABELS]}: ${entry.value.toFixed(2)}`}
-                  {entry.dataKey !== 'emotional_valence' && entry.dataKey !== 'positive_score' && entry.dataKey !== 'negative_score' && (
-                    <span className="text-xs ml-1">
-                      {Math.abs(entry.value) > 1.96 ? ' (🔴 significativo)' : ' (non signif.)'}
-                    </span>
-                  )}
-                </p>
-              ))}
+          <p className="font-semibold mb-2">{`Session ${label}: ${data.sessionTitle}`}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={index} style={{ color: entry.color }} className="text-sm">
+              {`${EMOTION_LABELS[entry.dataKey as keyof typeof EMOTION_LABELS]}: ${entry.value.toFixed(2)}`}
+              {entry.dataKey !== 'emotional_valence' && entry.dataKey !== 'positive_score' && entry.dataKey !== 'negative_score' && (
+                <span className="text-xs ml-1">
+                  {Math.abs(entry.value) > 1.96 ? ' (🔴 significant)' : ' (not signif.)'}
+                </span>
+              )}
+            </p>
+          ))}
         </div>
       )
     }
@@ -179,13 +180,13 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
     <Card className="w-full">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">
-          📈 Storico Sentiment - Andamento Emozioni nel Tempo
+          📈 Sentiment History - Emotion Trends Over Time
         </CardTitle>
         <p className="text-sm text-gray-600">
-          Evoluzione delle emozioni attraverso {trendData.length} sessioni analizzate
+          Evolution of emotions across {trendData.length} analyzed sessions
           {trendData.length < 3 && (
             <span className="ml-2 text-amber-600">
-              (seleziona più sessioni per un trend più significativo)
+              (select more sessions for a more meaningful trend)
             </span>
           )}
         </p>
@@ -193,14 +194,14 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
       <CardContent className="p-4">
         <div className="space-y-8 w-full overflow-hidden">          {/* Grafico Emozioni Principali */}
           <div className="w-full">
-            <h4 className="text-md font-medium mb-3">🎭 Emozioni Primarie (Z-scores)</h4>            <div className="w-full overflow-hidden">
+            <h4 className="text-md font-medium mb-3">🎭 Primary Emotions (Z-scores)</h4>            <div className="w-full overflow-hidden">
               <ResponsiveContainer width="100%" height={350}>
                 <LineChart data={trendData} margin={{ top: 20, right: 40, left: 40, bottom: 80 }}>                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis 
                   dataKey="sessionIndex" 
-                  label={{ value: 'Sessione', position: 'insideBottom', offset: -5 }}
+                  label={{ value: 'Session', position: 'insideBottom', offset: -5 }}
                   stroke="#666"
-                  tickFormatter={(value) => `S${value}`}
+                  tickFormatter={(value) => `Session ${value}`}
                   height={60}
                 />
                 <YAxis 
@@ -220,7 +221,7 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                   dataKey="joy" 
                   stroke={EMOTION_COLORS.joy} 
                   strokeWidth={2}
-                  name="Gioia"
+                  name="Joy"
                   dot={{ fill: EMOTION_COLORS.joy, strokeWidth: 2, r: 4 }}
                 />
                 <Line 
@@ -228,7 +229,7 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                   dataKey="trust" 
                   stroke={EMOTION_COLORS.trust} 
                   strokeWidth={2}
-                  name="Fiducia"
+                  name="Trust"
                   dot={{ fill: EMOTION_COLORS.trust, strokeWidth: 2, r: 4 }}
                 />
                 <Line 
@@ -236,7 +237,7 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                   dataKey="anticipation" 
                   stroke={EMOTION_COLORS.anticipation} 
                   strokeWidth={2}
-                  name="Anticipazione"
+                  name="Anticipation"
                   dot={{ fill: EMOTION_COLORS.anticipation, strokeWidth: 2, r: 4 }}
                 />
                 
@@ -246,7 +247,7 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                   dataKey="sadness" 
                   stroke={EMOTION_COLORS.sadness} 
                   strokeWidth={2}
-                  name="Tristezza"
+                  name="Sadness"
                   dot={{ fill: EMOTION_COLORS.sadness, strokeWidth: 2, r: 4 }}
                 />
                 <Line 
@@ -254,7 +255,7 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                   dataKey="fear" 
                   stroke={EMOTION_COLORS.fear} 
                   strokeWidth={2}
-                  name="Paura"
+                  name="Fear"
                   dot={{ fill: EMOTION_COLORS.fear, strokeWidth: 2, r: 4 }}
                 />
                 <Line 
@@ -262,27 +263,44 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                   dataKey="anger" 
                   stroke={EMOTION_COLORS.anger} 
                   strokeWidth={2}
-                  name="Rabbia"
+                  name="Anger"
                   dot={{ fill: EMOTION_COLORS.anger, strokeWidth: 2, r: 4 }}
-                />              </LineChart>
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="disgust" 
+                  stroke={EMOTION_COLORS.disgust} 
+                  strokeWidth={2}
+                  name="Disgust"
+                  dot={{ fill: EMOTION_COLORS.disgust, strokeWidth: 2, r: 4 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="surprise" 
+                  stroke={EMOTION_COLORS.surprise} 
+                  strokeWidth={2}
+                  name="Surprise"
+                  dot={{ fill: EMOTION_COLORS.surprise, strokeWidth: 2, r: 4 }}
+                />
+              </LineChart>
             </ResponsiveContainer>
             </div>
           </div>
 
           {/* Grafico Valenza Emotiva */}
           <div className="w-full">
-            <h4 className="text-md font-medium mb-3">⚖️ Valenza Emotiva e Punteggi</h4>            <div className="w-full overflow-hidden">
+            <h4 className="text-md font-medium mb-3">⚖️ Emotional Valence and Scores</h4>            <div className="w-full overflow-hidden">
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={trendData} margin={{ top: 20, right: 40, left: 40, bottom: 80 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />                <XAxis 
                   dataKey="sessionIndex" 
-                  label={{ value: 'Sessione', position: 'insideBottom', offset: -5 }}
+                  label={{ value: 'Session', position: 'insideBottom', offset: -5 }}
                   stroke="#666"
-                  tickFormatter={(value) => `S${value}`}
+                  tickFormatter={(value) => `Session ${value}`}
                   height={60}
                 />
                 <YAxis 
-                  label={{ value: 'Punteggio', angle: -90, position: 'insideLeft' }}
+                  label={{ value: 'Score', angle: -90, position: 'insideLeft' }}
                   stroke="#666"
                 />
                 <Tooltip content={<CustomTooltip />} />
@@ -295,7 +313,7 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                   dataKey="emotional_valence" 
                   stroke={EMOTION_COLORS.emotional_valence} 
                   strokeWidth={3}
-                  name="Valenza Emotiva"
+                  name="Emotional Valence"
                   dot={{ fill: EMOTION_COLORS.emotional_valence, strokeWidth: 2, r: 5 }}
                 />
                 <Line 
@@ -303,7 +321,7 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                   dataKey="positive_score" 
                   stroke={EMOTION_COLORS.positive_score} 
                   strokeWidth={2}
-                  name="Punteggio Positivo"
+                  name="Positive Score"
                   dot={{ fill: EMOTION_COLORS.positive_score, strokeWidth: 2, r: 4 }}
                 />
                 <Line 
@@ -311,42 +329,42 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                   dataKey="negative_score" 
                   stroke={EMOTION_COLORS.negative_score} 
                   strokeWidth={2}
-                  name="Punteggio Negativo"
+                  name="Negative Score"
                   dot={{ fill: EMOTION_COLORS.negative_score, strokeWidth: 2, r: 4 }}
                 />              </LineChart>
             </ResponsiveContainer>
             </div>
           </div>          {/* Legenda informativa */}
           <div className="bg-gray-50 p-4 rounded-lg">
-            <h5 className="text-sm font-medium mb-2">📊 Come interpretare il grafico:</h5>
+            <h5 className="text-sm font-medium mb-2">📊 How to interpret the chart:</h5>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600">
-              <div>• <span className="inline-block w-3 h-0.5 bg-red-400 mx-1"></span><strong>Linee rosse (±1.96):</strong> Soglia significatività statistica (p &lt; 0.05)</div>
-              <div>• <strong>Valenza Emotiva &gt; 0:</strong> Tono complessivamente positivo</div>
-              <div>• <strong>Linee ascendenti:</strong> Incremento dell'intensità emotiva nel tempo</div>
-              <div>• <strong>Variazioni brusche:</strong> Cambiamenti significativi tra sessioni</div>
+              <div>• <span className="inline-block w-3 h-0.5 bg-red-400 mx-1"></span><strong>Red lines (±1.96):</strong> Statistical significance threshold (p &lt; 0.05)</div>
+              <div>• <strong>Emotional Valence &gt; 0:</strong> Overall positive tone</div>
+              <div>• <strong>Ascending lines:</strong> Increase in emotional intensity over time</div>
+              <div>• <strong>Sharp changes:</strong> Significant changes between sessions</div>
             </div>
           </div>
 
           {/* Riepilogo trend (solo se abbiamo almeno 2 sessioni) */}
           {trendData.length >= 2 && (
             <div className="bg-blue-50 p-4 rounded-lg">
-              <h5 className="text-sm font-medium mb-2">📈 Riepilogo Trend:</h5>
+              <h5 className="text-sm font-medium mb-2">📈 Trend Summary:</h5>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <strong>Valenza Emotiva:</strong><br />
+                  <strong>Emotional Valence:</strong><br />
                   <span className="text-gray-600">
-                    Inizio: {trendData[0].emotional_valence.toFixed(2)} → 
-                    Fine: {trendData[trendData.length - 1].emotional_valence.toFixed(2)}
+                    Start: {trendData[0].emotional_valence.toFixed(2)} → 
+                    End: {trendData[trendData.length - 1].emotional_valence.toFixed(2)}
                     <span className={trendData[trendData.length - 1].emotional_valence > trendData[0].emotional_valence ? 'text-green-600 ml-1' : 'text-red-600 ml-1'}>
-                      ({trendData[trendData.length - 1].emotional_valence > trendData[0].emotional_valence ? 'Miglioramento' : 'Peggioramento'})
+                      ({trendData[trendData.length - 1].emotional_valence > trendData[0].emotional_valence ? 'Improvement' : 'Worsening'})
                     </span>
                   </span>
                 </div>
                 <div>
-                  <strong>Emozioni Positive:</strong><br />
+                  <strong>Positive Emotions:</strong><br />
                   <span className="text-gray-600">
-                    Inizio: {trendData[0].positive_score.toFixed(1)} → 
-                    Fine: {trendData[trendData.length - 1].positive_score.toFixed(1)}
+                    Start: {trendData[0].positive_score.toFixed(1)} → 
+                    End: {trendData[trendData.length - 1].positive_score.toFixed(1)}
                     <span className={trendData[trendData.length - 1].positive_score > trendData[0].positive_score ? 'text-green-600 ml-1' : 'text-red-600 ml-1'}>
                       ({trendData[trendData.length - 1].positive_score > trendData[0].positive_score ? '↑' : '↓'})
                     </span>

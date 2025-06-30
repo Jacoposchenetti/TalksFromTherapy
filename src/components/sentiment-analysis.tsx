@@ -237,9 +237,9 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
       <div className="h-full flex items-center justify-center">
         <div className="text-center text-gray-500">
           <Brain className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-          <p className="text-lg mb-2">Nessuna Trascrizione Disponibile</p>
+          <p className="text-lg mb-2">No Transcript Available</p>
           <p className="text-sm">
-            Seleziona sessioni con trascrizioni per analizzare le emozioni
+            Select sessions with transcripts to analyze emotions
           </p>
         </div>
       </div>
@@ -260,14 +260,14 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
       <div className="h-full overflow-y-auto space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">
-            Analisi Emotiva Completata
+            Emotional Analysis Completed
           </h3>
           <Button 
             variant="outline" 
             size="sm"
             onClick={clearAnalysis}
           >
-            Nuova Analisi
+            New Analysis
           </Button>
         </div>        {/* Combined Analysis */}
         {analysis.combined_analysis && (
@@ -279,14 +279,14 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
                   return (
                     <div className="text-center text-gray-500 py-4">
                       <AlertCircle className="w-8 h-8 mx-auto mb-2" />
-                      <p>Dati di analisi combinata non validi</p>
+                      <p>Invalid combined analysis data</p>
                     </div>
                   )
                 }
                 return (
                   <EmotionVisualizer 
                     data={transformedData}
-                    title={`🌸 Analisi Combinata (${analysis.total_sessions} sessioni)`}
+                    title={`🌸 Combined Analysis (${analysis.total_sessions} sessions)`}
                     showDetails={false}
                     flowerPlot={analysis.combined_analysis.flower_plot}
                   />
@@ -303,7 +303,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
               <h4 className="text-md font-medium text-gray-700">
                 {analysis.individual_sessions.length > 1 ? '📊 Analisi per Sessione' : '📊 Analisi Emotiva'}
                 <span className="text-sm text-gray-500 ml-2">
-                  ({analysis.individual_sessions.length} sessioni)
+                  ({analysis.individual_sessions.length} sessions)
                 </span>
               </h4>
               <div className="h-px bg-gray-300 flex-1"></div>
@@ -328,7 +328,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
                           <div className="text-center text-gray-500 py-4">
                             <AlertCircle className="w-6 h-6 mx-auto mb-2" />
                             <p className="font-medium">{sessionAnalysis.session_title}</p>
-                            <p className="text-sm">Dati di analisi non validi</p>
+                            <p className="text-sm">Invalid analysis data</p>
                           </div>
                         </CardContent>
                       </Card>
@@ -361,16 +361,16 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
         
         <div>
           <h3 className="text-lg font-semibold mb-2">
-            Analisi del Sentiment Emotivo
+            Emotional Sentiment Analysis
           </h3>
           <p className="text-gray-600 mb-4">
-            Analizza le 8 emozioni fondamentali nelle {validSessions.length} sessioni selezionate
+            Analyze the 8 core emotions in the {validSessions.length} selected sessions
           </p>
         </div>
 
         {/* Session Info */}
         <div className="bg-blue-50 p-3 rounded-md text-sm">
-          <h4 className="font-medium mb-2">Sessioni da Analizzare:</h4>
+          <h4 className="font-medium mb-2">Sessions to Analyze:</h4>
           <div className="space-y-1">
             {validSessions.map(session => (
               <div key={session.id} className="flex justify-between text-xs">
@@ -401,12 +401,12 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
           {isAnalyzing ? (
             <>
               <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              Analizzando Emozioni...
+              Analyzing Emotions...
             </>
           ) : (
             <>
               <Brain className="w-5 h-5 mr-2" />
-              Avvia Analisi Emotiva
+              Start Emotional Analysis
             </>
           )}
         </Button>
@@ -414,8 +414,8 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
         {/* Info */}
         <div className="text-xs text-gray-500 max-w-md mx-auto">
           <p>
-            L&apos;analisi utilizza EmoAtlas per identificare gioia, fiducia, paura, 
-            sorpresa, tristezza, disgusto, rabbia e anticipazione con significatività statistica.
+              The analysis uses EmoAtlas to identify joy, trust, fear, 
+              surprise, sadness, disgust, anger, and anticipation with statistical significance.
           </p>
         </div>
       </div>
