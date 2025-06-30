@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 
 export const runtime = 'nodejs'
 
@@ -50,66 +50,58 @@ const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
+    if (!session?.user?.email) {
       return NextResponse.json(
         { error: "Non autorizzato" },
         { status: 401 }
       )
     }
-
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
+    if (userError || !userData) {
+      return NextResponse.json(
+        { error: "Utente non trovato" },
+        { status: 404 }
+      )
+    }
     const { sessionIds, minTopicSize = 5 }: TopicAnalysisRequest = await request.json()
-
     if (!sessionIds || sessionIds.length === 0) {
       return NextResponse.json(
         { error: "Nessuna sessione selezionata" },
         { status: 400 }
       )
-    }    // Fetch sessions and their transcripts
-    const sessions = await prisma.session.findMany({
-      where: {
-        id: { in: sessionIds },
-        userId: session.user.id,
-        transcript: { not: null }
-        // Removed status filter to allow any status as long as transcript exists
-      },
-      select: {
-        id: true,
-        title: true,
-        transcript: true,
-        status: true, // Added status to debug
-        createdAt: true
-      }
-    })
-
-    console.log('🔍 Sessions found:', sessions.length)
-    console.log('📋 Sessions details:', sessions.map(s => ({ 
-      id: s.id, 
-      title: s.title, 
-      status: s.status,
-      hasTranscript: !!s.transcript,
-      transcriptLength: s.transcript?.length || 0
-    })))
-
-    if (sessions.length === 0) {
+    }
+    // Fetch sessions and their transcripts da Supabase
+    const { data: sessions, error: sessionsError } = await supabase
+      .from('sessions')
+      .select('id, title, transcript, status, createdAt')
+      .in('id', sessionIds)
+      .eq('userId', userData.id)
+    if (sessionsError) {
+      return NextResponse.json(
+        { error: "Errore nel recupero delle sessioni" },
+        { status: 500 }
+      )
+    }
+    if (!sessions || sessions.length === 0) {
       return NextResponse.json(
         { error: "Nessuna trascrizione trovata per le sessioni selezionate" },
         { status: 404 }
       )
     }
-
     // Filter out sessions without transcripts
     const validSessions = sessions.filter(session => 
-      session.transcript && session.transcript.trim().length > 0
+      session.transcript && typeof session.transcript === 'string' && session.transcript.trim().length > 0
     )
-
     if (validSessions.length === 0) {
       return NextResponse.json(
         { error: "Nessuna trascrizione valida trovata" },
         { status: 400 }
       )
     }
-
     // Prepare data for BERTopic service
     const bertopicRequest: BertopicRequest = {
       texts: validSessions.map(session => session.transcript!),
@@ -117,57 +109,54 @@ export async function POST(request: NextRequest) {
       min_topic_size: Math.max(2, Math.min(minTopicSize, Math.floor(validSessions.length / 2))),
       language: "italian"
     }
-
     // Call Python BERTopic service
-    console.log(`Calling BERTopic service at ${PYTHON_SERVICE_URL}/analyze-topics`)
-    
     const response = await fetch(`${PYTHON_SERVICE_URL}/analyze-topics`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(bertopicRequest),
-      // Add timeout
       signal: AbortSignal.timeout(60000) // 60 seconds timeout
     })
-
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('BERTopic service error:', errorText)
-      
       if (response.status === 404) {
         return NextResponse.json(
           { error: "Servizio di analisi non disponibile. Assicurati che il servizio Python sia in esecuzione." },
           { status: 503 }
         )
       }
-      
       return NextResponse.json(
         { error: `Errore del servizio di analisi: ${response.status}` },
         { status: 502 }
       )
     }
-
     const bertopicResult: BertopicResponse = await response.json()
-
-    // Save analysis results to database (optional)
+    // Save analysis results to Supabase (optional)
     try {
-      await prisma.analysis.createMany({
-        data: validSessions.map(session => ({
-          sessionId: session.id,
-          patientId: sessionIds[0], // Assuming all sessions belong to same patient
-          summary: `Topic modeling analysis completed. Found ${bertopicResult.summary.total_topics} topics.`,
-          keyTopics: JSON.stringify(bertopicResult.topics.slice(0, 5)), // Store top 5 topics
-          processingTime: Date.now(),
-          createdAt: new Date(),
-          updatedAt: new Date()
-        }))
-      })
+      for (const session of validSessions) {
+        const { data: insertData, error: insertError } = await supabase
+          .from('analyses')
+          .insert([{
+            sessionId: session.id,
+            patientId: sessionIds[0], // Assumiamo tutte le sessioni dello stesso paziente
+            summary: `Topic modeling analysis completed. Found ${bertopicResult.summary.total_topics} topics.`,
+            keyTopics: JSON.stringify(bertopicResult.topics.slice(0, 5)),
+            processingTime: Date.now(),
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }])
+        if (insertError) {
+          console.error('[Supabase] Error inserting topic analysis:', insertError)
+          return NextResponse.json({ error: 'Errore durante il salvataggio dell\'analisi topic modeling', details: insertError.message }, { status: 500 })
+        } else {
+          console.log('[Supabase] Topic analysis inserted:', insertData)
+        }
+      }
     } catch (dbError) {
-      console.warn('Failed to save analysis to database:', dbError)
+      console.warn('Failed to save analysis to Supabase:', dbError)
       // Continue anyway, don't fail the request
     }
-
     // Add session metadata to the response
     const enrichedResult = {
       ...bertopicResult,
@@ -178,19 +167,15 @@ export async function POST(request: NextRequest) {
       })),
       analysis_timestamp: new Date().toISOString()
     }
-
     return NextResponse.json(enrichedResult)
-
   } catch (error) {
     console.error("Errore durante l'analisi dei topic:", error)
-    
     if (error instanceof TypeError && error.message.includes('fetch')) {
       return NextResponse.json(
         { error: "Impossibile connettersi al servizio di analisi. Verifica che il servizio Python sia in esecuzione." },
         { status: 503 }
       )
     }
-    
     return NextResponse.json(
       { error: "Errore interno del server durante l'analisi" },
       { status: 500 }

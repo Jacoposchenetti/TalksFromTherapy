@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 import { emoatlasService } from "@/lib/emoatlas"
 
 export async function POST(request: NextRequest) {
@@ -11,11 +11,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
-
-    if (!user) {
+    // Recupera l'ID utente da Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
+    if (userError || !userData) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
@@ -29,22 +31,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch session from database
-    const sessionRecord = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: user.id,
-        isActive: true
-      },
-      select: {
-        id: true,
-        title: true,
-        transcript: true,
-        status: true
-      }
-    })
+    // Fetch session from Supabase
+    const { data: sessionRecord, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id, title, transcript, status')
+      .eq('id', sessionId)
+      .eq('userId', userData.id)
+      .eq('isActive', true)
+      .single()
 
-    if (!sessionRecord) {
+    if (sessionError || !sessionRecord) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
 
@@ -83,7 +79,7 @@ export async function POST(request: NextRequest) {
       success: true,
       session_id: sessionRecord.id,
       session_title: sessionRecord.title,
-      flower_plot: analysis.analysis.flower_plot,
+      flower_plot: (analysis as any).flower_plot,
       z_scores: analysis.analysis.z_scores,
       emotional_valence: analysis.analysis.emotional_valence,
       language: language,

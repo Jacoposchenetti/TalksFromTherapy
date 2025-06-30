@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 import { emoatlasService, SessionData } from "@/lib/emoatlas"
 
 export async function POST(request: NextRequest) {
@@ -11,11 +11,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
-
-    if (!user) {
+    // Recupera l'ID utente da Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
+    if (userError || !userData) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
@@ -29,22 +31,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch sessions from database
-    const sessions = await prisma.session.findMany({
-      where: {
-        id: { in: sessionIds },
-        userId: user.id,
-        isActive: true
-      },      select: {
-        id: true,
-        title: true,
-        transcript: true,
-        sessionDate: true,
-        status: true
-      }
-    })
+    // Fetch sessions from Supabase
+    const { data: sessions, error: sessionsError } = await supabase
+      .from('sessions')
+      .select('id, title, transcript, sessionDate, status, patientId')
+      .in('id', sessionIds)
+      .eq('userId', userData.id)
+      .eq('isActive', true)
 
-    if (sessions.length === 0) {
+    if (sessionsError) {
+      console.error('Supabase sessions error:', sessionsError)
+      return NextResponse.json({ error: "Error fetching sessions" }, { status: 500 })
+    }
+
+    if (!sessions || sessions.length === 0) {
       return NextResponse.json({ error: "No sessions found" }, { status: 404 })
     }
 
@@ -59,13 +59,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: "No sessions with transcripts found" 
       }, { status: 400 })
-    }    // Prepare session data for analysis
+    }
+
+    // Prepare session data for analysis
     const sessionData: SessionData[] = sessionsWithTranscripts.map(session => ({
       id: session.id,
       title: session.title,
       transcript: session.transcript!,
-      sessionDate: session.sessionDate ? session.sessionDate.toISOString() : new Date().toISOString()
-    }))// Perform emotion analysis
+      sessionDate: session.sessionDate ? new Date(session.sessionDate).toISOString() : new Date().toISOString()
+    }))
+
+    // Perform emotion analysis
     console.log('🧪 Starting emotion analysis for', sessionData.length, 'sessions')
     console.log('🌍 Language configured:', language)
     console.log('📊 Session data:', sessionData.map(s => ({ id: s.id, title: s.title, transcript_length: s.transcript.length })))
@@ -85,6 +89,41 @@ export async function POST(request: NextRequest) {
         error: "Emotion analysis failed", 
         details: analysis.error 
       }, { status: 500 })
+    }
+
+    // Save analysis results to Supabase
+    try {
+      for (const session of sessionsWithTranscripts) {
+        const sessionAnalysis = analysis.individual_sessions.find(s => s.session_id === session.id)
+        if (sessionAnalysis) {
+          const { data: insertData, error: insertError } = await supabase
+            .from('analyses')
+            .upsert([{
+              sessionId: session.id,
+              patientId: session.patientId,
+              emotions: JSON.stringify(sessionAnalysis.analysis.z_scores || {}),
+              emotionalValence: sessionAnalysis.analysis.emotional_valence || 0,
+              sentimentScore: sessionAnalysis.analysis.emotional_valence || 0,
+              significantEmotions: JSON.stringify(sessionAnalysis.analysis.significant_emotions || {}),
+              emotionFlowerPlot: (sessionAnalysis as any).flower_plot || null,
+              language: language,
+              analysisVersion: '1.0.0',
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }], {
+              onConflict: 'sessionId'
+            })
+          
+          if (insertError) {
+            console.error('[Supabase] Error saving emotion analysis:', insertError)
+          } else {
+            console.log('[Supabase] Emotion analysis saved for session:', session.id)
+          }
+        }
+      }
+    } catch (dbError) {
+      console.warn('Failed to save emotion analysis to Supabase:', dbError)
+      // Continue anyway, don't fail the request
     }
 
     console.log('✅ Analysis completed successfully')
