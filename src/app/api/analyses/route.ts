@@ -1,46 +1,48 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 
 // GET /api/analyses?sessionId=xxx - Recupera analisi per una sessione
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    if (!session?.user?.email) {
       return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
     }
-
     const { searchParams } = new URL(request.url)
     const sessionId = searchParams.get('sessionId')
-
     if (!sessionId) {
       return NextResponse.json({ error: "sessionId richiesto" }, { status: 400 })
     }
-
+    // Recupera l'ID utente da Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
+    if (userError || !userData) {
+      return NextResponse.json({ error: "Utente non trovato" }, { status: 404 })
+    }
     // Verifica che la sessione appartenga all'utente
-    const sessionData = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: session.user.id
-      }
-    })
-
-    if (!sessionData) {
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id, userId')
+      .eq('id', sessionId)
+      .eq('userId', userData.id)
+      .single()
+    if (sessionError || !sessionData) {
       return NextResponse.json({ error: "Sessione non trovata" }, { status: 404 })
     }
-
     // Recupera l'analisi esistente
-    const analysis = await prisma.analysis.findUnique({
-      where: {
-        sessionId: sessionId
-      }
-    })
-
-    if (!analysis) {
+    const { data: analysis, error: analysisError } = await supabase
+      .from('analyses')
+      .select('*')
+      .eq('sessionId', sessionId)
+      .single()
+    if (analysisError || !analysis) {
       return NextResponse.json({ cached: false, analysis: null })
     }
-
     // Trasforma i dati per l'uso nel frontend
     const responseData = {
       cached: true,
@@ -53,13 +55,10 @@ export async function GET(request: NextRequest) {
           flower_plot: analysis.emotionFlowerPlot,
           sentiment_score: analysis.sentimentScore
         } : null,
-
         // Topic Analysis  
         topics: analysis.topicAnalysisResult ? JSON.parse(analysis.topicAnalysisResult) : null,
-
         // Semantic Frame Analysis
         semanticFrames: analysis.semanticFrameResults ? JSON.parse(analysis.semanticFrameResults) : {},
-
         // Metadata
         analysisVersion: analysis.analysisVersion,
         language: analysis.language,
@@ -67,9 +66,7 @@ export async function GET(request: NextRequest) {
         updatedAt: analysis.updatedAt
       }
     }
-
     return NextResponse.json(responseData)
-
   } catch (error) {
     console.error("Errore nel recupero analisi:", error)
     return NextResponse.json({ error: "Errore interno del server" }, { status: 500 })
@@ -80,32 +77,33 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    if (!session?.user?.email) {
       return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
     }
-
     const body = await request.json()
     const { sessionId, analysisType, analysisData } = body
-
     if (!sessionId || !analysisType || !analysisData) {
       return NextResponse.json({ error: "Dati richiesti mancanti" }, { status: 400 })
     }
-
+    // Recupera l'ID utente da Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
+    if (userError || !userData) {
+      return NextResponse.json({ error: "Utente non trovato" }, { status: 404 })
+    }
     // Verifica che la sessione appartenga all'utente
-    const sessionData = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: session.user.id
-      },
-      include: {
-        patient: true
-      }
-    })
-
-    if (!sessionData) {
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id, userId, patientId')
+      .eq('id', sessionId)
+      .eq('userId', userData.id)
+      .single()
+    if (sessionError || !sessionData) {
       return NextResponse.json({ error: "Sessione non trovata" }, { status: 404 })
     }
-
     // Prepara i dati per l'aggiornamento basati sul tipo di analisi
     let updateData: any = {
       patientId: sessionData.patientId,
@@ -113,7 +111,6 @@ export async function POST(request: NextRequest) {
       analysisVersion: '1.0.0',
       updatedAt: new Date()
     }
-
     switch (analysisType) {
       case 'sentiment':
         updateData = {
@@ -125,7 +122,6 @@ export async function POST(request: NextRequest) {
           emotionFlowerPlot: analysisData.flower_plot || null
         }
         break
-
       case 'topics':
         updateData = {
           ...updateData,
@@ -133,16 +129,15 @@ export async function POST(request: NextRequest) {
           topicAnalysisResult: JSON.stringify(analysisData)
         }
         break
-
       case 'semantic_frame':
-        // Per semantic frame, salviamo i risultati per parola specifica
         const { target_word } = analysisData
         if (target_word) {
           // Recupera risultati esistenti
-          const existingAnalysis = await prisma.analysis.findUnique({
-            where: { sessionId }
-          })
-          
+          const { data: existingAnalysis } = await supabase
+            .from('analyses')
+            .select('semanticFrameResults')
+            .eq('sessionId', sessionId)
+            .single()
           let existingFrames = {}
           if (existingAnalysis?.semanticFrameResults) {
             try {
@@ -151,39 +146,53 @@ export async function POST(request: NextRequest) {
               console.error("Errore parsing semantic frames esistenti:", e)
             }
           }
-
-          // Aggiungi/aggiorna il frame per questa parola
           existingFrames[target_word] = analysisData
-
           updateData = {
             ...updateData,
             semanticFrameResults: JSON.stringify(existingFrames)
           }
         }
         break
-
       default:
         return NextResponse.json({ error: "Tipo di analisi non supportato" }, { status: 400 })
     }
-
     // Upsert dell'analisi (crea se non esiste, aggiorna se esiste)
-    const analysis = await prisma.analysis.upsert({
-      where: {
-        sessionId: sessionId
-      },
-      update: updateData,
-      create: {
-        sessionId,
-        ...updateData
+    // Prima controlla se esiste già
+    const { data: existing, error: existingError } = await supabase
+      .from('analyses')
+      .select('id')
+      .eq('sessionId', sessionId)
+      .single()
+    let analysisId = null
+    if (existing && existing.id) {
+      // Aggiorna
+      const { data: updated, error: updateError } = await supabase
+        .from('analyses')
+        .update(updateData)
+        .eq('id', existing.id)
+        .select('id')
+        .single()
+      if (updateError) {
+        return NextResponse.json({ error: "Errore durante l'aggiornamento analisi" }, { status: 500 })
       }
-    })
-
+      analysisId = updated.id
+    } else {
+      // Crea
+      const { data: created, error: createError } = await supabase
+        .from('analyses')
+        .insert([{ sessionId, ...updateData }])
+        .select('id')
+        .single()
+      if (createError) {
+        return NextResponse.json({ error: "Errore durante la creazione analisi" }, { status: 500 })
+      }
+      analysisId = created.id
+    }
     return NextResponse.json({ 
       success: true, 
-      analysisId: analysis.id,
+      analysisId,
       message: "Analisi salvata con successo"
     })
-
   } catch (error) {
     console.error("Errore nel salvataggio analisi:", error)
     return NextResponse.json({ error: "Errore interno del server" }, { status: 500 })
@@ -194,75 +203,42 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    if (!session?.user?.email) {
       return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
     }
-
     const { searchParams } = new URL(request.url)
     const sessionId = searchParams.get('sessionId')
-    const analysisType = searchParams.get('analysisType')
-
     if (!sessionId) {
       return NextResponse.json({ error: "sessionId richiesto" }, { status: 400 })
     }
-
+    // Recupera l'ID utente da Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
+    if (userError || !userData) {
+      return NextResponse.json({ error: "Utente non trovato" }, { status: 404 })
+    }
     // Verifica che la sessione appartenga all'utente
-    const sessionData = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: session.user.id
-      }
-    })
-
-    if (!sessionData) {
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id, userId')
+      .eq('id', sessionId)
+      .eq('userId', userData.id)
+      .single()
+    if (sessionError || !sessionData) {
       return NextResponse.json({ error: "Sessione non trovata" }, { status: 404 })
     }
-
-    if (analysisType) {
-      // Cancella solo un tipo specifico di analisi
-      let updateData: any = {}
-      
-      switch (analysisType) {
-        case 'sentiment':
-          updateData = {
-            emotions: null,
-            emotionalValence: null,
-            sentimentScore: null,
-            significantEmotions: null,
-            emotionFlowerPlot: null
-          }
-          break
-        case 'topics':
-          updateData = {
-            keyTopics: null,
-            topicAnalysisResult: null
-          }
-          break
-        case 'semantic_frame':
-          updateData = {
-            semanticFrameResults: null
-          }
-          break
-        default:
-          return NextResponse.json({ error: "Tipo di analisi non supportato" }, { status: 400 })
-      }
-
-      await prisma.analysis.update({
-        where: { sessionId },
-        data: updateData
-      })
-    } else {
-      // Cancella tutta l'analisi
-      await prisma.analysis.delete({
-        where: { sessionId }
-      })
+    // Cancella l'analisi
+    const { error: deleteError } = await supabase
+      .from('analyses')
+      .delete()
+      .eq('sessionId', sessionId)
+    if (deleteError) {
+      return NextResponse.json({ error: "Errore durante la cancellazione analisi" }, { status: 500 })
     }
-
-    return NextResponse.json({ 
-      success: true, 
-      message: "Analisi cancellata con successo"
-    })
-
+    return NextResponse.json({ success: true, message: "Analisi cancellata con successo" })
   } catch (error) {
     console.error("Errore nella cancellazione analisi:", error)
     return NextResponse.json({ error: "Errore interno del server" }, { status: 500 })

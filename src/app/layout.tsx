@@ -23,6 +23,29 @@ export default function RootLayout({
 }>) {
   return (    <html lang="it">
       <body className={inter.className}>
+        {/* Logo Bolt in alto a destra */}
+        <a
+          href="https://bolt.new/"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            position: 'fixed',
+            top: 0,
+            right: 16,
+            zIndex: 50,
+            width: 224,
+            height: 224,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <img
+            src="/bolt_logo.jpeg"
+            alt="Powered by Bolt.New"
+            style={{ width: '224px', height: '224px', objectFit: 'contain', filter: 'drop-shadow(0 4px 24px rgba(0,0,0,0.12))' }}
+          />
+        </a>
         <AuthProvider>
           <AudioPlayerProvider>
             <ConditionalNavigation />

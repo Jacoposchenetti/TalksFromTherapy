@@ -211,9 +211,6 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                  {/* Linee di riferimento per significatività statistica */}
-                <ReferenceLine y={1.96} stroke="#FF6B6B" strokeWidth={1.5} />
-                <ReferenceLine y={-1.96} stroke="#FF6B6B" strokeWidth={1.5} />
                 
                 {/* Emozioni positive */}
                 <Line 
@@ -353,20 +350,28 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                 <div>
                   <strong>Emotional Valence:</strong><br />
                   <span className="text-gray-600">
-                    Start: {trendData[0].emotional_valence.toFixed(2)} → 
-                    End: {trendData[trendData.length - 1].emotional_valence.toFixed(2)}
-                    <span className={trendData[trendData.length - 1].emotional_valence > trendData[0].emotional_valence ? 'text-green-600 ml-1' : 'text-red-600 ml-1'}>
-                      ({trendData[trendData.length - 1].emotional_valence > trendData[0].emotional_valence ? 'Improvement' : 'Worsening'})
+                    Start: {trendData[0]?.emotional_valence !== undefined ? trendData[0].emotional_valence.toFixed(2) : '-'} → 
+                    End: {trendData[trendData.length - 1]?.emotional_valence !== undefined ? trendData[trendData.length - 1].emotional_valence.toFixed(2) : '-'}
+                    <span className={
+                      trendData[trendData.length - 1]?.emotional_valence > trendData[0]?.emotional_valence
+                        ? 'text-green-600 ml-1'
+                        : 'text-red-600 ml-1'
+                    }>
+                      ({trendData[trendData.length - 1]?.emotional_valence > trendData[0]?.emotional_valence ? 'Improvement' : 'Worsening'})
                     </span>
                   </span>
                 </div>
                 <div>
                   <strong>Positive Emotions:</strong><br />
                   <span className="text-gray-600">
-                    Start: {trendData[0].positive_score.toFixed(1)} → 
-                    End: {trendData[trendData.length - 1].positive_score.toFixed(1)}
-                    <span className={trendData[trendData.length - 1].positive_score > trendData[0].positive_score ? 'text-green-600 ml-1' : 'text-red-600 ml-1'}>
-                      ({trendData[trendData.length - 1].positive_score > trendData[0].positive_score ? '↑' : '↓'})
+                    Start: {trendData[0]?.positive_score !== undefined ? trendData[0].positive_score.toFixed(1) : '-'} → 
+                    End: {trendData[trendData.length - 1]?.positive_score !== undefined ? trendData[trendData.length - 1].positive_score.toFixed(1) : '-'}
+                    <span className={
+                      trendData[trendData.length - 1]?.positive_score > trendData[0]?.positive_score
+                        ? 'text-green-600 ml-1'
+                        : 'text-red-600 ml-1'
+                    }>
+                      ({trendData[trendData.length - 1]?.positive_score > trendData[0]?.positive_score ? '↑' : '↓'})
                     </span>
                   </span>
                 </div>
