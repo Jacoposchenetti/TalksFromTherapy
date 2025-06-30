@@ -67,25 +67,13 @@ const EMOTION_LABELS = {
 }
 
 export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
-  console.log('🎭 EmotionTrends received data:', analysisData)
-  console.log('🎭 Individual sessions:', analysisData?.individual_sessions)
-  console.log('🎭 Sessions length:', analysisData?.individual_sessions?.length)
-  
   // Debug: Log detailed data structure
   if (analysisData?.individual_sessions) {
     analysisData.individual_sessions.forEach((session, index) => {
-      console.log(`🎭 Session ${index + 1}:`, {
-        id: session.session_id,
-        title: session.session_title,
-        z_scores: session.analysis.z_scores,
-        valence: session.analysis.emotional_valence,
-        positive: session.analysis.positive_score,
-        negative: session.analysis.negative_score
-      })
+      // Log structure if needed for debugging
     })
   }
     if (!analysisData?.individual_sessions || analysisData.individual_sessions.length === 0) {
-    console.log('🎭 No data - showing placeholder')
     return (
       <Card>
         <CardHeader>

@@ -80,14 +80,31 @@ model Analysis {
   session          Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   patientId        String
   patient          Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  // Sentiment Analysis (EmoAtlas)
   sentimentScore   Float?    // -1 to 1
-  emotions         String?   // JSON string di emozioni rilevate
+  emotions         String?   // JSON string di emozioni rilevate (z-scores)
+  emotionFlowerPlot String?  // Base64 string del grafico emotion flower
+  emotionalValence Float?   // Valenza emotiva generale
+  significantEmotions String? // JSON delle emozioni significative
+  
+  // Topic Analysis
   keyTopics        String?   // JSON string di topic principali
+  topicAnalysisResult String? // JSON completo risultato topic modeling
+  
+  // Semantic Frame Analysis
+  semanticFrameResults String? // JSON dei risultati semantic frame per diverse parole
+  
+  // General Analysis Fields
   therapeuticGoals String?   // JSON string obiettivi terapeutici identificati
   progressNotes    String?   // note automatiche su progressi
   summary          String?   // riassunto della sessione
   confidenceScore  Float?    // confidenza dell'analisi (0-1)
   processingTime   Int?      // tempo di processing in ms
+  
+  // Metadata
+  analysisVersion  String?   // versione dell'algoritmo usato
+  language         String?   // lingua dell'analisi
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
