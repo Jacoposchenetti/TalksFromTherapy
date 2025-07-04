@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 import { diarizeTranscript } from "@/lib/openai"
 
 export const runtime = 'nodejs'
@@ -38,29 +38,35 @@ export async function POST(request: NextRequest) {
     console.log(`🔍 Ricerca sessione con ID: ${sessionId}`)
     console.log(`👤 User ID: ${session.user.id}`)
 
-    const sessionRecord = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: session.user.id,
-        isActive: true
-      },
-      select: {
-        id: true,
-        userId: true,
-        status: true,
-        title: true,
-        transcript: true
-      }
-    })
+    // Trova l'utente su Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id, email')
+      .eq('email', session.user.email)
+      .single()
+
+    if (userError || !userData) {
+      console.error('[Supabase] User fetch error:', userError)
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    const { data: sessionRecord, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id, userId, status, title, transcript')
+      .eq('id', sessionId)
+      .eq('userId', userData.id)
+      .eq('isActive', true)
+      .single()
 
     console.log("Query database completata", { 
       found: !!sessionRecord, 
       sessionId,
       status: sessionRecord?.status,
-      hasTranscript: !!sessionRecord?.transcript
+      hasTranscript: !!sessionRecord?.transcript,
+      error: sessionError
     })
 
-    if (!sessionRecord) {
+    if (sessionError || !sessionRecord) {
       console.log(`❌ Sessione non trovata`)
       return NextResponse.json(
         { error: "Sessione non trovata" },
@@ -93,13 +99,18 @@ export async function POST(request: NextRequest) {
       console.log(`📏 Lunghezza trascrizione diarizzata: ${diarizedTranscript.length} caratteri`)
       
       // Aggiorna la sessione con la trascrizione diarizzata
-      await prisma.session.update({
-        where: { id: sessionId },
-        data: { 
+      const { error: updateError } = await supabase
+        .from('sessions')
+        .update({ 
           transcript: diarizedTranscript,
           updatedAt: new Date()
-        }
-      })
+        })
+        .eq('id', sessionId)
+
+      if (updateError) {
+        console.error('[Supabase] Error updating session:', updateError)
+        throw new Error('Errore nel salvataggio della trascrizione diarizzata')
+      }
 
       console.log(`✅ Diarizzazione completata per sessione ${sessionId}`)
 
