@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { writeFile, mkdir } from "fs/promises"
-import { join } from "path"
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -27,7 +25,7 @@ export async function GET(request: NextRequest) {
   const patientId = searchParams.get("patientId")
   let query = supabase
     .from('sessions')
-    .select('*')
+    .select('*, patient:patients(*)')
     .eq('userId', userData.id)
     .eq('isActive', true)
     .order('sessionDate', { ascending: false })
@@ -139,17 +137,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 })
     }
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = join(process.cwd(), "uploads", "audio")
-    await mkdir(uploadsDir, { recursive: true })
-
-    // Save the audio file
+    // Upload del file audio su Supabase Storage
     const bytes = await audioFile.arrayBuffer()
     const buffer = Buffer.from(bytes)
     
     const fileName = `${Date.now()}-${audioFile.name}`
-    const filePath = join(uploadsDir, fileName)
-    await writeFile(filePath, buffer)
+    const filePath = `${userData.id}/${fileName}` // Organizza per utente
+    
+    // Upload su Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('talksfromtherapy')
+      .upload(filePath, buffer, {
+        contentType: audioFile.type,
+        upsert: false
+      })
+
+    if (uploadError) {
+      console.error('[Supabase Storage] Upload error:', uploadError)
+      return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 })
+    }
+
+    // Genera URL per l'accesso al file
+    const { data: urlData } = await supabase.storage
+      .from('talksfromtherapy')
+      .createSignedUrl(filePath, 3600) // URL valido per 1 ora
+
+    const audioUrl = urlData?.signedUrl || null
 
     // Create session record
     const { data: newSession, error: sessionError } = await supabase
@@ -159,7 +172,7 @@ export async function POST(request: NextRequest) {
         patientId,
         title,
         audioFileName: fileName,
-        audioUrl: `/uploads/audio/${fileName}`,
+        audioUrl: audioUrl,
         audioFileSize: audioFile.size,
         sessionDate: new Date(),
         status: "UPLOADED",
