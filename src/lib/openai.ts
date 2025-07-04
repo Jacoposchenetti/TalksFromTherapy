@@ -7,22 +7,26 @@ const openai = new OpenAI({
 
 /**
  * Trascrive un file audio utilizzando OpenAI Whisper
- * @param audioFilePath - Percorso completo del file audio
+ * @param audioBuffer - Buffer del file audio
+ * @param fileName - Nome del file audio per l'API
  * @returns Promise<string> - Il testo trascritto
  */
-export async function transcribeAudio(audioFilePath: string): Promise<string> {
+export async function transcribeAudio(audioBuffer: Buffer, fileName: string): Promise<string> {
   try {
-    const { createReadStream } = await import('fs');
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-your-openai-api-key-here') {
       throw new Error('OPENAI_API_KEY not configured or invalid')
-    }    console.log(`Starting transcription for file: ${audioFilePath}`)
+    }
+
+    console.log(`Starting transcription for file: ${fileName}`)
     
-    // Crea un stream del file audio
-    const audioStream = createReadStream(audioFilePath)
+    // Crea un File object dal buffer
+    const audioFile = new File([audioBuffer], fileName, { 
+      type: 'audio/mpeg' // Tipo generico per audio
+    })
     
     // Chiama l'API Whisper di OpenAI
     const transcription = await openai.audio.transcriptions.create({
-      file: audioStream,
+      file: audioFile,
       model: 'whisper-1',
       language: 'it', // Italiano
       response_format: 'verbose_json', // Più dettagli nella risposta

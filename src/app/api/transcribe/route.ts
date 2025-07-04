@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { transcribeAudio, diarizeTranscript } from "@/lib/openai"
-import { join } from "path"
 
 export const runtime = 'nodejs'
 
@@ -109,24 +108,29 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      // Costruisce il percorso completo del file audio
-      const audioFilePath = join(process.cwd(), "uploads", "audio", sessionRecord.audioFileName)
+      // Scarica il file audio da Supabase Storage
+      const filePath = `${sessionRecord.userId}/${sessionRecord.audioFileName}`
       
-      console.log(`🚀 Avvio trascrizione REALE per file: ${audioFilePath}`)
+      console.log(`🚀 Download file audio da Supabase Storage: ${filePath}`)
       
-      // Verifica che il file esista
-      const fs = require('fs')
-      if (!fs.existsSync(audioFilePath)) {
-        throw new Error(`File audio non trovato: ${audioFilePath}`)
+      // Scarica il file da Supabase Storage
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('talksfromtherapy')
+        .download(filePath)
+
+      if (downloadError || !fileData) {
+        throw new Error(`Errore download file da Supabase Storage: ${downloadError?.message}`)
       }
       
-      // Ottieni informazioni sul file
-      const fileStats = fs.statSync(audioFilePath)
-      console.log(`📁 Dimensione file: ${fileStats.size} bytes (${(fileStats.size / 1024 / 1024).toFixed(2)} MB)`)
+      console.log(`📁 File scaricato, dimensione: ${fileData.size} bytes (${(fileData.size / 1024 / 1024).toFixed(2)} MB)`)
+      
+      // Converte il blob in buffer per OpenAI
+      const arrayBuffer = await fileData.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
       
       // Step 1: Utilizza OpenAI Whisper per la trascrizione iniziale
       console.log(`📝 Step 1: Trascrizione iniziale con Whisper...`)
-      const initialTranscript = await transcribeAudio(audioFilePath)
+      const initialTranscript = await transcribeAudio(buffer, sessionRecord.audioFileName)
       
       console.log(`📝 Trascrizione iniziale ricevuta: "${initialTranscript.substring(0, 100)}..."`)
       console.log(`📏 Lunghezza trascrizione iniziale: ${initialTranscript.length} caratteri`)
@@ -137,19 +141,26 @@ export async function POST(request: NextRequest) {
         console.warn(`💡 Potrebbe essere un watermark, file vuoto o audio di bassa qualità`)
       }
       
-      // Step 2: Diarizzazione con GPT-3.5-turbo
+      // Step 2: Diarizzazione con GPT-3.5-turbo (con fallback)
       console.log(`🎭 Step 2: Avvio diarizzazione con GPT-3.5-turbo...`)
-      const diarizedTranscript = await diarizeTranscript(initialTranscript, sessionRecord.title)
+      let finalTranscript = initialTranscript // Fallback alla trascrizione base
       
-      console.log(`🎭 Diarizzazione completata: "${diarizedTranscript.substring(0, 100)}..."`)
-      console.log(`📏 Lunghezza trascrizione diarizzata: ${diarizedTranscript.length} caratteri`)
+      try {
+        const diarizedTranscript = await diarizeTranscript(initialTranscript, sessionRecord.title)
+        finalTranscript = diarizedTranscript
+        console.log(`🎭 Diarizzazione completata: "${diarizedTranscript.substring(0, 100)}..."`)
+        console.log(`📏 Lunghezza trascrizione diarizzata: ${diarizedTranscript.length} caratteri`)
+      } catch (diarizeError) {
+        console.warn(`⚠️ Diarizzazione fallita, usando trascrizione base:`, diarizeError)
+        console.log(`📝 Salvando trascrizione senza diarizzazione`)
+      }
       
-      // Aggiorna la sessione con la trascrizione diarizzata completata su Supabase
+      // Aggiorna la sessione con la trascrizione completata su Supabase
       const { error: finalUpdateError } = await supabase
         .from('sessions')
         .update({
           status: "TRANSCRIBED",
-          transcript: diarizedTranscript,
+          transcript: finalTranscript,
           updatedAt: new Date()
         })
         .eq('id', sessionId)
@@ -159,17 +170,18 @@ export async function POST(request: NextRequest) {
         throw new Error('Errore nel salvataggio della trascrizione su Supabase')
       }
 
-      console.log(`✅ Processo completo (trascrizione + diarizzazione) completato per sessione ${sessionId}`)
+      console.log(`✅ Processo completo (trascrizione${finalTranscript === initialTranscript ? '' : ' + diarizzazione'}) completato per sessione ${sessionId}`)
 
       return NextResponse.json({
-        message: "Trascrizione e diarizzazione completate con successo",
+        message: `Trascrizione${finalTranscript === initialTranscript ? '' : ' e diarizzazione'} completate con successo`,
         sessionId,
         status: "TRANSCRIBED",
-        transcript: diarizedTranscript,
+        transcript: finalTranscript,
         initialTranscriptLength: initialTranscript.length,
-        diarizedTranscriptLength: diarizedTranscript.length,
-        fileSize: fileStats.size,
-        filePath: audioFilePath
+        finalTranscriptLength: finalTranscript.length,
+        fileSize: fileData.size,
+        fileName: sessionRecord.audioFileName,
+        diarizationSuccessful: finalTranscript !== initialTranscript
       })
 
     } catch (error) {

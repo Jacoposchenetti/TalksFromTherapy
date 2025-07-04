@@ -179,7 +179,7 @@ function SessionsPageContent() {
     if (patientId) {
       return sessions
     } else if (selectedPatientForUpload) {
-      return sessions.filter(session => session.patient.id === selectedPatientForUpload)
+      return sessions.filter(session => session.patient?.id === selectedPatientForUpload)
     } else {
       return sessions    }
   }
@@ -1012,7 +1012,7 @@ function SessionsPageContent() {
                     </CardTitle>
                     <CardDescription className="flex items-center gap-4 mt-2 flex-wrap">
                       {!patientId && (
-                        <span className="truncate">{session.patient.initials}</span>
+                        <span className="truncate">{session.patient?.initials || 'N/A'}</span>
                       )}
                       <span className="flex items-center gap-1 flex-shrink-0">
                         <Calendar className="h-4 w-4" />
