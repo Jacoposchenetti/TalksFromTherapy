@@ -57,6 +57,9 @@ export async function GET(request: NextRequest) {
         } : null,
         // Topic Analysis  
         topics: analysis.topicAnalysisResult ? JSON.parse(analysis.topicAnalysisResult) : null,
+        // Custom Topic Searches
+        customTopicSearches: analysis.customTopicAnalysisResults ? 
+          JSON.parse(analysis.customTopicAnalysisResults).searches || [] : [],
         // Semantic Frame Analysis
         semanticFrames: analysis.semanticFrameResults ? JSON.parse(analysis.semanticFrameResults) : {},
         // Metadata
@@ -129,6 +132,39 @@ export async function POST(request: NextRequest) {
           topicAnalysisResult: JSON.stringify(analysisData)
         }
         break
+      case 'custom_topics':
+        // Per i topic personalizzati, aggiungiamo alla lista esistente
+        const { data: existingCustomAnalysis } = await supabase
+          .from('analyses')
+          .select('customTopicAnalysisResults')
+          .eq('sessionId', sessionId)
+          .single()
+        
+        let existingCustomSearches = []
+        if (existingCustomAnalysis?.customTopicAnalysisResults) {
+          try {
+            const parsed = JSON.parse(existingCustomAnalysis.customTopicAnalysisResults)
+            existingCustomSearches = parsed.searches || []
+          } catch (e) {
+            console.error("Errore parsing custom topic searches esistenti:", e)
+          }
+        }
+        
+        // Aggiungi la nuova ricerca
+        const newSearch = {
+          query: analysisData.query,
+          timestamp: new Date().toISOString(),
+          results: analysisData.results || []
+        }
+        existingCustomSearches.push(newSearch)
+        
+        updateData = {
+          ...updateData,
+          customTopicAnalysisResults: JSON.stringify({
+            searches: existingCustomSearches
+          })
+        }
+        break
       case 'semantic_frame':
         const { target_word } = analysisData
         if (target_word) {
@@ -154,7 +190,7 @@ export async function POST(request: NextRequest) {
         }
         break
       default:
-        return NextResponse.json({ error: "Tipo di analisi non supportato" }, { status: 400 })
+        return NextResponse.json({ error: "Tipo di analisi non supportato. Tipi supportati: sentiment, topics, custom_topics, semantic_frame" }, { status: 400 })
     }
     // Upsert dell'analisi (crea se non esiste, aggiorna se esiste)
     // Prima controlla se esiste già

@@ -3,6 +3,11 @@ import { useState, useEffect, useCallback } from 'react'
 interface CachedAnalysis {
   sentiment?: any
   topics?: any
+  customTopicSearches?: Array<{
+    query: string
+    timestamp: string
+    results: any[]
+  }>
   semanticFrames?: Record<string, any>
   analysisVersion?: string
   language?: string
