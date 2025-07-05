@@ -212,12 +212,25 @@ export default function PatientAnalysisPage() {
     }
   }
 
-  // Function to highlight search terms in text
+  // Function to highlight search terms in text and format dialogue
   const highlightSearchTerm = (text: string, searchTerm: string) => {
-    if (!searchTerm.trim()) return text
+    if (!text) return text
+    
+    // First, format the dialogue by adding line breaks before "Therapist:" and "Patient:"
+    let formattedText = text
+      .replace(/(\s+)(Therapist:)/g, '<br/><br/><strong class="text-blue-600">$2</strong>')
+      .replace(/(\s+)(Patient:)/g, '<br/><br/><strong class="text-green-600">$2</strong>')
+    
+    // Handle the case where Therapist: or Patient: appears at the beginning
+    formattedText = formattedText
+      .replace(/^(Therapist:)/g, '<strong class="text-blue-600">$1</strong>')
+      .replace(/^(Patient:)/g, '<strong class="text-green-600">$1</strong>')
+    
+    // Then highlight search terms if provided
+    if (!searchTerm.trim()) return formattedText
     
     const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
-    const parts = text.split(regex)
+    const parts = formattedText.split(regex)
     
     return parts.map((part, index) => {
       if (regex.test(part)) {
