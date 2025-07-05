@@ -1,10 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, Brain, Loader2, MessageCircle, FileText, Eye, EyeOff } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { AlertCircle, Brain, Loader2, MessageCircle, FileText, Eye, EyeOff, Search, Plus, X, History } from "lucide-react"
 import { extractPatientContent } from "@/lib/text-utils"
 
 interface Session {
@@ -34,6 +39,20 @@ interface AnalysisResult {
   }
 }
 
+interface CustomTopicSearchResult {
+  query: string
+  timestamp: string
+  sessions: Array<{ id: string; title: string }>
+  results: Array<{
+    topic: string
+    relevantSegments: TextSegment[]
+    totalMatches: number
+    confidence: number
+    error?: string
+  }>
+  summary: string
+}
+
 interface TextSegment {
   text: string
   topic_id: number | null
@@ -43,7 +62,7 @@ interface TextSegment {
 interface TopicAnalysisProps {
   selectedSessions: Session[]
   combinedTranscript: string
-  onAnalysisComplete?: (result: AnalysisResult) => void
+  onAnalysisComplete?: (result: AnalysisResult | CustomTopicSearchResult) => void
 }
 
 export default function TopicAnalysisComponent({ 
@@ -53,8 +72,108 @@ export default function TopicAnalysisComponent({
 }: TopicAnalysisProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
+  const [customSearchResult, setCustomSearchResult] = useState<CustomTopicSearchResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showTextView, setShowTextView] = useState(false)
+  const [showCustomTextView, setShowCustomTextView] = useState(false)
+  
+  // Nuovi stati per i topic personalizzati
+  const [isCustomMode, setIsCustomMode] = useState(false)
+  const [customTopics, setCustomTopics] = useState<string[]>([''])
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchProgress, setSearchProgress] = useState<string>('')
+
+  // Nuovi stati per le ricerche precedenti
+  const [previousSearches, setPreviousSearches] = useState<CustomTopicSearchResult[]>([])
+  const [selectedPreviousSearch, setSelectedPreviousSearch] = useState<string>('')
+  const [isLoadingPreviousSearches, setIsLoadingPreviousSearches] = useState(false)
+
+  // Funzioni per gestire i topic personalizzati
+  const addCustomTopic = () => {
+    setCustomTopics([...customTopics, ''])
+  }
+
+  const removeCustomTopic = (index: number) => {
+    if (customTopics.length > 1) {
+      setCustomTopics(customTopics.filter((_, i) => i !== index))
+    }
+  }
+
+  const updateCustomTopic = (index: number, value: string) => {
+    const newTopics = [...customTopics]
+    newTopics[index] = value
+    setCustomTopics(newTopics)
+  }
+
+  const runCustomTopicSearch = async () => {
+    const validTopics = customTopics.filter(topic => topic.trim().length > 0)
+    
+    if (validTopics.length === 0) {
+      setError("Inserisci almeno un topic da cercare")
+      return
+    }
+
+    setIsSearching(true)
+    setError(null)
+    setCustomSearchResult(null)
+    setSearchProgress(`Preparazione ricerca per ${validTopics.length} topic...`)
+
+    try {
+      const response = await fetch('/api/custom-topic-search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionIds: selectedSessions.map(s => s.id),
+          customTopics: validTopics
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP Error: ${response.status}`)
+      }
+
+      setSearchProgress('Elaborazione risultati...')
+      const result = await response.json()
+      
+      if (result.success) {
+        setCustomSearchResult(result.data)
+        onAnalysisComplete?.(result.data)
+        setSearchProgress('')
+
+        // Salva la ricerca nei risultati precedenti se ha successo
+        setPreviousSearches(prev => {
+          const newSearch = result.data
+          // Controlla se esiste già nella cronologia
+          const exists = prev.find(search => 
+            search.query === newSearch.query && 
+            JSON.stringify(search.sessions) === JSON.stringify(newSearch.sessions)
+          )
+          if (exists) {
+            // Aggiorna solo il timestamp se esiste già
+            return prev.map(search => 
+              search === exists ? { ...search, timestamp: new Date().toISOString() } : search
+            )
+          } else {
+            // Aggiungi alla cronologia mantenendo solo le ultime 5 ricerche
+            return [{ ...newSearch, timestamp: new Date().toISOString() }, ...prev].slice(0, 5)
+          }
+        })
+
+      } else {
+        throw new Error(result.error || 'Errore sconosciuto')
+      }
+
+    } catch (error) {
+      console.error('Errore durante la ricerca personalizzata:', error)
+      setError(error instanceof Error ? error.message : 'Errore sconosciuto durante la ricerca')
+      setSearchProgress('')
+    } finally {
+      setIsSearching(false)
+    }
+  }
 
   const runTopicAnalysis = async () => {
     if (!combinedTranscript || combinedTranscript.trim().length === 0) {
@@ -526,13 +645,127 @@ Rispondi SOLO con JSON:
     }
   }
 
+  // Carica le ricerche precedenti quando si entra in modalità custom
+  useEffect(() => {
+    if (isCustomMode && selectedSessions.length > 0) {
+      loadPreviousSearches()
+    }
+  }, [isCustomMode, selectedSessions])
+
+  const loadPreviousSearches = async () => {
+    if (selectedSessions.length === 0) return
+
+    setIsLoadingPreviousSearches(true)
+    try {
+      // Carica da ogni sessione selezionata
+      const allSearches: CustomTopicSearchResult[] = []
+      
+      for (const session of selectedSessions) {
+        const response = await fetch(`/api/analyses?sessionId=${session.id}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.cached && data.analysis?.customTopicSearches) {
+            // Trasforma le ricerche salvate nel formato giusto
+            data.analysis.customTopicSearches.forEach((search: any) => {
+              allSearches.push({
+                query: search.query,
+                timestamp: search.timestamp,
+                sessions: [{ id: session.id, title: session.title }],
+                results: search.results || [],
+                summary: `Ricerca "${search.query}" del ${new Date(search.timestamp).toLocaleDateString()}`
+              })
+            })
+          }
+        }
+      }
+      
+      // Rimuovi duplicati basandosi su query e timestamp
+      const uniqueSearches = allSearches.filter((search, index, self) => 
+        index === self.findIndex(s => s.query === search.query && s.timestamp === search.timestamp)
+      )
+      
+      setPreviousSearches(uniqueSearches.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      ))
+    } catch (error) {
+      console.error('Errore nel caricamento delle ricerche precedenti:', error)
+    } finally {
+      setIsLoadingPreviousSearches(false)
+    }
+  }
+
+  const loadPreviousSearch = (searchKey: string) => {
+    const search = previousSearches.find(s => `${s.query}-${s.timestamp}` === searchKey)
+    if (search) {
+      setCustomSearchResult(search)
+      setCustomTopics(search.query.split(', ').filter(t => t.trim().length > 0))
+      setShowCustomTextView(false) // Reset text view
+    }
+  }
+
+  const renderCustomSearchTextView = (searchResult: CustomTopicSearchResult) => {
+    // Crea una mappa dei segmenti rilevanti per topic
+    const topicSegments = new Map<string, TextSegment[]>()
+    searchResult.results.forEach((result, index) => {
+      if (result.relevantSegments) {
+        topicSegments.set(result.topic, result.relevantSegments.map(segment => ({
+          ...segment,
+          topic_id: index + 1 // Assegna un ID per il colore
+        })))
+      }
+    })
+
+    // Split del testo combinato in frasi
+    const allSentences = combinedTranscript
+      .split(/[.!?]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 10)
+
+    if (allSentences.length === 0) {
+      return <p className="text-gray-500 italic">No transcript available for text view.</p>
+    }
+
+    return allSentences.map((sentence, index) => {
+      // Cerca se questa frase è presente nei segmenti rilevanti
+      let matchedTopic: string | null = null
+      let confidence = 0
+      let topicId: number | null = null
+
+      for (const [topic, segments] of topicSegments) {
+        const matchingSegment = segments.find(segment => 
+          segment.text.toLowerCase().includes(sentence.toLowerCase()) ||
+          sentence.toLowerCase().includes(segment.text.toLowerCase())
+        )
+        
+        if (matchingSegment) {
+          matchedTopic = topic
+          confidence = matchingSegment.confidence
+          topicId = matchingSegment.topic_id
+          break
+        }
+      }
+
+      return (
+        <span
+          key={index}
+          className={`inline-block p-1 rounded ${getTopicBackgroundColor(topicId)} ${
+            topicId ? 'border-l-2 border-gray-400' : ''
+          }`}
+          title={topicId ? `Topic: ${matchedTopic} (${Math.round(confidence * 100)}% confidence)` : 'Not matched to any custom topic'}
+        >
+          {sentence}
+        </span>
+      )
+    })
+  }
+
   return (
     <div className="h-full space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Brain className="h-5 w-5" />
-            GPT-3.5 Topic Analysis
+            Topic Analysis
           </h3>
           <p className="text-sm text-gray-600">
             {selectedSessions.length > 0 
@@ -541,6 +774,32 @@ Rispondi SOLO con JSON:
           </p>
         </div>
         
+        {/* Toggle per modalità */}
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="analysis-mode" className="text-sm">
+              Auto Discovery
+            </Label>
+            <Switch
+              id="analysis-mode"
+              checked={isCustomMode}
+              onCheckedChange={(checked) => {
+                setIsCustomMode(checked)
+                // Reset dei risultati quando si cambia modalità
+                setAnalysisResult(null)
+                setCustomSearchResult(null)
+                setError(null)
+              }}
+            />
+            <Label htmlFor="analysis-mode" className="text-sm">
+              Custom Topics
+            </Label>
+          </div>
+        </div>
+      </div>
+
+      {/* Modalità Auto Discovery */}
+      {!isCustomMode && (
         <Button 
           onClick={runTopicAnalysis}
           disabled={isAnalyzing || !combinedTranscript || combinedTranscript.trim().length === 0}
@@ -558,9 +817,222 @@ Rispondi SOLO con JSON:
             </>
           )}
         </Button>
-      </div>
+      )}
 
-      {error && (
+      {/* Modalità Custom Topics */}
+      {isCustomMode && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              Search Custom Topics
+            </CardTitle>
+            <CardDescription>
+              Enter specific topics you want to search for in the selected sessions.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {customTopics.map((topic, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <Input
+                  placeholder={`Topic ${index + 1} (e.g., "anxiety", "relationships", "work stress")`}
+                  value={topic}
+                  onChange={(e) => updateCustomTopic(index, e.target.value)}
+                  className="flex-1"
+                />
+                {customTopics.length > 1 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => removeCustomTopic(index)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+            
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addCustomTopic}
+                disabled={customTopics.length >= 5}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Topic
+              </Button>
+              
+              <Button
+                onClick={runCustomTopicSearch}
+                disabled={isSearching || !combinedTranscript || customTopics.every(t => t.trim().length === 0)}
+                className="flex items-center gap-2"
+              >
+                {isSearching ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Searching...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4" />
+                    Search Topics
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Menu a tendina per ricerche precedenti */}
+            {previousSearches.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <History className="h-4 w-4" />
+                  Load Previous Search
+                </Label>
+                <Select
+                  onValueChange={(value) => {
+                    setSelectedPreviousSearch(value)
+                    loadPreviousSearch(value)
+                  }}
+                  value={selectedPreviousSearch}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a previous search..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {previousSearches.map((search) => (
+                      <SelectItem 
+                        key={`${search.query}-${search.timestamp}`} 
+                        value={`${search.query}-${search.timestamp}`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">{search.query}</span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(search.timestamp).toLocaleDateString()} - {search.results.length} topics
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            {/* Progress indicator */}
+            {isSearching && searchProgress && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  <span className="text-sm text-blue-800">{searchProgress}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Sezione per ricerche precedenti */}
+            {previousSearches.length > 0 && (
+              <div className="mt-6">
+                <Label className="text-sm">
+                  Previous Searches
+                </Label>
+                <Select
+                  onValueChange={(value) => {
+                    const search = previousSearches.find(s => s.timestamp === value)
+                    setSelectedPreviousSearch(search ? search.timestamp : '')
+                    // Carica i risultati della ricerca selezionata
+                    if (search) {
+                      setIsLoadingPreviousSearches(true)
+                      setTimeout(() => {
+                        setCustomSearchResult(search)
+                        setIsLoadingPreviousSearches(false)
+                      }, 300)
+                    }
+                  }}
+                  defaultValue={selectedPreviousSearch}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a previous search" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {previousSearches.map((search) => (
+                      <SelectItem key={search.timestamp} value={search.timestamp}>
+                        {new Date(search.timestamp).toLocaleString()} - {search.query}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Mostra i risultati della ricerca selezionata */}
+                {selectedPreviousSearch && customSearchResult && (
+                  <Card className="mt-4">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <History className="h-5 w-5" />
+                        Search Results
+                      </CardTitle>
+                      <CardDescription>
+                        {customSearchResult.summary}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {customSearchResult.results.map((result, index) => (
+                          <div key={index} className="border rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-medium text-lg">"{result.topic}"</h4>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline">
+                                  {result.totalMatches} matches
+                                </Badge>
+                                {result.confidence > 0 && (
+                                  <Badge variant="secondary">
+                                    {Math.round(result.confidence * 100)}% confidence
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+
+                            {result.error ? (
+                              <div className="text-red-600 text-sm">
+                                <AlertCircle className="h-4 w-4 inline mr-1" />
+                                {result.error}
+                              </div>
+                            ) : result.relevantSegments.length > 0 ? (
+                              <div className="space-y-2">
+                                <p className="text-sm text-gray-600 mb-2">
+                                  Relevant segments found:
+                                </p>
+                                <div className="max-h-48 overflow-y-auto space-y-2">
+                                  {result.relevantSegments.map((segment, segIndex) => (
+                                    <div
+                                      key={segIndex}
+                                      className="p-2 bg-blue-50 border-l-4 border-blue-400 rounded text-sm"
+                                    >
+                                      <div className="flex justify-between items-start mb-1">
+                                        <span className="text-xs text-gray-500">
+                                          Confidence: {Math.round(segment.confidence * 100)}%
+                                        </span>
+                                      </div>
+                                      <p className="text-gray-800">{segment.text}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 italic text-sm">
+                                No relevant segments found for this topic.
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}      {error && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-red-800">
@@ -601,7 +1073,118 @@ Rispondi SOLO con JSON:
                 </div>
               </div>
             </CardContent>
-          </Card>          {/* Risultati dell'analisi */}
+          </Card>
+
+          {/* Risultati della ricerca personalizzata */}
+          {customSearchResult && (
+            <Card className="relative">
+              {/* Overlay del titolo in alto a sinistra */}
+              <div className="absolute top-4 left-4 z-10">
+                <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border shadow-sm">
+                  <Search className="h-4 w-4" />
+                  <span className="text-sm font-medium">Custom Topic Search Results</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCustomTextView(!showCustomTextView)}
+                    className="ml-2 h-7 px-2"
+                  >
+                    {showCustomTextView ? (
+                      <>
+                        <EyeOff className="h-3 w-3 mr-1" />
+                        Hide
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-3 w-3 mr-1" />
+                        In Text
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <CardHeader className="pt-16">
+                <CardDescription>
+                  {customSearchResult.summary}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!showCustomTextView ? (
+                  <div className="space-y-6">
+                    {customSearchResult.results.map((result, index) => (
+                      <div key={index} className="border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-medium text-lg">"{result.topic}"</h4>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">
+                              {result.totalMatches} matches
+                            </Badge>
+                            {result.confidence > 0 && (
+                              <Badge variant="secondary">
+                                {Math.round(result.confidence * 100)}% confidence
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        {result.error ? (
+                          <div className="text-red-600 text-sm">
+                            <AlertCircle className="h-4 w-4 inline mr-1" />
+                            {result.error}
+                          </div>
+                        ) : result.relevantSegments.length > 0 ? (
+                          <div className="space-y-2">
+                            <p className="text-sm text-gray-600 mb-2">
+                              Relevant segments found:
+                            </p>
+                            <div className="max-h-48 overflow-y-auto space-y-2">
+                              {result.relevantSegments.map((segment, segIndex) => (
+                                <div
+                                  key={segIndex}
+                                  className="p-2 bg-blue-50 border-l-4 border-blue-400 rounded text-sm"
+                                >
+                                  <div className="flex justify-between items-start mb-1">
+                                    <span className="text-xs text-gray-500">
+                                      Confidence: {Math.round(segment.confidence * 100)}%
+                                    </span>
+                                  </div>
+                                  <p className="text-gray-800">{segment.text}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-gray-500 italic text-sm">
+                            No relevant segments found for this topic.
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="max-h-96 overflow-y-auto pr-2">
+                    <div className="mb-4">
+                      <h4 className="font-medium mb-2">Topic Legend:</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {customSearchResult.results.map((result, index) => (
+                          <Badge key={index} className={getTopicColor(index + 1)}>
+                            {result.topic}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2 text-sm leading-relaxed">
+                      {renderCustomSearchTextView(customSearchResult)}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Risultati dell'analisi automatica */}
           {analysisResult && (
             <Card className="relative">
               {/* Overlay del titolo in alto a sinistra */}
@@ -650,7 +1233,9 @@ Rispondi SOLO con JSON:
                 <CardDescription>
                   {analysisResult.summary}
                 </CardDescription>
-              </CardHeader>              <CardContent>
+              </CardHeader>
+
+              <CardContent>
                 {!showTextView ? (
                   <div className="max-h-96 overflow-y-auto space-y-4 pr-2">
                     {analysisResult.topics.map((topic, index) => (
@@ -733,7 +1318,8 @@ Rispondi SOLO con JSON:
                     </div>
                   </div>
                 )}
-              </CardContent></Card>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}
