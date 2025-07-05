@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp, Download, Users } from "lucide-react"
+import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp, Download } from "lucide-react"
 import { DocumentParser } from "@/lib/document-parser"
 import { NotificationManager } from "@/lib/notification-manager"
 import { useAudioPlayer } from "@/hooks/useAudioPlayer"
@@ -118,7 +118,6 @@ function SessionsPageContent() {
   const [editingTranscriptId, setEditingTranscriptId] = useState<string | null>(null) // sessionId being edited
   const [editingTranscriptText, setEditingTranscriptText] = useState<string>("")
   const [savingTranscript, setSavingTranscript] = useState(false)
-  const [diarizingSessionId, setDiarizingSessionId] = useState<string | null>(null) // sessionId being diarized
   // Audio player state
   const { playSession, currentSession, isPlaying } = useAudioPlayer()
 
@@ -781,41 +780,6 @@ function SessionsPageContent() {
     }
   }
 
-  const handleDiarizeTranscript = async (sessionId: string) => {
-    try {
-      setDiarizingSessionId(sessionId)
-      console.log(`🎭 Avvio diarizzazione per sessione: ${sessionId}`)
-      
-      const response = await fetch('/api/diarize-transcript', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ sessionId }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Errore durante la diarizzazione')
-      }
-
-      const result = await response.json()
-      console.log('✅ Diarizzazione completata:', result)
-      
-      // Aggiorna la lista delle sessioni per mostrare la nuova trascrizione
-      await fetchSessions()
-      
-      // Mostra notifica di successo
-      NotificationManager.showSuccess('Diarizzazione completata con successo!')
-      
-    } catch (error) {
-      console.error('❌ Errore durante la diarizzazione:', error)
-      NotificationManager.showError(`Errore durante la diarizzazione: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`)
-    } finally {
-      setDiarizingSessionId(null)
-    }
-  }
-
   if (status === "loading" || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -1079,25 +1043,6 @@ function SessionsPageContent() {
                         <Button variant="outline" size="sm">
                           <FileText className="h-4 w-4 mr-1" />
                           Transcription
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleDiarizeTranscript(session.id)}
-                          disabled={diarizingSessionId === session.id}
-                          className="text-purple-600 hover:text-purple-700 border-purple-200 hover:border-purple-300"
-                        >
-                          {diarizingSessionId === session.id ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-1"></div>
-                              Diarizing...
-                            </>
-                          ) : (
-                            <>
-                              <Users className="h-4 w-4 mr-1" />
-                              Diarize
-                            </>
-                          )}
                         </Button>
                         <div className="relative">
                           <Button 
