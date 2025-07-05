@@ -541,9 +541,7 @@ export default function PatientAnalysisPage() {
                             >
                               <Icon className="h-4 w-4" />
                               {slide.title}
-                              {slide.hasCachedData && selectedSessions.size > 0 && (
-                                <Database className="h-3 w-3 text-green-600" />
-                              )}
+                              {/* Database icon removed - cache indicator */}
                             </button>
                           )
                         })}
@@ -667,34 +665,7 @@ export default function PatientAnalysisPage() {
                             </div>
                           )}
 
-                          {/* Show recalculate button when cached data is available */}
-                          {hasAllTopicAnalyses && (
-                            <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Database className="h-4 w-4 text-green-600" />
-                                  <span className="text-sm text-green-700 font-medium">
-                                    Topic analysis loaded from cache
-                                  </span>
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    // Pulisci cache per topic analysis
-                                    selectedSessions.forEach(sessionId => {
-                                      fetch(`/api/analyses?sessionId=${sessionId}&analysisType=topics`, {
-                                        method: 'DELETE'
-                                      })
-                                    })
-                                  }}
-                                  className="text-xs"
-                                >
-                                  Recalculate
-                                </Button>
-                              </div>
-                            </div>
-                          )}
+                          {/* Banner removed - topic analysis cache notification */}
 
                           <TopicAnalysisComponent 
                             selectedSessions={getSelectedSessionsData().map(session => ({
@@ -730,35 +701,7 @@ export default function PatientAnalysisPage() {
                             </div>
                           )}
 
-                          {/* Show recalculate button when cached data is available */}
-                          {hasAllSentimentAnalyses && (
-                            <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Database className="h-4 w-4 text-green-600" />
-                                  <span className="text-sm text-green-700 font-medium">
-                                    Analysis loaded from cache
-                                  </span>
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    // Pulisci cache e forza ricalcolo
-                                    setEmotionAnalysisResults([])
-                                    selectedSessions.forEach(sessionId => {
-                                      fetch(`/api/analyses?sessionId=${sessionId}&analysisType=sentiment`, {
-                                        method: 'DELETE'
-                                      })
-                                    })
-                                  }}
-                                  className="text-xs"
-                                >
-                                  Recalculate
-                                </Button>
-                              </div>
-                            </div>
-                          )}
+                          {/* Banner removed - sentiment analysis cache notification */}
                           
                           <SentimentAnalysis 
                             selectedSessions={getSelectedSessionsData().map(session => ({
@@ -812,7 +755,7 @@ export default function PatientAnalysisPage() {
                             {selectedSessions.size > 0 && analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames && Object.keys(analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames || {}).length > 0 && (
                               <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
                                 <div className="flex items-center gap-2">
-                                  <Database className="h-4 w-4 text-green-600" />
+                                  {/* Database icon removed */}
                                   <span className="text-sm text-green-700 font-medium">
                                     Semantic frame analyses available for: {Object.keys(analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames || {}).join(', ')}
                                   </span>
@@ -825,7 +768,7 @@ export default function PatientAnalysisPage() {
                           {Object.keys(pastAnalyses).length > 0 && (
                             <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
                               <h4 className="text-md font-medium mb-3 flex items-center gap-2">
-                                <Database className="h-4 w-4 text-blue-600" />
+                                {/* Database icon removed */}
                                 Past Analyses
                               </h4>
                               <div className="flex gap-3 items-center">
