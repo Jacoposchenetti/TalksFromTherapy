@@ -71,68 +71,6 @@ Rispondi SOLO con JSON:
   }
 }
 
-// Funzione per classificare tutti i topic contemporaneamente
-async function classifyTextForMultipleTopics(sentences: string[], topics: string[], sessionId: string) {
-  const topicList = topics.map((topic, index) => `${index + 1}. "${topic}"`).join('\n')
-  
-  const prompt = `Classifica ogni frase del testo per trovare segmenti relativi ai topic specificati.
-
-TOPIC DA CERCARE:
-${topicList}
-
-FRASI DA CLASSIFICARE:
-${sentences.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}
-
-ISTRUZIONI:
-1. Per ogni frase, assegna il topic_id più appropriato (1, 2, 3, etc.) o null
-2. Usa topic_id corrispondente al numero del topic nella lista sopra
-3. Usa topic_id = null se la frase non è chiaramente collegata a nessun topic
-4. Confidence alta (>0.7) solo se sei MOLTO sicuro della connessione
-5. Confidence media (0.4-0.7) per connessioni probabili
-6. Confidence bassa (<0.4) per connessioni deboli
-7. PREFERISCI null piuttosto che classificazioni incerte
-
-Rispondi SOLO con JSON:
-{"classifications": [
-  {"sentence_id": 1, "topic_id": 2, "confidence": 0.9, "text": "testo_frase"},
-  {"sentence_id": 2, "topic_id": null, "confidence": 0.1, "text": "testo_frase"}
-]}`
-
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: "Sei un esperto analista di testi terapeutici. Classifica con precisione le frasi in base ai topic richiesti."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      temperature: 0.1,
-      max_tokens: 4000,
-    })
-
-    const content = response.choices[0]?.message?.content || '{}'
-    const parsed = JSON.parse(content)
-    
-    if (parsed.classifications && Array.isArray(parsed.classifications)) {
-      return parsed.classifications.map((cls: any) => ({
-        text: cls.text || sentences[cls.sentence_id - 1] || '',
-        topic_id: cls.topic_id,
-        confidence: cls.confidence || 0
-      }))
-    }
-    
-    return []
-  } catch (error) {
-    console.error('Errore nella classificazione OpenAI:', error)
-    return []
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -210,61 +148,31 @@ export async function POST(request: NextRequest) {
       .map(session => `--- ${session.title} ---\n${session.transcript}`)
       .join('\n\n')
 
-    // Dividi il testo in frasi per la classificazione
-    const sentences = combinedTranscript
-      .split(/[.!?]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 15)
-
-    console.log(`Classificando ${sentences.length} frasi per ${customTopics.length} topic personalizzati`)
-
-    // Classifica tutto il testo per tutti i topic contemporaneamente
-    let fullTextSegments: any[] = []
+    // Usa l'endpoint classify-text-segments per cercare i topic personalizzati
     const topicSearchResults = []
-    
-    try {
-      // Usa la nuova funzione per classificare tutti i topic insieme
-      const classifications = await classifyTextForMultipleTopics(
-        sentences, 
-        customTopics, 
-        `custom_search_${Date.now()}`
-      )
 
-      fullTextSegments = classifications
-
-      // Crea i risultati per ogni topic
-      for (let i = 0; i < customTopics.length; i++) {
-        const topicId = i + 1
-        const customTopic = customTopics[i]
-        
-        const relevantSegments = classifications.filter((segment: any) => 
-          segment.topic_id === topicId && segment.confidence > 0.4
-        )
-
-        console.log(`Trovati ${relevantSegments.length} segmenti rilevanti per "${customTopic}"`)
-
-        topicSearchResults.push({
-          topic: customTopic,
-          topicId: topicId,
-          relevantSegments: relevantSegments,
-          totalMatches: relevantSegments.length,
-          confidence: relevantSegments.length > 0 ? 
-            relevantSegments.reduce((sum: number, seg: any) => sum + seg.confidence, 0) / relevantSegments.length : 0
-        })
-      }
-
-    } catch (error) {
-      console.error('Errore nella classificazione multi-topic:', error)
+    for (const customTopic of customTopics) {
+      console.log(`Cercando topic personalizzato: "${customTopic}"`)
       
-      // Fallback: classifica ogni topic separatamente
-      for (const customTopic of customTopics) {
-        console.log(`Fallback: Cercando topic personalizzato: "${customTopic}"`)
-        
+      let attempt = 0
+      const maxAttempts = 2
+      let success = false
+      
+      while (attempt < maxAttempts && !success) {
         try {
+          // Dividi il testo in frasi per la classificazione
+          const sentences = combinedTranscript
+            .split(/[.!?]+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 15)
+
+          console.log(`Classificando ${sentences.slice(0, 30).length} frasi per topic: "${customTopic}"`)
+
+          // Usa la funzione diretta invece della fetch
           const classifications = await classifyTextForTopic(
             sentences.slice(0, 30), 
             customTopic, 
-            `custom_search_fallback_${Date.now()}`
+            `custom_search_${Date.now()}_attempt_${attempt}`
           )
 
           const relevantSegments = classifications.filter((segment: any) => 
@@ -275,29 +183,38 @@ export async function POST(request: NextRequest) {
 
           topicSearchResults.push({
             topic: customTopic,
-            topicId: topicSearchResults.length + 1,
             relevantSegments: relevantSegments,
             totalMatches: relevantSegments.length,
             confidence: relevantSegments.length > 0 ? 
               relevantSegments.reduce((sum: number, seg: any) => sum + seg.confidence, 0) / relevantSegments.length : 0
           })
+          success = true
 
-        } catch (topicError) {
-          console.error(`Errore nella ricerca del topic "${customTopic}":`, topicError)
+        } catch (error) {
+          console.error(`Errore nella ricerca del topic "${customTopic}" (tentativo ${attempt + 1}):`, error)
           
-          topicSearchResults.push({
-            topic: customTopic,
-            topicId: topicSearchResults.length + 1,
-            relevantSegments: [],
-            totalMatches: 0,
-            confidence: 0,
-            error: topicError instanceof Error ? topicError.message : 'Errore sconosciuto'
-          })
+          if (attempt === maxAttempts - 1) {
+            // Ultimo tentativo fallito
+            topicSearchResults.push({
+              topic: customTopic,
+              relevantSegments: [],
+              totalMatches: 0,
+              confidence: 0,
+              error: error instanceof Error ? error.message : 'Errore sconosciuto'
+            })
+          }
         }
-
-        // Pausa tra i topic per evitare rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        attempt++
+        
+        // Pausa tra i tentativi
+        if (attempt < maxAttempts && !success) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
       }
+
+      // Pausa tra i topic per evitare rate limiting
+      await new Promise(resolve => setTimeout(resolve, 1000))
     }
 
     const searchResult = {
@@ -305,12 +222,6 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
       sessions: validSessions.map(s => ({ id: s.id, title: s.title })),
       results: topicSearchResults,
-      fullTextSegments: fullTextSegments, // Aggiungi i segmenti completi per l'highlighting
-      customTopics: customTopics.map((topic, index) => ({
-        topic_id: index + 1,
-        description: topic,
-        keywords: [topic] // Per compatibilità con il frontend
-      })),
       summary: `Ricerca completata per ${customTopics.length} topic personalizzati su ${validSessions.length} sessioni. 
                 Trovati ${topicSearchResults.reduce((sum, r) => sum + r.totalMatches, 0)} segmenti rilevanti totali.`
     }
