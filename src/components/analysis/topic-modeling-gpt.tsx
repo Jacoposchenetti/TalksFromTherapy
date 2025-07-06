@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, Brain, Loader2, MessageCircle, FileText, Eye, EyeOff, Search, Plus, X, History } from "lucide-react"
+import { AlertCircle, Brain, Loader2, MessageCircle, FileText, Eye, EyeOff, Search, Plus, X, History, Database } from "lucide-react"
 import { extractPatientContent } from "@/lib/text-utils"
 
 interface Session {
@@ -63,12 +63,14 @@ interface TopicAnalysisProps {
   selectedSessions: Session[]
   combinedTranscript: string
   onAnalysisComplete?: (result: AnalysisResult | CustomTopicSearchResult) => void
+  cachedData?: any // Dati topic analysis dalla cache
 }
 
 export default function TopicAnalysisComponent({ 
   selectedSessions, 
   combinedTranscript, 
-  onAnalysisComplete 
+  onAnalysisComplete,
+  cachedData 
 }: TopicAnalysisProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
@@ -137,6 +139,14 @@ export default function TopicAnalysisComponent({
       setSelectedSavedSearch(searchId)
     }
   }
+
+  // Carica automaticamente i dati cachati quando il componente viene montato
+  React.useEffect(() => {
+    if (cachedData && !isCustomMode && !analysisResult) {
+      console.log('🎯 Loading cached topic data:', cachedData)
+      setAnalysisResult(cachedData)
+    }
+  }, [cachedData, isCustomMode, analysisResult])
 
   // Carica le ricerche salvate quando si attiva la modalità custom
   React.useEffect(() => {
@@ -671,6 +681,11 @@ Rispondi SOLO con JSON:
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             Topic Analysis
+            {cachedData && !isCustomMode && (
+              <Badge variant="secondary" className="text-xs">
+                Cached
+              </Badge>
+            )}
           </h3>
           <p className="text-sm text-gray-600">
             {selectedSessions.length > 0 
@@ -679,29 +694,33 @@ Rispondi SOLO con JSON:
           </p>
         </div>
         
-        {/* Toggle per modalità */}
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="analysis-mode" className="text-sm">
+        {/* Pulsante per cambiare modalità */}
+        <Button
+          variant="outline"
+          onClick={() => {
+            setIsCustomMode(!isCustomMode)
+            // Reset dei risultati quando si cambia modalità
+            setAnalysisResult(null)
+            setCustomSearchResult(null)
+            setError(null)
+          }}
+          className="flex items-center gap-2"
+        >
+          {isCustomMode ? (
+            <>
+              <Search className="h-4 w-4" />
               Auto Discovery
-            </Label>
-            <Switch
-              id="analysis-mode"
-              checked={isCustomMode}
-              onCheckedChange={(checked) => {
-                setIsCustomMode(checked)
-                // Reset dei risultati quando si cambia modalità
-                setAnalysisResult(null)
-                setCustomSearchResult(null)
-                setError(null)
-              }}
-            />
-            <Label htmlFor="analysis-mode" className="text-sm">
+            </>
+          ) : (
+            <>
+              <Search className="h-4 w-4" />
               Custom Topics
-            </Label>
-          </div>
-        </div>
+            </>
+          )}
+        </Button>
       </div>
+
+     
 
       {/* Modalità Auto Discovery */}
       {!isCustomMode && (
@@ -752,7 +771,7 @@ Rispondi SOLO con JSON:
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a previous search..." />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white border-gray-300 shadow-lg">
                     {savedSearches.map((search) => (
                       <SelectItem key={search.id} value={search.id}>
                         <div className="flex flex-col">
