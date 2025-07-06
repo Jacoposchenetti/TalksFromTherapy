@@ -164,4 +164,21 @@ model SessionNote {
   @@map("session_notes")
 }
 
+// Tabella per le ricerche di custom topics salvate
+model CustomTopicSearch {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String   // Nome dato dall'utente alla ricerca
+  topics        String   // JSON array dei topics cercati
+  sessionIds    String   // JSON array degli ID delle sessioni
+  results       String?  // JSON dei risultati (opzionale, per cache)
+  isBookmarked  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("custom_topic_searches")
+}
+
 

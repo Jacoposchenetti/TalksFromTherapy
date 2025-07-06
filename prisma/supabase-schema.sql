@@ -66,6 +66,7 @@ CREATE TABLE "analyses" (
   -- Topic Analysis
   "keyTopics" TEXT,
   "topicAnalysisResult" TEXT,
+  "customTopicAnalysisResults" TEXT,
   -- Semantic Frame Analysis
   "semanticFrameResults" TEXT,
   -- General Analysis Fields
@@ -129,4 +130,4 @@ CREATE TABLE "session_notes" (
   "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "session_notes_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "sessions"("id") ON DELETE CASCADE
 );
-CREATE INDEX "session_notes_sessionId_idx" ON "session_notes"("sessionId"); 
+CREATE INDEX "session_notes_sessionId_idx" ON "session_notes"("sessionId");
