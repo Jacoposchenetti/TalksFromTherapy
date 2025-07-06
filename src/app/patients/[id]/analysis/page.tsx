@@ -688,6 +688,12 @@ export default function PatientAnalysisPage() {
                                 console.log('✅ Analisi topic salvata nella cache')
                               }
                             }}
+                            cachedData={(() => {
+                              const topicData = hasAllTopicAnalyses ? getTopicData() : undefined
+                              console.log('🎯 Topic cached data being passed:', topicData)
+                              console.log('🎯 hasAllTopicAnalyses:', hasAllTopicAnalyses)
+                              return topicData
+                            })()}
                           />
                         </div>
                       )}                      {/* Slide 2: Sentiment Analysis */}
@@ -768,7 +774,7 @@ export default function PatientAnalysisPage() {
                                   }}
                                   className="border rounded px-3 py-2 bg-white min-w-[200px] focus:ring-2 focus:ring-blue-400"
                                 >
-                                  <option value="">Select a past analysis</option>
+                                  <option value="">Select previous search </option>
                                   {Object.keys(pastAnalyses).map(word => (
                                     <option key={word} value={word}>
                                       {word}
