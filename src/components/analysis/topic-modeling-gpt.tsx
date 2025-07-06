@@ -670,7 +670,6 @@ Rispondi SOLO con JSON:
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Brain className="h-5 w-5" />
             Topic Analysis
           </h3>
           <p className="text-sm text-gray-600">
@@ -718,7 +717,6 @@ Rispondi SOLO con JSON:
             </>
           ) : (
             <>
-              <Brain className="h-4 w-4" />
               Start Topic Analysis
             </>
           )}
@@ -1012,6 +1010,51 @@ Rispondi SOLO con JSON:
                           );
                         }
 
+                        // Funzione helper per formattare il testo con interruzioni di riga
+                        const formatTextWithSpeakers = (text: string) => {
+                          // Pattern per riconoscere i cambi di interlocutore
+                          const speakerPattern = /(Therapist:|Patient:|Paziente:|Terapeuta:)/gi;
+                          return text.replace(speakerPattern, '\n\n$1');
+                        };
+
+                        // Funzione helper per creare elementi con formattazione
+                        const createFormattedElements = (text: string, className: string, title?: string) => {
+                          const formattedText = formatTextWithSpeakers(text);
+                          const lines = formattedText.split('\n');
+                          
+                          return lines.map((line, lineIndex) => {
+                            if (line.trim() === '') {
+                              return <br key={`${elementKey++}-br-${lineIndex}`} />;
+                            }
+                            
+                            // Controlla se la riga inizia con un interlocutore
+                            const speakerMatch = line.match(/^(Therapist:|Patient:|Paziente:|Terapeuta:)/i);
+                            if (speakerMatch) {
+                              const speaker = speakerMatch[1];
+                              const restOfLine = line.slice(speaker.length).trim();
+                              
+                              return (
+                                <div key={`${elementKey++}-line-${lineIndex}`} className="mb-2">
+                                  <span className="font-semibold text-gray-900">
+                                    {speaker}
+                                  </span>
+                                  {restOfLine && (
+                                    <span className={className} title={title}>
+                                      {' ' + restOfLine}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            }
+                            
+                            return (
+                              <span key={`${elementKey++}-line-${lineIndex}`} className={className} title={title}>
+                                {line}
+                              </span>
+                            );
+                          });
+                        };
+
                         // Costruire il testo con evidenziazioni
                         let currentIndex = 0;
                         const elements = [];
@@ -1021,23 +1064,17 @@ Rispondi SOLO con JSON:
                           // Aggiungere il testo non evidenziato prima del segmento
                           if (currentIndex < startIndex) {
                             const beforeText = combinedTranscript.slice(currentIndex, startIndex);
-                            elements.push(
-                              <span key={elementKey++} className="text-gray-800">
-                                {beforeText}
-                              </span>
-                            );
+                            const beforeElements = createFormattedElements(beforeText, "text-gray-800");
+                            elements.push(...beforeElements);
                           }
 
                           // Aggiungere il segmento evidenziato
-                          elements.push(
-                            <span
-                              key={elementKey++}
-                              className={`inline-block p-1 rounded ${getTopicBackgroundColor(segment.topicIndex)} border-l-2 border-gray-400`}
-                              title={`"${segment.topic}" (${Math.round(segment.confidence * 100)}% confidence)`}
-                            >
-                              {segment.text}
-                            </span>
+                          const highlightedElements = createFormattedElements(
+                            segment.text,
+                            `inline-block p-1 rounded ${getTopicBackgroundColor(segment.topicIndex)} border-l-2 border-gray-400`,
+                            `"${segment.topic}" (${Math.round(segment.confidence * 100)}% confidence)`
                           );
+                          elements.push(...highlightedElements);
 
                           currentIndex = segment.endIndex;
                         });
@@ -1045,11 +1082,8 @@ Rispondi SOLO con JSON:
                         // Aggiungere il resto del testo se c'è
                         if (currentIndex < combinedTranscript.length) {
                           const remainingText = combinedTranscript.slice(currentIndex);
-                          elements.push(
-                            <span key={elementKey++} className="text-gray-800">
-                              {remainingText}
-                            </span>
-                          );
+                          const remainingElements = createFormattedElements(remainingText, "text-gray-800");
+                          elements.push(...remainingElements);
                         }
 
                         return elements;

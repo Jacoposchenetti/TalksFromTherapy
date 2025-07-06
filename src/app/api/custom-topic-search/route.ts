@@ -229,14 +229,37 @@ export async function POST(request: NextRequest) {
     // Salva i risultati per ogni sessione
     try {
       for (const session of validSessions) {
-        // Salva direttamente nel database invece di fare fetch
+        // Prima recupera le ricerche esistenti
+        const { data: existingAnalysis } = await supabase
+          .from('analyses')
+          .select('customTopicAnalysisResults')
+          .eq('sessionId', session.id)
+          .single()
+
+        let existingSearches = []
+        if (existingAnalysis?.customTopicAnalysisResults) {
+          try {
+            const parsed = JSON.parse(existingAnalysis.customTopicAnalysisResults)
+            existingSearches = parsed.searches || []
+          } catch (parseError) {
+            console.warn('Error parsing existing searches:', parseError)
+          }
+        }
+
+        // Aggiungi la nuova ricerca preservando quelle esistenti
+        const allSearches = [...existingSearches, searchResult]
+        
+        // Mantieni solo le ultime 50 ricerche per evitare che il database cresca troppo
+        const limitedSearches = allSearches.slice(-50)
+
+        // Salva direttamente nel database
         const { error: saveError } = await supabase
           .from('analyses')
           .upsert([{
             sessionId: session.id,
             patientId: session.patientId,
             customTopicAnalysisResults: JSON.stringify({
-              searches: [searchResult]
+              searches: limitedSearches
             }),
             updatedAt: new Date()
           }], {
