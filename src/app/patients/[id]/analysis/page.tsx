@@ -450,9 +450,6 @@ export default function PatientAnalysisPage() {
                 <h1 className="text-3xl font-bold text-gray-900">
                   Analysis - {patient.initials}
                 </h1>
-                <p className="text-gray-600">
-                  Analysis of therapy sessions and transcriptions
-                </p>
               </div>
             </div>
           </div>
@@ -483,7 +480,7 @@ export default function PatientAnalysisPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <FileText className="h-5 w-5" />
-                      Sessions and Transcriptions
+                      Transcribed sessions
                     </CardTitle>
                     <div className="flex items-center gap-2 pt-2">
                       <input
@@ -518,12 +515,6 @@ export default function PatientAnalysisPage() {
                             >
                               <div className="font-medium text-sm">
                                 {session.title}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {new Date(session.createdAt).toLocaleDateString('it-IT')}
-                              </div>
-                              <div className="text-xs text-gray-400">
-                                Status: {session.status}
                               </div>
                             </button>
                           </div>
@@ -750,38 +741,18 @@ export default function PatientAnalysisPage() {
                           <div className="mb-2">
                             <h3 className="text-lg font-semibold flex items-center gap-2">
                               <Network className="h-5 w-5 text-blue-700" />
-                              Semantic Analysis (Semantic Frame)
+                              Word Analysis
                             </h3>
                             <p className="text-gray-600 text-sm mt-1">
                               Explore the cognitive and emotional context of a keyword in the selected sessions.<br/>
                               Enter a word and view its semantic network and associated emotional profile.
                             </p>
-                            
-                            {/* Descrizione metodologica */}
-                            <div className="text-xs text-gray-500 mt-3 bg-blue-50 p-3 rounded-lg border border-blue-200">
-                              <p>
-                                <strong>💡 What is it?</strong> The Semantic Frame Analysis allows you to explore the cognitive and emotional associations of a keyword in the text, useful for narrative analysis, metaphors, roles, and clinical insights.
-                              </p>
-                            </div>
-
-                            {/* Cache Status per Semantic Frame */}
-                            {selectedSessions.size > 0 && analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames && Object.keys(analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames || {}).length > 0 && (
-                              <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                                <div className="flex items-center gap-2">
-                                  {/* Database icon removed */}
-                                  <span className="text-sm text-green-700 font-medium">
-                                    Semantic frame analyses available for: {Object.keys(analyses[getSelectedSessionsData()[0]?.id]?.semanticFrames || {}).join(', ')}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
                           </div>
                           
                           {/* Menu Analisi Passate */}
                           {Object.keys(pastAnalyses).length > 0 && (
-                            <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
+                            <div className="mb-4">
                               <h4 className="text-md font-medium mb-3 flex items-center gap-2">
-                                {/* Database icon removed */}
                                 Past Analyses
                               </h4>
                               <div className="flex gap-3 items-center">
@@ -800,7 +771,7 @@ export default function PatientAnalysisPage() {
                                   <option value="">Select a past analysis</option>
                                   {Object.keys(pastAnalyses).map(word => (
                                     <option key={word} value={word}>
-                                      {word} (previously analyzed)
+                                      {word}
                                     </option>
                                   ))}
                                 </select>
