@@ -10,3 +10,4 @@ spacy>=3.4.0
 matplotlib
 networkx
 numpy
+git+https://github.com/MassimoStel/emoatlas
