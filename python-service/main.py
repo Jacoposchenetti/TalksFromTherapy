@@ -1,11 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
 from typing import List, Optional, Dict
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.decomposition import NMF
 from datetime import datetime
 import openai
 import os
@@ -13,8 +10,6 @@ import json
 from dotenv import load_dotenv
 import base64
 import io
-import os
-from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
