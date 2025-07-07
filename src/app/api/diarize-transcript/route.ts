@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 import { diarizeTranscript } from "@/lib/openai"
 
 export const runtime = 'nodejs'
@@ -38,30 +38,24 @@ export async function POST(request: NextRequest) {
     console.log(`🔍 Ricerca sessione con ID: ${sessionId}`)
     console.log(`👤 User ID: ${session.user.id}`)
 
-    const sessionRecord = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: session.user.id,
-        isActive: true
-      },
-      select: {
-        id: true,
-        userId: true,
-        status: true,
-        title: true,
-        transcript: true
-      }
-    })
+    const { data: sessionRecord, error } = await supabase
+      .from('sessions')
+      .select('id, user_id, status, title, transcript')
+      .eq('id', sessionId)
+      .eq('user_id', session.user.id)
+      .eq('is_active', true)
+      .single()
 
     console.log("Query database completata", { 
       found: !!sessionRecord, 
       sessionId,
       status: sessionRecord?.status,
-      hasTranscript: !!sessionRecord?.transcript
+      hasTranscript: !!sessionRecord?.transcript,
+      error: error?.message
     })
 
-    if (!sessionRecord) {
-      console.log(`❌ Sessione non trovata`)
+    if (error || !sessionRecord) {
+      console.log(`❌ Sessione non trovata`, { error: error?.message })
       return NextResponse.json(
         { error: "Sessione non trovata" },
         { status: 404 }
@@ -93,13 +87,18 @@ export async function POST(request: NextRequest) {
       console.log(`📏 Lunghezza trascrizione diarizzata: ${diarizedTranscript.length} caratteri`)
       
       // Aggiorna la sessione con la trascrizione diarizzata
-      await prisma.session.update({
-        where: { id: sessionId },
-        data: { 
+      const { error: updateError } = await supabase
+        .from('sessions')
+        .update({ 
           transcript: diarizedTranscript,
-          updatedAt: new Date()
-        }
-      })
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sessionId)
+
+      if (updateError) {
+        console.error("❌ Errore durante l'aggiornamento della sessione:", updateError)
+        throw new Error(updateError.message)
+      }
 
       console.log(`✅ Diarizzazione completata per sessione ${sessionId}`)
 

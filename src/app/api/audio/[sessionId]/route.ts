@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 import { createReadStream, statSync } from "fs"
 import { join } from "path"
 
@@ -19,26 +19,23 @@ export async function GET(
     const { sessionId } = params
 
     // Verifica che la sessione esista e appartenga all'utente
-    const sessionRecord = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: session.user.id,
-        isActive: true
-      },
-      select: {
-        id: true,
-        audioFileName: true,
-        audioUrl: true,
-        title: true,
-        patient: {
-          select: {
-            initials: true
-          }
-        }
-      }
-    })
+    const { data: sessionRecord, error } = await supabase
+      .from('sessions')
+      .select(`
+        id,
+        audioFileName,
+        audioUrl,
+        title,
+        patients!inner (
+          initials
+        )
+      `)
+      .eq('id', sessionId)
+      .eq('userId', session.user.id)
+      .eq('isActive', true)
+      .single()
 
-    if (!sessionRecord) {
+    if (error || !sessionRecord) {
       return NextResponse.json({ error: "Sessione non trovata" }, { status: 404 })
     }
 

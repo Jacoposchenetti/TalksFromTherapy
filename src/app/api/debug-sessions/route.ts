@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 
 export async function GET() {
   try {
@@ -12,34 +12,33 @@ export async function GET() {
     }
 
     // Recupera tutte le sessioni dell'utente per debug
-    const sessions = await prisma.session.findMany({
-      where: {
-        userId: session.user.id,
-        isActive: true
-      },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        audioFileName: true,
-        audioUrl: true,
-        errorMessage: true,
-        createdAt: true,
-        patient: {
-          select: {
-            id: true,
-            initials: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    })
+    const { data: sessions, error } = await supabase
+      .from('sessions')
+      .select(`
+        id,
+        title,
+        status,
+        audio_file_name,
+        audio_url,
+        error_message,
+        created_at,
+        patients(id, initials)
+      `)
+      .eq('user_id', session.user.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error("Errore recupero sessioni:", error)
+      return NextResponse.json({
+        error: "Errore durante il recupero delle sessioni",
+        details: error.message
+      }, { status: 500 })
+    }
 
     return NextResponse.json({
-      totalSessions: sessions.length,
-      sessions: sessions,
+      totalSessions: sessions?.length || 0,
+      sessions: sessions || [],
       userInfo: {
         id: session.user.id,
         email: session.user.email
