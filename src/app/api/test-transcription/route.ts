@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { transcribeAudio } from "@/lib/openai"
 import { join } from "path"
-import { existsSync } from "fs"
+import { existsSync, readFileSync } from "fs"
 
 export const runtime = 'nodejs'
 
@@ -41,8 +41,11 @@ export async function POST(request: NextRequest) {
     try {
       console.log(`Test trascrizione per file: ${audioFilePath}`)
       
+      // Leggi il file audio come Buffer
+      const audioBuffer = readFileSync(audioFilePath)
+      
       // Prova la trascrizione
-      const transcript = await transcribeAudio(audioFilePath)
+      const transcript = await transcribeAudio(audioBuffer, fileName)
       
       return NextResponse.json({
         success: true,
