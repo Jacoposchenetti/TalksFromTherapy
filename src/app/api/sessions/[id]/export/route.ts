@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 import { jsPDF } from "jspdf"
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx"
 
@@ -15,11 +15,13 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
@@ -31,18 +33,22 @@ export async function GET(
     }
 
     // Find the session and verify ownership
-    const sessionData = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: user.id,
-        isActive: true,
-      },
-      include: {
-        patient: true,
-      },
-    })
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('sessions')
+      .select(`
+        id,
+        title,
+        session_date,
+        duration,
+        transcript,
+        patients(id, initials, name)
+      `)
+      .eq('id', sessionId)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .single()
 
-    if (!sessionData) {
+    if (sessionError || !sessionData) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
 
@@ -51,9 +57,9 @@ export async function GET(
     }
 
     // Generate filename with safe characters
-    const date = new Date(sessionData.sessionDate).toISOString().split('T')[0]
+    const date = new Date(sessionData.session_date).toISOString().split('T')[0]
     const safeTitle = sessionData.title.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_')
-    const filename = `${sessionData.patient.initials}_${date}_${safeTitle}`
+    const filename = `${sessionData.patients?.initials || 'Unknown'}_${date}_${safeTitle}`
 
     if (format === 'pdf') {
       try {
@@ -92,7 +98,7 @@ export async function GET(
 }
 
 async function generateTXTExport(sessionData: any, filename: string) {
-  const date = new Date(sessionData.sessionDate).toLocaleDateString('it-IT')
+  const date = new Date(sessionData.session_date).toLocaleDateString('it-IT')
   const duration = sessionData.duration 
     ? `${Math.floor(sessionData.duration / 60)}:${(sessionData.duration % 60).toString().padStart(2, '0')}` 
     : 'N/A'
@@ -100,7 +106,7 @@ async function generateTXTExport(sessionData: any, filename: string) {
   const content = `TRASCRIZIONE SESSIONE TERAPEUTICA
 ==================================
 
-Paziente: ${sessionData.patient.initials}
+Paziente: ${sessionData.patients?.initials || 'Unknown'}
 Titolo Sessione: ${sessionData.title}
 Data: ${date}
 Durata: ${duration}
@@ -128,7 +134,7 @@ async function generatePDFExport(sessionData: any, filename: string) {
     console.log("Generating PDF with jsPDF...")
     
     // Prepare data
-    const date = new Date(sessionData.sessionDate).toLocaleDateString('it-IT')
+    const date = new Date(sessionData.session_date).toLocaleDateString('it-IT')
     const duration = sessionData.duration 
       ? `${Math.floor(sessionData.duration / 60)}:${(sessionData.duration % 60).toString().padStart(2, '0')}` 
       : 'N/A'
@@ -175,7 +181,7 @@ async function generatePDFExport(sessionData: any, filename: string) {
 
     // Info table
     const infoData = [
-      ['Paziente:', sessionData.patient.initials],
+      ['Paziente:', sessionData.patients[0].initials],
       ['Titolo Sessione:', sessionData.title],
       ['Data:', date],
       ['Durata:', duration],
@@ -244,7 +250,7 @@ async function generateDOCXExport(sessionData: any, filename: string) {
     console.log("Generating DOCX with docx library...")
     
     // Prepare data
-    const date = new Date(sessionData.sessionDate).toLocaleDateString('it-IT')
+    const date = new Date(sessionData.session_date).toLocaleDateString('it-IT')
     const duration = sessionData.duration 
       ? `${Math.floor(sessionData.duration / 60)}:${(sessionData.duration % 60).toString().padStart(2, '0')}` 
       : 'N/A'
@@ -276,7 +282,7 @@ async function generateDOCXExport(sessionData: any, filename: string) {
           new Paragraph({
             children: [
               new TextRun({ text: "Paziente: ", bold: true }),
-              new TextRun({ text: sessionData.patient.initials }),
+              new TextRun({ text: sessionData.patients[0].initials }),
             ],
           }),
           

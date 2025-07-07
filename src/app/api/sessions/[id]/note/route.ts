@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 
 export const runtime = 'nodejs'
 
@@ -16,35 +16,37 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     const sessionId = params.id
 
     // Verify session belongs to user
-    const sessionRecord = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: user.id,
-        isActive: true,
-      },
-    })
+    const { data: sessionRecord, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .eq('userId', user.id)
+      .eq('isActive', true)
+      .single()
 
-    if (!sessionRecord) {
+    if (sessionError || !sessionRecord) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
 
     // Find existing note
-    const note = await prisma.sessionNote.findFirst({
-      where: {
-        sessionId: sessionId,
-      },
-    })
+    const { data: note } = await supabase
+      .from('session_notes')
+      .select('*')
+      .eq('sessionId', sessionId)
+      .single()
 
     return NextResponse.json({
       id: note?.id,
@@ -73,11 +75,13 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
@@ -89,32 +93,34 @@ export async function POST(
     }
 
     // Verify session belongs to user
-    const sessionRecord = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        userId: user.id,
-        isActive: true,
-      },
-    })
+    const { data: sessionRecord, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .eq('userId', user.id)
+      .eq('isActive', true)
+      .single()
 
-    if (!sessionRecord) {
+    if (sessionError || !sessionRecord) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
 
     // Upsert note
-    const note = await prisma.sessionNote.upsert({
-      where: {
-        sessionId: sessionId,
-      },
-      update: {
-        content: content,
-        updatedAt: new Date(),
-      },
-      create: {
+    const { data: note, error: noteError } = await supabase
+      .from('session_notes')
+      .upsert({
         sessionId: sessionId,
         content: content,
-      },
-    })
+        updatedAt: new Date().toISOString(),
+      }, {
+        onConflict: 'sessionId'
+      })
+      .select()
+      .single()
+
+    if (noteError) {
+      throw noteError
+    }
 
     return NextResponse.json({
       id: note.id,

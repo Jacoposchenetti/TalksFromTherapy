@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabase } from "@/lib/supabase"
 
 export async function GET(
   request: NextRequest,
@@ -13,21 +13,20 @@ export async function GET(
       return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
     }
 
-    const sessionData = await prisma.session.findUnique({
-      where: { id: params.id },
-      select: {
-        id: true,
-        transcript: true,
-        patient: {
-          select: {
-            id: true,
-            initials: true,
-          },
-        },
-      },
-    })
+    const { data: sessionData, error } = await supabase
+      .from('sessions')
+      .select(`
+        id,
+        transcript,
+        patients!inner (
+          id,
+          initials
+        )
+      `)
+      .eq('id', params.id)
+      .single()
 
-    if (!sessionData) {
+    if (error || !sessionData) {
       return NextResponse.json({ error: "Sessione non trovata" }, { status: 404 })
     }
 
