@@ -168,11 +168,11 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
       
       // Check if the sets are different
       const sessionSetChanged = currentSessionIds.size !== analyzedSessionIds.size || 
-        [...currentSessionIds].some(id => !analyzedSessionIds.has(id))
+        Array.from(currentSessionIds).some(id => !analyzedSessionIds.has(id))
       
       console.log('🔄 Session comparison:', {
-        currentIds: [...currentSessionIds].sort(),
-        analyzedIds: [...analyzedSessionIds].sort(),
+        currentIds: Array.from(currentSessionIds).sort(),
+        analyzedIds: Array.from(analyzedSessionIds).sort(),
         changed: sessionSetChanged
       })
       
