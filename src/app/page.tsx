@@ -1,4 +1,24 @@
 export default function Home() {
+  // Modalità manutenzione
+  if (process.env.MAINTENANCE_MODE === 'true') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="text-center p-8">
+          <div className="text-6xl mb-6">🚧</div>
+          <h1 className="text-3xl font-bold text-gray-800 mb-4">
+            Sito in Manutenzione
+          </h1>
+          <p className="text-gray-600 mb-2">
+            Stiamo lavorando per migliorare il servizio
+          </p>
+          <p className="text-sm text-gray-500">
+            Torneremo online al più presto
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       <div className="max-w-6xl mx-auto px-4 py-16">
