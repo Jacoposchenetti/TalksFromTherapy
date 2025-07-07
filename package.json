@@ -11,7 +11,6 @@
     "dev-full": "concurrently \"npm run dev\" \"npm run python-service\""
   },
   "dependencies": {
-    "@prisma/client": "^5.19.1",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-select": "^2.2.5",
     "@radix-ui/react-slot": "^1.2.3",
@@ -35,7 +34,6 @@
     "openai": "^5.3.0",
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.17.1",
-    "prisma": "^5.19.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-force-graph-2d": "^1.27.1",
