@@ -36,10 +36,9 @@ export default function LoginPage() {
         setError("Invalid email or password")
       } else if (result?.ok) {
         console.log("Login successful, redirecting...")
-        // Aspetta un momento prima del redirect per assicurarsi che la sessione sia impostata
-        setTimeout(() => {
-          router.push("/dashboard")
-        }, 100)
+        // Forza il redirect e refresh della pagina
+        router.push("/dashboard")
+        router.refresh()
       } else {
         console.error("Unexpected login result:", result)
         setError("An unexpected error occurred")
