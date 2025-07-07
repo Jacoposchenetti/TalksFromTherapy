@@ -59,7 +59,7 @@ export async function GET(
     // Generate filename with safe characters
     const date = new Date(sessionData.session_date).toISOString().split('T')[0]
     const safeTitle = sessionData.title.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_')
-    const filename = `${sessionData.patients?.initials || 'Unknown'}_${date}_${safeTitle}`
+    const filename = `${sessionData.patients[0].initials}_${date}_${safeTitle}`
 
     if (format === 'pdf') {
       try {
@@ -106,7 +106,7 @@ async function generateTXTExport(sessionData: any, filename: string) {
   const content = `TRASCRIZIONE SESSIONE TERAPEUTICA
 ==================================
 
-Paziente: ${sessionData.patients?.initials || 'Unknown'}
+Paziente: ${sessionData.patients[0].initials}
 Titolo Sessione: ${sessionData.title}
 Data: ${date}
 Durata: ${duration}
