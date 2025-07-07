@@ -1,0 +1,16 @@
+{
+  "name": "talks-from-therapy-python-service",
+  "description": "Python service for topic modeling and emotion analysis",
+  "repository": "https://github.com/YOUR_USERNAME/TalksFromTherapy",
+  "env": {
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key for GPT analysis"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+}
