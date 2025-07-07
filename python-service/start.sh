@@ -1,7 +1,7 @@
 #!/bin/bash
 # Startup script for BERTopic Python service
 
-echo "🐍 Starting BERTopic Analysis Service..."
+echo "🐍 Starting Python Service..."
 
 # Check if Python is available
 if ! command -v python3 &> /dev/null; then
@@ -27,8 +27,8 @@ echo "📥 Installing requirements..."
 pip install -r requirements.txt
 
 # Start the service
-echo "🚀 Starting BERTopic service on http://localhost:8000"
-echo "📊 Service will be available for topic modeling analysis"
+echo "🚀 Starting python service on http://localhost:8001"
+echo "📊 Service will be available for topic modeling, sentiment and semantic analysis"
 echo "⏹️  Press Ctrl+C to stop the service"
 echo ""
 
