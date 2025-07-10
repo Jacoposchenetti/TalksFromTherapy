@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from '@/lib/supabase'
 import OpenAI from 'openai'
 
@@ -73,34 +72,24 @@ Rispondi SOLO con JSON:
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: "Non autorizzato" },
-        { status: 401 }
-      )
+    // Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth()
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', session.user.email)
-      .single()
+    const body = await request.json()
+    const { sessionIds, customTopics }: CustomTopicSearchRequest = body
 
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: "Utente non trovato" },
-        { status: 404 }
-      )
+    // Validazione input rigorosa
+    if (!validateApiInput(body, ['sessionIds', 'customTopics'])) {
+      return createErrorResponse("SessionIds e customTopics sono richiesti", 400)
     }
-
-    const { sessionIds, customTopics }: CustomTopicSearchRequest = await request.json()
 
     if (!sessionIds || sessionIds.length === 0) {
-      return NextResponse.json(
-        { error: "Nessuna sessione selezionata" },
+      return createErrorResponse("Nessuna sessione selezionata", 400)
         { status: 400 }
-      )
+      
     }
 
     if (!customTopics || customTopics.length === 0) {
@@ -115,7 +104,7 @@ export async function POST(request: NextRequest) {
       .from('sessions')
       .select('id, title, transcript, status, createdAt, patientId')
       .in('id', sessionIds)
-      .eq('userId', userData.id)
+      .eq('userId', authResult.user!.id)
 
     if (sessionsError) {
       return NextResponse.json(

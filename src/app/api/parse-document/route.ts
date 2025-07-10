@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { verifyApiAuth, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
+
+// File size limit: 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024
 
 // Importazioni dinamiche per evitare problemi di bundling
 async function parseDocument(file: File) {
+  // SECURITY: Validate file size
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`File troppo grande. Massimo consentito: ${MAX_FILE_SIZE / 1024 / 1024}MB`)
+  }
+  
   const fileExtension = file.name.split('.').pop()?.toLowerCase()
   
-  // Validazione del tipo di file basata su estensione e MIME type
+  // SECURITY: Strict validation del tipo di file basata su estensione e MIME type
   const supportedExtensions = ['txt', 'doc', 'docx', 'pdf', 'rtf']
   const supportedMimeTypes = [
     'text/plain',
@@ -21,8 +28,9 @@ async function parseDocument(file: File) {
     throw new Error(`Formato file non supportato: ${fileExtension}. Formati supportati: ${supportedExtensions.join(', ')}`)
   }
   
-  if (!supportedMimeTypes.includes(file.type) && file.type !== '') {
-    console.warn(`MIME type non riconosciuto: ${file.type}, ma estensione valida: ${fileExtension}`)
+  // SECURITY: More strict MIME type validation
+  if (file.type && !supportedMimeTypes.includes(file.type)) {
+    throw new Error(`MIME type non valido: ${file.type}`)
   }
   
   switch (fileExtension) {
@@ -213,42 +221,45 @@ async function parseRtf(file: File) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // STEP 1: Verifica autorizzazione
+    const authResult = await verifyApiAuth(request)
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
+    console.log("POST /api/parse-document - Richiesta autorizzata", { 
+      userId: authResult.user?.id 
+    })
+
+    // STEP 2: Validazione form data
     const formData = await request.formData()
     const file = formData.get("file") as File
 
     if (!file) {
-      return NextResponse.json(
-        { error: "No file provided" },
-        { status: 400 }
-      )
+      return createErrorResponse("Nessun file fornito", 400)
     }
 
-    console.log(`Parsing document: ${file.name}, type: ${file.type}, size: ${file.size} bytes`)
+    // SECURITY: Validate file name (prevent path traversal)
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')
+    if (sanitizedFileName !== file.name) {
+      return createErrorResponse("Nome file non valido", 400)
+    }
 
-    // Parse the document
+    console.log(`Parsing document: ${sanitizedFileName}, type: ${file.type}, size: ${file.size} bytes`)
+
+    // STEP 3: Parse the document (già con validazioni di sicurezza)
     const parsedDocument = await parseDocument(file)
     
     if (!parsedDocument.text || parsedDocument.text.trim().length === 0) {
-      return NextResponse.json(
-        { error: "Il documento sembra essere vuoto o non è stato possibile estrarre il testo" },
-        { status: 400 }
-      )
+      return createErrorResponse("Il documento sembra essere vuoto o non è stato possibile estrarre il testo", 400)
     }
 
-    console.log(`Successfully parsed document: ${file.name}, extracted ${parsedDocument.text.length} characters`)
+    console.log(`Successfully parsed document: ${sanitizedFileName}, extracted ${parsedDocument.text.length} characters`)
 
-    return NextResponse.json(parsedDocument)
+    return createSuccessResponse(parsedDocument, "Documento analizzato con successo")
   } catch (error) {
     console.error("Error parsing document:", error)
     const errorMessage = error instanceof Error ? error.message : "Errore durante la lettura del documento"
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    )
+    return createErrorResponse(errorMessage, 500)
   }
 }

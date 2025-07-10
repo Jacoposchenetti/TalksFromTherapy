@@ -1,64 +1,77 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { verifyApiAuth, validateApiInput, sanitizeInput, createErrorResponse, createSuccessResponse, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
 import { emoatlasService, SessionData } from "@/lib/emoatlas"
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // STEP 1: Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth(request)
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    // Recupera l'ID utente da Supabase
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', session.user.email)
-      .single()
-    if (userError || !userData) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    console.log("POST /api/emotion-analysis - Richiesta autorizzata", { 
+      userId: authResult.user?.id 
+    })
+
+    // STEP 2: Validazione input
+    const requestData = await request.json()
+    
+    if (!validateApiInput(requestData, ['sessionIds'])) {
+      return createErrorResponse("Dati richiesta non validi - sessionIds richiesto", 400)
     }
 
-    const body = await request.json()
-    const { sessionIds, language = 'italian' } = body
+    const { sessionIds, language = 'italian' } = requestData
 
-    if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
-      return NextResponse.json(
-        { error: "Must provide sessionIds array" }, 
-        { status: 400 }
-      )
+    if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+      return createErrorResponse("sessionIds deve essere un array non vuoto", 400)
     }
 
-    // Fetch sessions from Supabase
+    // STEP 3: Sanitizza sessionIds e verifica che siano stringhe valide
+    const sanitizedSessionIds = sessionIds
+      .map(id => sanitizeInput(id.toString()))
+      .filter(id => id.length > 0)
+
+    if (sanitizedSessionIds.length === 0) {
+      return createErrorResponse("Nessun sessionId valido fornito", 400)
+    }
+
+    // STEP 4: Fetch sessions e verifica ownership
     const { data: sessions, error: sessionsError } = await supabase
       .from('sessions')
-      .select('id, title, transcript, sessionDate, status, patientId')
-      .in('id', sessionIds)
-      .eq('userId', userData.id)
+      .select('id, title, transcript, sessionDate, status, patientId, userId')
+      .in('id', sanitizedSessionIds)
+      .eq('userId', authResult.user!.id)
       .eq('isActive', true)
 
     if (sessionsError) {
-      console.error('Supabase sessions error:', sessionsError)
-      return NextResponse.json({ error: "Error fetching sessions" }, { status: 500 })
+      console.error('Errore recupero sessioni:', sessionsError)
+      return createErrorResponse("Errore nel recupero delle sessioni", 500)
     }
 
     if (!sessions || sessions.length === 0) {
-      return NextResponse.json({ error: "No sessions found" }, { status: 404 })
+      return createErrorResponse("Nessuna sessione trovata o accesso negato", 404)
     }
 
-    // Filter sessions with transcripts
-    const sessionsWithTranscripts = sessions.filter(s => 
+    // STEP 5: Double-check resource access per ogni sessione
+    const authorizedSessions = sessions.filter(session => 
+      hasResourceAccess(authResult.user!.id, session.userId)
+    )
+
+    if (authorizedSessions.length === 0) {
+      return createErrorResponse("Accesso negato alle sessioni richieste", 403)
+    }
+
+    // STEP 6: Filter sessions with transcripts
+    const sessionsWithTranscripts = authorizedSessions.filter(s => 
       s.transcript && 
       typeof s.transcript === 'string' && 
       s.transcript.trim().length > 0
     )
 
     if (sessionsWithTranscripts.length === 0) {
-      return NextResponse.json({ 
-        error: "No sessions with transcripts found" 
-      }, { status: 400 })
+      return createErrorResponse("Nessuna sessione con trascrizione trovata", 400)
     }
 
     // Prepare session data for analysis

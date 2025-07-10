@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
 import { diarizeTranscript } from "@/lib/openai"
 
@@ -9,46 +8,41 @@ export const runtime = 'nodejs'
 // POST /api/diarize-transcript - Diarizza una trascrizione esistente
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    // Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth()
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
+    }
     
     console.log("POST /api/diarize-transcript - Inizio richiesta", { 
-      hasSession: !!session, 
-      userId: session?.user?.id 
+      userId: authResult.user!.id 
     })
-    
-    if (!session?.user?.id) {
-      console.log("Errore: utente non autenticato")
-      return NextResponse.json(
-        { error: "Non autorizzato" },
-        { status: 401 }
-      )
+
+    const body = await request.json()
+    const { sessionId } = body
+
+    // Validazione input rigorosa
+    if (!validateApiInput(body, ['sessionId'])) {
+      return createErrorResponse("ID sessione richiesto", 400)
     }
 
-    const { sessionId } = await request.json()
-    console.log("Dati ricevuti:", { sessionId })
+    const sanitizedSessionId = sanitizeInput(sessionId)
+    console.log("Dati ricevuti:", { sessionId: sanitizedSessionId })
 
-    if (!sessionId) {
-      console.log("Errore: sessionId mancante")
-      return NextResponse.json(
-        { error: "ID sessione richiesto" },
-        { status: 400 }
-      )
-    }
-
-    console.log(`🔍 Ricerca sessione con ID: ${sessionId}`)
-    console.log(`👤 User ID: ${session.user.id}`)
+    console.log(`🔍 Ricerca sessione con ID: ${sanitizedSessionId}`)
+    console.log(`👤 User ID: ${authResult.user!.id}`)
 
     const { data: sessionRecord, error } = await supabase
       .from('sessions')
-      .select('id, user_id, status, title, transcript')
-      .eq('id', sessionId)
-      .eq('user_id', session.user.id)
-      .eq('is_active', true)
+      .select('id, userId, status, title, transcript')
+      .eq('id', sanitizedSessionId)
+      .eq('userId', authResult.user!.id)
+      .eq('isActive', true)
       .single()
 
     console.log("Query database completata", { 
       found: !!sessionRecord, 
-      sessionId,
+      sessionId: sanitizedSessionId,
       status: sessionRecord?.status,
       hasTranscript: !!sessionRecord?.transcript,
       error: error?.message
@@ -56,18 +50,17 @@ export async function POST(request: NextRequest) {
 
     if (error || !sessionRecord) {
       console.log(`❌ Sessione non trovata`, { error: error?.message })
-      return NextResponse.json(
-        { error: "Sessione non trovata" },
-        { status: 404 }
-      )
+      return createErrorResponse("Sessione non trovata", 404)
+    }
+
+    // Verifica accesso alla risorsa
+    if (!hasResourceAccess(authResult.user!.id, sessionRecord.userId)) {
+      return createErrorResponse("Accesso negato a questa risorsa", 403)
     }
 
     if (!sessionRecord.transcript || sessionRecord.transcript.trim().length === 0) {
       console.log(`❌ Nessuna trascrizione trovata per la sessione`)
-      return NextResponse.json(
-        { error: "Nessuna trascrizione trovata per questa sessione" },
-        { status: 400 }
-      )
+      return createErrorResponse("Nessuna trascrizione trovata per questa sessione", 400)
     }
 
     console.log(`✅ Sessione trovata:`, {
@@ -91,43 +84,31 @@ export async function POST(request: NextRequest) {
         .from('sessions')
         .update({ 
           transcript: diarizedTranscript,
-          updated_at: new Date().toISOString()
+          updatedAt: new Date().toISOString()
         })
-        .eq('id', sessionId)
+        .eq('id', sanitizedSessionId)
+        .eq('userId', authResult.user!.id) // Double check per sicurezza
 
       if (updateError) {
         console.error("❌ Errore durante l'aggiornamento della sessione:", updateError)
-        throw new Error(updateError.message)
+        return createErrorResponse("Errore durante l'aggiornamento sessione", 500)
       }
 
-      console.log(`✅ Diarizzazione completata per sessione ${sessionId}`)
+      console.log(`✅ Diarizzazione completata per sessione ${sanitizedSessionId}`)
 
-      return NextResponse.json({
-        message: "Diarizzazione completata con successo",
-        sessionId,
+      return createSuccessResponse({
+        sessionId: sanitizedSessionId,
         originalTranscriptLength: sessionRecord.transcript.length,
         diarizedTranscriptLength: diarizedTranscript.length,
         transcript: diarizedTranscript
-      })
+      }, "Diarizzazione completata con successo")
 
     } catch (error) {
       console.error("❌ Errore durante la diarizzazione:", error)
-      
-      return NextResponse.json({
-        error: "Errore durante la diarizzazione",
-        details: error instanceof Error ? error.message : "Errore sconosciuto"
-      }, { status: 500 })
+      return createErrorResponse("Errore durante la diarizzazione", 500)
     }
   } catch (error) {
     console.error("Errore durante l'avvio diarizzazione:", error)
-    console.error("Stack trace:", error instanceof Error ? error.stack : "N/A")
-    return NextResponse.json(
-      { 
-        error: "Errore interno del server",
-        details: error instanceof Error ? error.message : "Errore sconosciuto",
-        type: error instanceof Error ? error.constructor.name : typeof error
-      },
-      { status: 500 }
-    )
+    return createErrorResponse("Errore interno del server", 500)
   }
 } 

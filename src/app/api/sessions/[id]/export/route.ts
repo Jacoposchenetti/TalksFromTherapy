@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
 import { jsPDF } from "jspdf"
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx"
@@ -10,29 +9,27 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth()
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', session.user.email)
-      .single()
-
-    if (userError || !user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    // Validazione parametri
+    if (!params.id || typeof params.id !== 'string') {
+      return createErrorResponse("ID sessione non valido", 400)
     }
 
-    const sessionId = params.id
+    const sessionId = sanitizeInput(params.id)
     const { searchParams } = new URL(request.url)
-    const format = searchParams.get('format')?.toLowerCase() || 'txt' // Default to TXT    // Validate format parameter
+    const format = sanitizeInput(searchParams.get('format')?.toLowerCase() || 'txt') // Default to TXT
+    
+    // Validazione formato
     if (!['txt', 'pdf', 'docx'].includes(format)) {
-      return NextResponse.json({ error: "Invalid format. Use 'txt', 'pdf', or 'docx'" }, { status: 400 })
+      return createErrorResponse("Formato non valido. Usa 'txt', 'pdf', o 'docx'", 400)
     }
 
-    // Find the session and verify ownership
+    // Find the session and verify ownership SICURO
     const { data: sessionData, error: sessionError } = await supabase
       .from('sessions')
       .select(`
@@ -41,59 +38,63 @@ export async function GET(
         session_date,
         duration,
         transcript,
-        patients(id, initials, name)
+        userId,
+        patients(id, initials, name, userId)
       `)
       .eq('id', sessionId)
-      .eq('user_id', user.id)
-      .eq('is_active', true)
+      .eq('userId', authResult.user!.id) // CRITICAL: Verifica ownership
+      .eq('isActive', true)
       .single()
 
     if (sessionError || !sessionData) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 })
+      return createErrorResponse("Sessione non trovata", 404)
+    }
+
+    // Double check accesso alla risorsa
+    if (!hasResourceAccess(authResult.user!.id, sessionData.userId)) {
+      return createErrorResponse("Accesso negato a questa risorsa", 403)
     }
 
     if (!sessionData.transcript || sessionData.transcript.trim() === '') {
-      return NextResponse.json({ error: "No transcript available for this session" }, { status: 400 })
+      return createErrorResponse("Nessun transcript disponibile per questa sessione", 400)
+    }
+
+    // Verifica accesso al paziente se esiste
+    if (sessionData.patients && sessionData.patients.length > 0) {
+      const patient = sessionData.patients[0]
+      if (patient.userId && !hasResourceAccess(authResult.user!.id, patient.userId)) {
+        return createErrorResponse("Accesso negato al paziente", 403)
+      }
     }
 
     // Generate filename with safe characters
     const date = new Date(sessionData.session_date).toISOString().split('T')[0]
-    const safeTitle = sessionData.title.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_')
-    const filename = `${sessionData.patients[0].initials}_${date}_${safeTitle}`
+    const safeTitle = sanitizeInput(sessionData.title || 'sessione').replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_')
+    const patientInitials = sessionData.patients && sessionData.patients[0] 
+      ? sanitizeInput(sessionData.patients[0].initials || 'paziente')
+      : 'paziente'
+    const filename = `${patientInitials}_${date}_${safeTitle}`
 
     if (format === 'pdf') {
       try {
         return await generatePDFExport(sessionData, filename)
       } catch (pdfError) {
         console.error("PDF generation error:", pdfError)
-        
-        // Return a proper error response instead of fallback
-        return NextResponse.json({ 
-          error: "Errore nella generazione del PDF", 
-          details: `${(pdfError as Error).message}`,
-          suggestion: "Prova con il formato TXT"
-        }, { status: 500 })
+        return createErrorResponse("Errore nella generazione del PDF", 500)
       }
     } else if (format === 'docx') {
       try {
         return await generateDOCXExport(sessionData, filename)
       } catch (docxError) {
         console.error("DOCX generation error:", docxError)
-        
-        return NextResponse.json({ 
-          error: "Errore nella generazione del DOCX", 
-          details: `${(docxError as Error).message}`,
-          suggestion: "Prova con il formato TXT"
-        }, { status: 500 })
+        return createErrorResponse("Errore nella generazione del DOCX", 500)
       }
     } else {
       return generateTXTExport(sessionData, filename)
-    }} catch (error) {
+    }
+  } catch (error) {
     console.error("Export error:", error)
-    return NextResponse.json({ 
-      error: "Internal server error", 
-      details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined 
-    }, { status: 500 })
+    return createErrorResponse("Errore interno del server", 500)
   }
 }
 

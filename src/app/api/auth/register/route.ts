@@ -1,19 +1,27 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { hashPassword } from "@/lib/password"
+import { sanitizeInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, email, password, licenseNumber } = await request.json()
+    const rawBody = await request.json()
+    
+    // STEP 1: Sanitizzazione input per sicurezza
+    const name = sanitizeInput(rawBody.name || '')
+    const email = sanitizeInput(rawBody.email || '').toLowerCase()
+    const password = rawBody.password || ''
+    const licenseNumber = sanitizeInput(rawBody.licenseNumber || '')
 
-    // Validazione base
-    if (!name || !email || !password) {
-      return NextResponse.json(
-        { error: "Nome, email e password sono obbligatori" },
-        { status: 400 }
-      )
+    // STEP 2: Validazione rigorosa
+    if (!name || name.length < 2 || name.length > 100) {
+      return createErrorResponse("Il nome deve essere tra 2 e 100 caratteri", 400)
+    }
+
+    if (!email || !password) {
+      return createErrorResponse("Nome, email e password sono obbligatori", 400)
     }
 
     // Validazione email formato

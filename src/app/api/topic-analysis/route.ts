@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
 
 export const runtime = 'nodejs'
@@ -49,59 +48,54 @@ const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: "Non autorizzato" },
-        { status: 401 }
-      )
+    // SECURITY: Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth()
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', session.user.email)
-      .single()
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: "Utente non trovato" },
-        { status: 404 }
-      )
+
+    const requestData = await request.json()
+    
+    // SECURITY: Validazione input rigorosa
+    if (!validateApiInput(requestData, ['sessionIds'])) {
+      return createErrorResponse("Dati richiesta non validi", 400)
     }
-    const { sessionIds, minTopicSize = 5 }: TopicAnalysisRequest = await request.json()
-    if (!sessionIds || sessionIds.length === 0) {
-      return NextResponse.json(
-        { error: "Nessuna sessione selezionata" },
-        { status: 400 }
-      )
+
+    const { sessionIds, minTopicSize = 5 }: TopicAnalysisRequest = requestData
+
+    if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+      return createErrorResponse("Nessuna sessione selezionata", 400)
     }
-    // Fetch sessions and their transcripts da Supabase
+
+    // SECURITY: Limitiamo il numero di sessioni per prevenire abuse
+    if (sessionIds.length > 50) {
+      return createErrorResponse("Troppi sessioni selezionate (max 50)", 400)
+    }
+    // SECURITY: Fetch solo le sessioni dell'utente autenticato
     const { data: sessions, error: sessionsError } = await supabase
       .from('sessions')
       .select('id, title, transcript, status, createdAt')
+      .eq('userId', authResult.user!.id)
       .in('id', sessionIds)
-      .eq('userId', userData.id)
+
     if (sessionsError) {
-      return NextResponse.json(
-        { error: "Errore nel recupero delle sessioni" },
-        { status: 500 }
-      )
+      console.error('Errore database sessioni:', sessionsError)
+      return createErrorResponse("Errore nel recupero delle sessioni", 500)
     }
+
     if (!sessions || sessions.length === 0) {
-      return NextResponse.json(
-        { error: "Nessuna trascrizione trovata per le sessioni selezionate" },
-        { status: 404 }
-      )
+      return createErrorResponse("Nessuna trascrizione trovata per le sessioni selezionate", 404)
     }
+
     // Filter out sessions without transcripts
     const validSessions = sessions.filter(session => 
       session.transcript && typeof session.transcript === 'string' && session.transcript.trim().length > 0
     )
+
     if (validSessions.length === 0) {
-      return NextResponse.json(
-        { error: "Nessuna trascrizione valida trovata" },
-        { status: 400 }
-      )
+      return createErrorResponse("Nessuna trascrizione valida trovata", 400)
     }
+
     // Prepare data for BERTopic service
     const bertopicRequest: BertopicRequest = {
       texts: validSessions.map(session => session.transcript!),
@@ -121,15 +115,9 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text()
       if (response.status === 404) {
-        return NextResponse.json(
-          { error: "Servizio di analisi non disponibile. Assicurati che il servizio Python sia in esecuzione." },
-          { status: 503 }
-        )
+        return createErrorResponse("Servizio di analisi non disponibile. Assicurati che il servizio Python sia in esecuzione.", 503)
       }
-      return NextResponse.json(
-        { error: `Errore del servizio di analisi: ${response.status}` },
-        { status: 502 }
-      )
+      return createErrorResponse(`Errore del servizio di analisi: ${response.status}`, 502)
     }
     const bertopicResult: BertopicResponse = await response.json()
     // Save analysis results to Supabase (optional)
@@ -148,7 +136,7 @@ export async function POST(request: NextRequest) {
           }])
         if (insertError) {
           console.error('[Supabase] Error inserting topic analysis:', insertError)
-          return NextResponse.json({ error: 'Errore durante il salvataggio dell\'analisi topic modeling', details: insertError.message }, { status: 500 })
+          return createErrorResponse('Errore durante il salvataggio dell\'analisi topic modeling', 500)
         } else {
           console.log('[Supabase] Topic analysis inserted:', insertData)
         }
@@ -167,19 +155,20 @@ export async function POST(request: NextRequest) {
       })),
       analysis_timestamp: new Date().toISOString()
     }
-    return NextResponse.json(enrichedResult)
+
+    return createSuccessResponse(enrichedResult, "Analisi dei topic completata con successo")
+
   } catch (error) {
     console.error("Errore durante l'analisi dei topic:", error)
+    
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      return NextResponse.json(
-        { error: "Impossibile connettersi al servizio di analisi. Verifica che il servizio Python sia in esecuzione." },
-        { status: 503 }
+      return createErrorResponse(
+        "Impossibile connettersi al servizio di analisi. Verifica che il servizio Python sia in esecuzione.", 
+        503
       )
     }
-    return NextResponse.json(
-      { error: "Errore interno del server durante l'analisi" },
-      { status: 500 }
-    )
+
+    return createErrorResponse("Errore interno del server durante l'analisi", 500)
   }
 }
 
