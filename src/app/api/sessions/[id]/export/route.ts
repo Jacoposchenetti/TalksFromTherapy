@@ -3,6 +3,7 @@ import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResp
 import { supabase } from "@/lib/supabase"
 import { jsPDF } from "jspdf"
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx"
+import { decryptIfEncrypted } from "@/lib/encryption"
 
 export async function GET(
   request: NextRequest,
@@ -55,9 +56,15 @@ export async function GET(
       return createErrorResponse("Accesso negato a questa risorsa", 403)
     }
 
-    if (!sessionData.transcript || sessionData.transcript.trim() === '') {
+    // Decripta il transcript se è criptato
+    const decryptedTranscript = decryptIfEncrypted(sessionData.transcript)
+    
+    if (!decryptedTranscript || decryptedTranscript.trim() === '') {
       return createErrorResponse("Nessun transcript disponibile per questa sessione", 400)
     }
+
+    // Usa il transcript decriptato
+    sessionData.transcript = decryptedTranscript
 
     // Verifica accesso al paziente se esiste
     if (sessionData.patients && sessionData.patients.length > 0) {

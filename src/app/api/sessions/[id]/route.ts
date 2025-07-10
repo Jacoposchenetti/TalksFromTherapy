@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
+import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
 
 export async function DELETE(
   request: NextRequest,
@@ -105,7 +106,13 @@ export async function GET(
       return createErrorResponse("Sessione non trovata", 404)
     }
 
-    return createSuccessResponse(sessionData)
+    // Decripta il transcript se presente
+    const decryptedSessionData = {
+      ...sessionData,
+      transcript: decryptIfEncrypted(sessionData.transcript)
+    }
+
+    return createSuccessResponse(decryptedSessionData)
   } catch (error) {
     console.error("Error fetching session:", error)
     return createErrorResponse("Errore interno del server", 500)
@@ -187,7 +194,7 @@ export async function PATCH(
     }
     
     if (transcript !== undefined) {
-      updateData.transcript = sanitizeInput(transcript).trim()
+      updateData.transcript = encryptIfSensitive(sanitizeInput(transcript).trim())
     }
 
     const { data: updatedSession, error: updateError } = await supabase
@@ -203,7 +210,13 @@ export async function PATCH(
       return createErrorResponse("Errore durante l'aggiornamento sessione", 500)
     }
 
-    return createSuccessResponse(updatedSession, "Sessione aggiornata con successo")
+    // Decripta il transcript per la risposta
+    const decryptedSession = {
+      ...updatedSession,
+      transcript: decryptIfEncrypted(updatedSession.transcript)
+    }
+
+    return createSuccessResponse(decryptedSession, "Sessione aggiornata con successo")
   } catch (error) {
     console.error("Error updating session:", error)
     return createErrorResponse("Errore interno del server", 500)

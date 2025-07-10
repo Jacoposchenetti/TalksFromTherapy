@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
+import { decryptIfEncrypted } from "@/lib/encryption"
 
 export async function GET(
   request: NextRequest,
@@ -55,7 +56,13 @@ export async function GET(
       }
     }
 
-    return createSuccessResponse(sessionData)
+    // Decripta il transcript se è criptato
+    const decryptedTranscript = decryptIfEncrypted(sessionData.transcript)
+    
+    return createSuccessResponse({
+      ...sessionData,
+      transcript: decryptedTranscript
+    })
   } catch (error) {
     console.error("Error fetching session transcript:", error)
     return createErrorResponse("Errore interno del server", 500)

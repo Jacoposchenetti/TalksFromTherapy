@@ -5,7 +5,7 @@ import crypto from 'crypto'
  * Usa AES-256-GCM per crittografia simmetrica sicura
  */
 
-const ALGORITHM = 'aes-256-gcm'
+const ALGORITHM = 'aes-256-cbc'
 const KEY_LENGTH = 32 // 256 bits
 const IV_LENGTH = 16  // 128 bits
 const SALT_LENGTH = 64
@@ -54,19 +54,15 @@ export function encryptSensitiveData(plaintext: string): string {
     const key = deriveKey(masterKey, salt)
     
     // Cripta
-    const cipher = crypto.createCipher(ALGORITHM, key)
-    cipher.setAAD(Buffer.from('TalksFromTherapy-v1')) // Additional authenticated data
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
     
     let encrypted = cipher.update(plaintext, 'utf8', 'hex')
     encrypted += cipher.final('hex')
     
-    const tag = cipher.getAuthTag()
-    
-    // Combina salt + iv + tag + encrypted
+    // Combina salt + iv + encrypted (senza tag per CBC)
     const combined = Buffer.concat([
       salt,
-      iv, 
-      tag,
+      iv,
       Buffer.from(encrypted, 'hex')
     ])
     
@@ -96,16 +92,13 @@ export function decryptSensitiveData(encryptedData: string): string {
     // Estrae i componenti
     const salt = combined.subarray(0, SALT_LENGTH)
     const iv = combined.subarray(SALT_LENGTH, SALT_LENGTH + IV_LENGTH)
-    const tag = combined.subarray(SALT_LENGTH + IV_LENGTH, SALT_LENGTH + IV_LENGTH + TAG_LENGTH)
-    const encrypted = combined.subarray(SALT_LENGTH + IV_LENGTH + TAG_LENGTH)
+    const encrypted = combined.subarray(SALT_LENGTH + IV_LENGTH)
     
     // Deriva la chiave
     const key = deriveKey(masterKey, salt)
     
     // Decripta
-    const decipher = crypto.createDecipher(ALGORITHM, key)
-    decipher.setAAD(Buffer.from('TalksFromTherapy-v1'))
-    decipher.setAuthTag(tag)
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
     
     let decrypted = decipher.update(encrypted, null, 'utf8')
     decrypted += decipher.final('utf8')

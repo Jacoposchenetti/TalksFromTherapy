@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from '@/lib/supabase'
+import { decryptIfEncrypted } from "@/lib/encryption"
 
 interface SavedSearch {
   id: string
@@ -51,7 +52,8 @@ export async function GET(request: NextRequest) {
     if (analyses) {
       for (const analysis of analyses) {
         try {
-          const customResults = JSON.parse(analysis.customTopicAnalysisResults || '{}')
+          const decryptedResults = decryptIfEncrypted(analysis.customTopicAnalysisResults || '{}')
+          const customResults = JSON.parse(decryptedResults)
           
           // Verifica accesso alla sessione
           if (analysis.sessions && Array.isArray(analysis.sessions) && analysis.sessions.length > 0) {

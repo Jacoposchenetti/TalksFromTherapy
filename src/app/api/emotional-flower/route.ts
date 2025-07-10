@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
 import { emoatlasService } from "@/lib/emoatlas"
+import { decryptIfEncrypted } from "@/lib/encryption"
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,6 +50,13 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("La sessione non ha un transcript", 400)
     }
 
+    // Decripta il transcript se è criptato
+    const decryptedTranscript = decryptIfEncrypted(sessionRecord.transcript)
+    
+    if (!decryptedTranscript || decryptedTranscript.trim().length === 0) {
+      return createErrorResponse("La sessione non ha un transcript valido", 400)
+    }
+
     console.log('🌸 Generating emotional flower for session:', sessionRecord.id)
     console.log('🌍 Language:', sanitizedLanguage)
 
@@ -56,7 +64,7 @@ export async function POST(request: NextRequest) {
     const sessionData = [{
       id: sessionRecord.id,
       title: sessionRecord.title,
-      transcript: sessionRecord.transcript,
+      transcript: decryptedTranscript,
       sessionDate: new Date().toISOString()
     }]
     

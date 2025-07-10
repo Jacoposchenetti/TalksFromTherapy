@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
+import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
 
 export const runtime = 'nodejs'
 
@@ -48,9 +49,12 @@ export async function GET(
       .eq('sessionId', sessionId)
       .single()
 
+    // Decripta il contenuto della nota se è criptato
+    const decryptedContent = note?.content ? decryptIfEncrypted(note.content) : ""
+
     const noteData = {
       id: note?.id,
-      content: note?.content || "",
+      content: decryptedContent,
       sessionId: sessionId,
       createdAt: note?.createdAt,
       updatedAt: note?.updatedAt,
@@ -94,6 +98,9 @@ export async function POST(
     }
 
     const sanitizedContent = sanitizeInput(content)
+    
+    // Cripta il contenuto se sensibile
+    const encryptedContent = encryptIfSensitive(sanitizedContent)
 
     // Verify session belongs to user
     const { data: sessionRecord, error: sessionError } = await supabase
@@ -118,7 +125,7 @@ export async function POST(
       .from('session_notes')
       .upsert({
         sessionId: sessionIdForPost,
-        content: sanitizedContent,
+        content: encryptedContent,
         updatedAt: new Date().toISOString(),
       }, {
         onConflict: 'sessionId'
@@ -131,9 +138,12 @@ export async function POST(
       return createErrorResponse("Errore durante il salvataggio nota", 500)
     }
 
+    // Decripta il contenuto per la risposta
+    const decryptedContent = decryptIfEncrypted(note.content)
+
     return createSuccessResponse({
       id: note.id,
-      content: note.content,
+      content: decryptedContent,
       sessionId: note.sessionId,
       createdAt: note.createdAt,
       updatedAt: note.updatedAt,

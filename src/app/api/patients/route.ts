@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
+import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
 
 export const runtime = 'nodejs'
 
@@ -30,7 +31,13 @@ export async function GET(request: NextRequest) {
       return createErrorResponse("Errore nel recupero pazienti", 500)
     }
 
-    return createSuccessResponse({ patients: patients || [] })
+    // Decripta le note per tutti i pazienti
+    const decryptedPatients = patients?.map(patient => ({
+      ...patient,
+      notes: decryptIfEncrypted(patient.notes)
+    })) || []
+
+    return createSuccessResponse({ patients: decryptedPatients })
   } catch (error) {
     console.error('Errore autenticazione API patients:', error)
     return createErrorResponse("Errore interno", 500)
@@ -66,7 +73,7 @@ export async function POST(request: NextRequest) {
     const patientData = {
       initials: body.initials.trim().toUpperCase(),
       dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
-      notes: body.notes?.trim() || null,
+      notes: encryptIfSensitive(body.notes?.trim() || null),
       userId: authResult.user!.id,
       isActive: true
     }
@@ -82,7 +89,13 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("Errore durante la creazione del paziente", 500)
     }
 
-    return createSuccessResponse(data, "Paziente creato con successo")
+    // Decripta le note per la risposta
+    const decryptedData = {
+      ...data,
+      notes: decryptIfEncrypted(data.notes)
+    }
+
+    return createSuccessResponse(decryptedData, "Paziente creato con successo")
   } catch (error) {
     console.error('Errore creazione paziente:', error)
     return createErrorResponse("Errore interno", 500)
