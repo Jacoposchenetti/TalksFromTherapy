@@ -1,61 +1,90 @@
 import { NextRequest, NextResponse } from "next/server"
+import { verifyApiAuth, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
 
 export const runtime = 'nodejs'
 
 // GET /api/patients - Lista pazienti dell'utente autenticato
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    // STEP 1: Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth(request)
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
+    }
+
+    console.log("GET /api/patients - Richiesta autorizzata", { 
+      userId: authResult.user?.id 
+    })
+
+    // STEP 2: Fetch pazienti usando l'ID dall'auth unificato
+    const { data: patients, error } = await supabase
+      .from('patients')
+      .select('*')
+      .eq('userId', authResult.user!.id)
+      .eq('isActive', true)
+      .order('createdAt', { ascending: false })
+
+    if (error) {
+      console.error('[Supabase] Patients fetch error:', error)
+      return createErrorResponse("Errore nel recupero pazienti", 500)
+    }
+
+    return createSuccessResponse({ patients: patients || [] })
+  } catch (error) {
+    console.error('Errore autenticazione API patients:', error)
+    return createErrorResponse("Errore interno", 500)
   }
-  const { data: userData, error: userError } = await supabase
-    .from('users')
-    .select('id, email')
-    .eq('email', session.user.email)
-    .single()
-  if (userError || !userData) {
-    console.error('[Supabase] User fetch error:', userError)
-    return NextResponse.json({ error: 'User not found' }, { status: 404 })
-  }
-  const { data: patients, error } = await supabase
-    .from('patients')
-    .select('*')
-    .eq('userId', userData.id)
-    .eq('isActive', true)
-    .order('createdAt', { ascending: false })
-  if (error) {
-    console.error('[Supabase] Patients fetch error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-  return NextResponse.json({ patients: patients || [] })
 }
 
 // POST /api/patients - Crea nuovo paziente
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    // STEP 1: Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth(request)
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
+    }
+
+    console.log("POST /api/patients - Richiesta autorizzata", { 
+      userId: authResult.user?.id 
+    })
+
+    // STEP 2: Validazione e sanitizzazione input
+    const body = await request.json()
+    
+    if (!body.initials || typeof body.initials !== 'string' || body.initials.trim() === '') {
+      return createErrorResponse("Iniziali paziente richieste", 400)
+    }
+
+    // Validazione iniziali
+    if (body.initials.trim().length < 2 || !/^[A-Za-z\s]+$/.test(body.initials.trim())) {
+      return createErrorResponse("Le iniziali devono essere di almeno 2 caratteri e contenere solo lettere", 400)
+    }
+
+    // STEP 3: Crea nuovo paziente
+    const patientData = {
+      initials: body.initials.trim().toUpperCase(),
+      dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
+      notes: body.notes?.trim() || null,
+      userId: authResult.user!.id,
+      isActive: true
+    }
+
+    const { data, error } = await supabase
+      .from('patients')
+      .insert([patientData])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('[Supabase] Patient insert error:', error)
+      return createErrorResponse("Errore durante la creazione del paziente", 500)
+    }
+
+    return createSuccessResponse(data, "Paziente creato con successo")
+  } catch (error) {
+    console.error('Errore creazione paziente:', error)
+    return createErrorResponse("Errore interno", 500)
   }
-  const { data: userData, error: userError } = await supabase
-    .from('users')
-    .select('id, email')
-    .eq('email', session.user.email)
-    .single()
-  if (userError || !userData) {
-    console.error('[Supabase] User fetch error:', userError)
-    return NextResponse.json({ error: 'User not found' }, { status: 404 })
-  }
-  const body = await request.json()
-  const { data, error } = await supabase
-    .from('patients')
-    .insert([{ ...body, userId: userData.id }])
-    .select()
-  if (error) {
-    console.error('[Supabase] Patient insert error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-  return NextResponse.json(data)
 }

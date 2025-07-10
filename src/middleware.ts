@@ -2,7 +2,49 @@ import { withAuth } from "next-auth/middleware"
 import { NextResponse } from "next/server"
 
 export default withAuth(
-  function middleware(req) {
+  async function middleware(req) {
+    // GLOBAL BLOCK MODE - Blocca tutto se abilitato
+    if (process.env.GLOBAL_BLOCK_MODE === 'true') {
+      return new NextResponse('Sistema temporaneamente non disponibile', { status: 503 })
+    }
+
+    // BASIC RATE LIMITING - Fallback se il database non è disponibile
+    const ip = req.ip || req.headers.get('x-forwarded-for') || 'unknown'
+    const now = Date.now()
+    const timeWindow = 60 * 1000 // 1 minuto
+    const maxRequests = 100 // Max 100 richieste per minuto per IP
+    
+    // Simple in-memory rate limiting
+    if (!global.rateLimitStore) {
+      global.rateLimitStore = new Map()
+    }
+    
+    const ipData = global.rateLimitStore.get(ip) || { count: 0, resetTime: now + timeWindow }
+    
+    if (now > ipData.resetTime) {
+      ipData.count = 1
+      ipData.resetTime = now + timeWindow
+    } else {
+      ipData.count++
+    }
+    
+    global.rateLimitStore.set(ip, ipData)
+    
+    // Block if rate limit exceeded
+    if (ipData.count > maxRequests) {
+      return new NextResponse('Rate limit exceeded', { status: 429 })
+    }
+
+    // Cleanup old entries periodically
+    if (Math.random() < 0.01) { // 1% chance per request
+      const cutoff = now - timeWindow
+      for (const [key, value] of global.rateLimitStore.entries()) {
+        if (value.resetTime < cutoff) {
+          global.rateLimitStore.delete(key)
+        }
+      }
+    }
+
     // MIDDLEWARE GLOBALE - Blocca completamente il sito quando attivato
     if (process.env.GLOBAL_BLOCK_MODE === 'true') {
       return new NextResponse(
@@ -117,11 +159,13 @@ export default withAuth(
 export const config = {
   matcher: [
     /*
-     * IMPORTANTE: Il matcher blocca tutto quando GLOBAL_BLOCK_MODE=true
-     * Include sia pagine che API routes per protezione totale
+     * SECURITY ENHANCED MATCHER
+     * Cattura TUTTO per garantire blocco totale con GLOBAL_BLOCK_MODE
+     * Include TUTTE le API routes senza eccezioni
+     * Esclude solo i file statici essenziali per Next.js
      */
-    '/',
-    '/(api|auth|dashboard|patients|sessions|transcriptions)/:path*',
-    '/((?!_next|favicon.ico).*)'
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/api/:path*',
+    '/(api|trpc)(.*)' // Extra safety for all API routes
   ],
 }

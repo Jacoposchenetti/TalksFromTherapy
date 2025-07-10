@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { verifyApiAuth, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 
 export const runtime = 'nodejs'
 
 // GET /api/config - Verifica configurazione
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Non autorizzato" },
-        { status: 401 }
-      )
+    const authResult = await verifyApiAuth(request)
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
+    }
+
+    // SECURITY WARNING: This is a config endpoint - should be restricted in production
+    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_CONFIG_API !== 'true') {
+      return createErrorResponse("Config API non disponibile in produzione", 403)
     }
 
     const config = {
@@ -31,13 +31,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(config)
+    return createSuccessResponse(config)
 
   } catch (error) {
     console.error("Errore verifica configurazione:", error)
-    return NextResponse.json(
-      { error: "Errore interno del server" },
-      { status: 500 }
-    )
+    return createErrorResponse("Errore interno del server", 500)
   }
 }

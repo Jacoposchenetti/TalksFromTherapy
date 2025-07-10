@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
 
 export const runtime = 'nodejs'
@@ -11,34 +10,35 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth()
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', session.user.email)
-      .single()
-
-    if (userError || !user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    // Validazione parametri
+    if (!params.id || typeof params.id !== 'string') {
+      return createErrorResponse("ID sessione non valido", 400)
     }
 
-    const sessionId = params.id
+    const sessionId = sanitizeInput(params.id)
 
     // Verify session belongs to user
     const { data: sessionRecord, error: sessionError } = await supabase
       .from('sessions')
-      .select('id')
+      .select('id, userId')
       .eq('id', sessionId)
-      .eq('userId', user.id)
+      .eq('userId', authResult.user!.id)
       .eq('isActive', true)
       .single()
 
     if (sessionError || !sessionRecord) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 })
+      return createErrorResponse("Sessione non trovata", 404)
+    }
+
+    // Double check accesso alla risorsa
+    if (!hasResourceAccess(authResult.user!.id, sessionRecord.userId)) {
+      return createErrorResponse("Accesso negato a questa risorsa", 403)
     }
 
     // Find existing note
@@ -48,19 +48,18 @@ export async function GET(
       .eq('sessionId', sessionId)
       .single()
 
-    return NextResponse.json({
+    const noteData = {
       id: note?.id,
       content: note?.content || "",
       sessionId: sessionId,
       createdAt: note?.createdAt,
       updatedAt: note?.updatedAt,
-    })
+    }
+
+    return createSuccessResponse(noteData)
   } catch (error) {
     console.error("Error fetching session note:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return createErrorResponse("Errore interno del server", 500)
   }
 }
 
@@ -70,47 +69,56 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth()
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', session.user.email)
-      .single()
-
-    if (userError || !user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    // Validazione parametri
+    if (!params.id || typeof params.id !== 'string') {
+      return createErrorResponse("ID sessione non valido", 400)
     }
 
-    const sessionId = params.id
-    const { content } = await request.json()
+    const sessionIdForPost = sanitizeInput(params.id)
+    const body = await request.json()
+    const { content } = body
+
+    // Validazione input
+    if (!validateApiInput(body, ['content'])) {
+      return createErrorResponse("Content è richiesto", 400)
+    }
 
     if (typeof content !== 'string') {
-      return NextResponse.json({ error: "Content is required" }, { status: 400 })
+      return createErrorResponse("Content deve essere una stringa", 400)
     }
+
+    const sanitizedContent = sanitizeInput(content)
 
     // Verify session belongs to user
     const { data: sessionRecord, error: sessionError } = await supabase
       .from('sessions')
-      .select('id')
-      .eq('id', sessionId)
-      .eq('userId', user.id)
+      .select('id, userId')
+      .eq('id', sessionIdForPost)
+      .eq('userId', authResult.user!.id)
       .eq('isActive', true)
       .single()
 
     if (sessionError || !sessionRecord) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 })
+      return createErrorResponse("Sessione non trovata", 404)
     }
 
-    // Upsert note
+    // Double check accesso alla risorsa
+    if (!hasResourceAccess(authResult.user!.id, sessionRecord.userId)) {
+      return createErrorResponse("Accesso negato a questa risorsa", 403)
+    }
+
+    // Upsert note con sicurezza
     const { data: note, error: noteError } = await supabase
       .from('session_notes')
       .upsert({
-        sessionId: sessionId,
-        content: content,
+        sessionId: sessionIdForPost,
+        content: sanitizedContent,
         updatedAt: new Date().toISOString(),
       }, {
         onConflict: 'sessionId'
@@ -119,21 +127,19 @@ export async function POST(
       .single()
 
     if (noteError) {
-      throw noteError
+      console.error('Errore salvataggio nota:', noteError)
+      return createErrorResponse("Errore durante il salvataggio nota", 500)
     }
 
-    return NextResponse.json({
+    return createSuccessResponse({
       id: note.id,
       content: note.content,
       sessionId: note.sessionId,
       createdAt: note.createdAt,
       updatedAt: note.updatedAt,
-    })
+    }, "Nota salvata con successo")
   } catch (error) {
     console.error("Error saving session note:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return createErrorResponse("Errore interno del server", 500)
   }
 }

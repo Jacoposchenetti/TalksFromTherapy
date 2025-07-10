@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { verifyApiAuth, sanitizeInput, createErrorResponse, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
 import { createReadStream, statSync } from "fs"
 import { join } from "path"
@@ -10,19 +9,30 @@ export async function GET(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
+    // STEP 1: Verifica autorizzazione
+    const authResult = await verifyApiAuth(request)
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    const { sessionId } = params
+    // STEP 2: Sanitizza sessionId
+    const sessionId = sanitizeInput(params.sessionId)
+    
+    if (!sessionId) {
+      return createErrorResponse("SessionId non valido", 400)
+    }
 
-    // Verifica che la sessione esista e appartenga all'utente
+    console.log("GET /api/audio - Richiesta autorizzata", { 
+      userId: authResult.user?.id,
+      sessionId 
+    })
+
+    // STEP 3: Verifica accesso alla risorsa
     const { data: sessionRecord, error } = await supabase
       .from('sessions')
       .select(`
         id,
+        userId,
         audioFileName,
         audioUrl,
         title,
@@ -31,16 +41,21 @@ export async function GET(
         )
       `)
       .eq('id', sessionId)
-      .eq('userId', session.user.id)
+      .eq('userId', authResult.user!.id) // FIX: era session.user.id
       .eq('isActive', true)
       .single()
 
     if (error || !sessionRecord) {
-      return NextResponse.json({ error: "Sessione non trovata" }, { status: 404 })
+      return createErrorResponse("Sessione non trovata", 404) // FIX: response sicura
+    }
+
+    // Verifica accesso alla risorsa
+    if (!hasResourceAccess(authResult.user!.id, sessionRecord.userId)) {
+      return createErrorResponse("Accesso negato a questa risorsa", 403)
     }
 
     if (!sessionRecord.audioFileName) {
-      return NextResponse.json({ error: "Nessun file audio per questa sessione" }, { status: 404 })
+      return createErrorResponse("Nessun file audio per questa sessione", 404) // FIX: response sicura
     }
 
     // Costruisce il percorso del file audio
@@ -88,15 +103,12 @@ export async function GET(
       
     } catch (fileError) {
       console.error(`File audio non trovato: ${audioFilePath}`, fileError)
-      return NextResponse.json({ error: "File audio non trovato" }, { status: 404 })
+      return createErrorResponse("File audio non trovato", 404) // FIX: response sicura
     }
 
   } catch (error) {
     console.error("Errore servizio audio:", error)
-    return NextResponse.json({ 
-      error: "Errore interno del server",
-      details: error instanceof Error ? error.message : "Errore sconosciuto"
-    }, { status: 500 })
+    return createErrorResponse("Errore interno del server", 500) // FIX: response sicura
   }
 }
 

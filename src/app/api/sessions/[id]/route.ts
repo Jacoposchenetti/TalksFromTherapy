@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
 
 export async function DELETE(
@@ -8,43 +7,41 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth()
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    // Trova l'utente su Supabase
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('email', session.user.email)
-      .single()
-
-    if (userError || !userData) {
-      console.error('[Supabase] User fetch error:', userError)
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    // Validazione parametri
+    if (!params.id || typeof params.id !== 'string') {
+      return createErrorResponse("ID sessione non valido", 400)
     }
 
-    const sessionId = params.id
+    const sessionId = sanitizeInput(params.id)
 
     // Trova la sessione e verifica ownership
     const { data: sessionToDelete, error: sessionError } = await supabase
       .from('sessions')
       .select('id, audioFileName, userId')
       .eq('id', sessionId)
-      .eq('userId', userData.id)
+      .eq('userId', authResult.user!.id)
       .eq('isActive', true)
       .single()
 
     if (sessionError || !sessionToDelete) {
-      console.error('[Supabase] Session fetch error:', sessionError)
-      return NextResponse.json({ error: "Session not found" }, { status: 404 })
+      return createErrorResponse("Sessione non trovata", 404)
+    }
+
+    // Verifica accesso alla risorsa
+    if (!hasResourceAccess(authResult.user!.id, sessionToDelete.userId)) {
+      return createErrorResponse("Accesso negato a questa risorsa", 403)
     }
 
     // Elimina il file audio da Supabase Storage se esiste
     if (sessionToDelete.audioFileName) {
       try {
-        const filePath = `${userData.id}/${sessionToDelete.audioFileName}`
+        const filePath = `${authResult.user!.id}/${sessionToDelete.audioFileName}`
         const { error: deleteError } = await supabase.storage
           .from('talksfromtherapy')
           .remove([filePath])
@@ -63,19 +60,17 @@ export async function DELETE(
       .from('sessions')
       .update({ isActive: false })
       .eq('id', sessionId)
+      .eq('userId', authResult.user!.id) // Double check per sicurezza
 
     if (updateError) {
-      console.error('[Supabase] Session update error:', updateError)
-      return NextResponse.json({ error: "Failed to delete session" }, { status: 500 })
+      console.error('Errore eliminazione sessione:', updateError)
+      return createErrorResponse("Errore durante l'eliminazione sessione", 500)
     }
 
-    return NextResponse.json({ success: true }, { status: 200 })
+    return createSuccessResponse(null, "Sessione eliminata con successo")
   } catch (error) {
     console.error("Error deleting session:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return createErrorResponse("Errore interno del server", 500)
   }
 }
 
@@ -84,46 +79,36 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth()
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    // Trova l'utente su Supabase
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('email', session.user.email)
-      .single()
-
-    if (userError || !userData) {
-      console.error('[Supabase] User fetch error:', userError)
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    // Validazione parametri
+    if (!params.id || typeof params.id !== 'string') {
+      return createErrorResponse("ID sessione non valido", 400)
     }
 
-    const sessionId = params.id
+    const sessionIdForGet = sanitizeInput(params.id)
 
     // Cerca la sessione con i dati del paziente
     const { data: sessionData, error: sessionError } = await supabase
       .from('sessions')
       .select('*, patient:patients(*)')
-      .eq('id', sessionId)
-      .eq('userId', userData.id)
+      .eq('id', sessionIdForGet)
+      .eq('userId', authResult.user!.id)
       .eq('isActive', true)
       .single()
 
     if (sessionError || !sessionData) {
-      console.error('[Supabase] Session fetch error:', sessionError)
-      return NextResponse.json({ error: "Session not found" }, { status: 404 })
+      return createErrorResponse("Sessione non trovata", 404)
     }
 
-    return NextResponse.json(sessionData)
+    return createSuccessResponse(sessionData)
   } catch (error) {
     console.error("Error fetching session:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return createErrorResponse("Errore interno del server", 500)
   }
 }
 
@@ -132,61 +117,47 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Verifica autorizzazione con sistema unificato
+    const authResult = await verifyApiAuth()
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    // Trova l'utente su Supabase
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('email', session.user.email)
-      .single()
-
-    if (userError || !userData) {
-      console.error('[Supabase] User fetch error:', userError)
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    // Validazione parametri
+    if (!params.id || typeof params.id !== 'string') {
+      return createErrorResponse("ID sessione non valido", 400)
     }
 
-    const sessionId = params.id
+    const sessionIdForPatch = sanitizeInput(params.id)
     const body = await request.json()
     const { title, transcript } = body
 
     // Validate input - either title or transcript (or both) should be provided
     if (!title && !transcript) {
-      return NextResponse.json({ 
-        error: "Either title or transcript must be provided" 
-      }, { status: 400 })
+      return createErrorResponse("Title o transcript devono essere forniti", 400)
     }
 
     // Validate title if provided
     if (title !== undefined) {
-      if (typeof title !== 'string' || title.trim().length === 0) {
-        return NextResponse.json({ 
-          error: "Title must be a non-empty string" 
-        }, { status: 400 })
+      const sanitizedTitle = sanitizeInput(title)
+      if (typeof sanitizedTitle !== 'string' || sanitizedTitle.trim().length === 0) {
+        return createErrorResponse("Il titolo deve essere una stringa non vuota", 400)
       }
 
-      if (title.trim().length > 255) {
-        return NextResponse.json({ 
-          error: "Title must be less than 255 characters" 
-        }, { status: 400 })
+      if (sanitizedTitle.trim().length > 255) {
+        return createErrorResponse("Il titolo deve essere di meno di 255 caratteri", 400)
       }
     }
 
     // Validate transcript if provided
     if (transcript !== undefined) {
-      if (typeof transcript !== 'string') {
-        return NextResponse.json({ 
-          error: "Transcript must be a string" 
-        }, { status: 400 })
+      const sanitizedTranscript = sanitizeInput(transcript)
+      if (typeof sanitizedTranscript !== 'string') {
+        return createErrorResponse("Il transcript deve essere una stringa", 400)
       }
 
-      if (transcript.trim().length === 0) {
-        return NextResponse.json({ 
-          error: "Transcript cannot be empty" 
-        }, { status: 400 })
+      if (sanitizedTranscript.trim().length === 0) {
+        return createErrorResponse("Il transcript non può essere vuoto", 400)
       }
     }
 
@@ -194,45 +165,47 @@ export async function PATCH(
     const { data: existingSession, error: sessionError } = await supabase
       .from('sessions')
       .select('id, userId')
-      .eq('id', sessionId)
-      .eq('userId', userData.id)
+      .eq('id', sessionIdForPatch)
+      .eq('userId', authResult.user!.id)
       .eq('isActive', true)
       .single()
 
     if (sessionError || !existingSession) {
-      console.error('[Supabase] Session verification error:', sessionError)
-      return NextResponse.json({ error: "Session not found" }, { status: 404 })
+      return createErrorResponse("Sessione non trovata", 404)
+    }
+
+    // Verifica accesso alla risorsa
+    if (!hasResourceAccess(authResult.user!.id, existingSession.userId)) {
+      return createErrorResponse("Accesso negato a questa risorsa", 403)
     }
 
     // Update the session with provided fields
     const updateData: any = { updatedAt: new Date().toISOString() }
     
     if (title !== undefined) {
-      updateData.title = title.trim()
+      updateData.title = sanitizeInput(title).trim()
     }
     
     if (transcript !== undefined) {
-      updateData.transcript = transcript.trim()
+      updateData.transcript = sanitizeInput(transcript).trim()
     }
 
     const { data: updatedSession, error: updateError } = await supabase
       .from('sessions')
       .update(updateData)
-      .eq('id', sessionId)
+      .eq('id', sessionIdForPatch)
+      .eq('userId', authResult.user!.id) // Double check per sicurezza
       .select('*, patient:patients(*)')
       .single()
 
     if (updateError) {
-      console.error('[Supabase] Session update error:', updateError)
-      return NextResponse.json({ error: "Failed to update session" }, { status: 500 })
+      console.error('Errore aggiornamento sessione:', updateError)
+      return createErrorResponse("Errore durante l'aggiornamento sessione", 500)
     }
 
-    return NextResponse.json(updatedSession)
+    return createSuccessResponse(updatedSession, "Sessione aggiornata con successo")
   } catch (error) {
     console.error("Error updating session:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return createErrorResponse("Errore interno del server", 500)
   }
 }

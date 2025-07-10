@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { verifyApiAuth, validateApiInput, sanitizeInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
 import { transcribeAudio, diarizeTranscript } from "@/lib/openai"
 
@@ -9,41 +8,35 @@ export const runtime = 'nodejs'
 // POST /api/transcribe - Avvia trascrizione di una sessione
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    console.log("POST /api/transcribe - Inizio richiesta", { 
-      hasSession: !!session, 
-      userId: session?.user?.id 
+    // STEP 1: Verifica autorizzazione
+    const authResult = await verifyApiAuth(request)
+    if (!authResult.success) {
+      return createErrorResponse(authResult.error || "Non autorizzato", 401)
+    }
+
+    console.log("POST /api/transcribe - Richiesta autorizzata", { 
+      userId: authResult.user?.id 
     })
+
+    // STEP 2: Validazione input
+    const requestData = await request.json()
     
-    if (!session?.user?.id) {
-      console.log("Errore: utente non autenticato")
-      return NextResponse.json(
-        { error: "Non autorizzato" },
-        { status: 401 }
-      )
+    if (!validateApiInput(requestData, ['sessionId'])) {
+      return createErrorResponse("Dati richiesta non validi - sessionId richiesto", 400)
     }
 
-    const { sessionId } = await request.json()
-    console.log("Dati ricevuti:", { sessionId })
-
-    if (!sessionId) {
-      console.log("Errore: sessionId mancante")
-      return NextResponse.json(
-        { error: "ID sessione richiesto" },
-        { status: 400 }
-      )
-    }
+    const sessionId = sanitizeInput(requestData.sessionId)
+    console.log("Dati validati:", { sessionId })
 
     console.log(`🔍 Ricerca sessione con ID: ${sessionId}`)
-    console.log(`👤 User ID: ${session.user.id}`)
+    console.log(`👤 User ID: ${authResult.user!.id}`)
 
-    // Cerca la sessione su Supabase
+    // STEP 3: Verifica accesso alla risorsa
     const { data: sessionRecord, error: sessionError } = await supabase
       .from('sessions')
       .select('id, userId, status, audioFileName, audioUrl, title')
       .eq('id', sessionId)
-      .eq('userId', session.user.id)
+      .eq('userId', authResult.user!.id)
       .eq('isActive', true)
       .single()
 
