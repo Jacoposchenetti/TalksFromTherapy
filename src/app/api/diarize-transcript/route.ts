@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
 import { diarizeTranscript } from "@/lib/openai"
+import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
 
 export const runtime = 'nodejs'
 
@@ -63,27 +64,35 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("Nessuna trascrizione trovata per questa sessione", 400)
     }
 
+    // Decripta il transcript se è criptato
+    const decryptedTranscript = decryptIfEncrypted(sessionRecord.transcript)
+    
+    if (!decryptedTranscript || decryptedTranscript.trim().length === 0) {
+      console.log(`❌ Nessuna trascrizione valida trovata per la sessione`)
+      return createErrorResponse("Nessuna trascrizione valida trovata per questa sessione", 400)
+    }
+
     console.log(`✅ Sessione trovata:`, {
       id: sessionRecord.id,
       title: sessionRecord.title,
       status: sessionRecord.status,
-      transcriptLength: sessionRecord.transcript.length
+      transcriptLength: decryptedTranscript.length
     })
 
     try {
       console.log(`🎭 Avvio diarizzazione per sessione: ${sessionRecord.title}`)
       
       // Esegui la diarizzazione
-      const diarizedTranscript = await diarizeTranscript(sessionRecord.transcript, sessionRecord.title)
+      const diarizedTranscript = await diarizeTranscript(decryptedTranscript, sessionRecord.title)
       
       console.log(`🎭 Diarizzazione completata: "${diarizedTranscript.substring(0, 100)}..."`)
       console.log(`📏 Lunghezza trascrizione diarizzata: ${diarizedTranscript.length} caratteri`)
       
-      // Aggiorna la sessione con la trascrizione diarizzata
+      // Aggiorna la sessione con la trascrizione diarizzata criptata
       const { error: updateError } = await supabase
         .from('sessions')
         .update({ 
-          transcript: diarizedTranscript,
+          transcript: encryptIfSensitive(diarizedTranscript),
           updatedAt: new Date().toISOString()
         })
         .eq('id', sanitizedSessionId)
@@ -98,7 +107,7 @@ export async function POST(request: NextRequest) {
 
       return createSuccessResponse({
         sessionId: sanitizedSessionId,
-        originalTranscriptLength: sessionRecord.transcript.length,
+        originalTranscriptLength: decryptedTranscript.length,
         diarizedTranscriptLength: diarizedTranscript.length,
         transcript: diarizedTranscript
       }, "Diarizzazione completata con successo")

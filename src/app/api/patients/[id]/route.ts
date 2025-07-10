@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
+import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
 
 export const runtime = 'nodejs'
 
@@ -36,7 +37,13 @@ export async function GET(
       return createErrorResponse("Paziente non trovato", 404)
     }
 
-    return createSuccessResponse(patient)
+    // Decripta le note se sono criptate
+    const decryptedNotes = decryptIfEncrypted(patient.notes)
+
+    return createSuccessResponse({
+      ...patient,
+      notes: decryptedNotes
+    })
   } catch (error) {
     console.error("Errore durante il recupero paziente:", error)
     return createErrorResponse("Errore interno del server", 500)
@@ -88,7 +95,7 @@ export async function PUT(
     const updateData: any = {}
     if (initials !== undefined) updateData.initials = sanitizeInput(initials).trim().toUpperCase()
     if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null
-    if (notes !== undefined) updateData.notes = sanitizeInput(notes || '').trim() || null
+    if (notes !== undefined) updateData.notes = encryptIfSensitive(sanitizeInput(notes || '').trim()) || null
 
     const { data: patient, error: updateError } = await supabase
       .from('patients')
@@ -103,7 +110,13 @@ export async function PUT(
       return createErrorResponse('Errore durante l\'aggiornamento paziente', 500)
     }
 
-    return createSuccessResponse(patient, 'Paziente aggiornato con successo')
+    // Decripta le note per la risposta
+    const decryptedNotes = decryptIfEncrypted(patient.notes)
+
+    return createSuccessResponse({
+      ...patient,
+      notes: decryptedNotes
+    }, 'Paziente aggiornato con successo')
   } catch (error) {
     console.error("Errore durante l'aggiornamento paziente:", error)
     return createErrorResponse('Errore interno del server', 500)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, sanitizeInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
+import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
 
 // GET /api/analyses?sessionId=xxx - Recupera analisi per una sessione
 export async function GET(request: NextRequest) {
@@ -48,19 +49,19 @@ export async function GET(request: NextRequest) {
       analysis: {
         // Sentiment Analysis
         sentiment: analysis.emotions ? {
-          z_scores: JSON.parse(analysis.emotions),
+          z_scores: JSON.parse(decryptIfEncrypted(analysis.emotions) || '{}'),
           emotional_valence: analysis.emotionalValence,
-          significant_emotions: analysis.significantEmotions ? JSON.parse(analysis.significantEmotions) : {},
-          flower_plot: analysis.emotionFlowerPlot,
+          significant_emotions: analysis.significantEmotions ? JSON.parse(decryptIfEncrypted(analysis.significantEmotions) || '{}') : {},
+          flower_plot: decryptIfEncrypted(analysis.emotionFlowerPlot),
           sentiment_score: analysis.sentimentScore
         } : null,
         // Topic Analysis  
-        topics: analysis.topicAnalysisResult ? JSON.parse(analysis.topicAnalysisResult) : null,
+        topics: analysis.topicAnalysisResult ? JSON.parse(decryptIfEncrypted(analysis.topicAnalysisResult) || 'null') : null,
         // Custom Topic Searches
         customTopicSearches: analysis.customTopicAnalysisResults ? 
-          JSON.parse(analysis.customTopicAnalysisResults).searches || [] : [],
+          JSON.parse(decryptIfEncrypted(analysis.customTopicAnalysisResults) || '{}').searches || [] : [],
         // Semantic Frame Analysis
-        semanticFrames: analysis.semanticFrameResults ? JSON.parse(analysis.semanticFrameResults) : {},
+        semanticFrames: analysis.semanticFrameResults ? JSON.parse(decryptIfEncrypted(analysis.semanticFrameResults) || '{}') : {},
         // Metadata
         analysisVersion: analysis.analysisVersion,
         language: analysis.language,
@@ -120,18 +121,18 @@ export async function POST(request: NextRequest) {
       case 'sentiment':
         updateData = {
           ...updateData,
-          emotions: JSON.stringify(analysisData.z_scores || {}),
+          emotions: encryptIfSensitive(JSON.stringify(analysisData.z_scores || {})),
           emotionalValence: analysisData.emotional_valence || 0,
           sentimentScore: analysisData.sentiment_score || 0,
-          significantEmotions: JSON.stringify(analysisData.significant_emotions || {}),
-          emotionFlowerPlot: analysisData.flower_plot || null
+          significantEmotions: encryptIfSensitive(JSON.stringify(analysisData.significant_emotions || {})),
+          emotionFlowerPlot: encryptIfSensitive(analysisData.flower_plot || null)
         }
         break
       case 'topics':
         updateData = {
           ...updateData,
-          keyTopics: JSON.stringify(analysisData.topics || []),
-          topicAnalysisResult: JSON.stringify(analysisData)
+          keyTopics: encryptIfSensitive(JSON.stringify(analysisData.topics || [])),
+          topicAnalysisResult: encryptIfSensitive(JSON.stringify(analysisData))
         }
         break
       case 'custom_topics':
@@ -145,7 +146,8 @@ export async function POST(request: NextRequest) {
         let existingCustomSearches = []
         if (existingCustomAnalysis?.customTopicAnalysisResults) {
           try {
-            const parsed = JSON.parse(existingCustomAnalysis.customTopicAnalysisResults)
+            const decryptedData = decryptIfEncrypted(existingCustomAnalysis.customTopicAnalysisResults)
+            const parsed = JSON.parse(decryptedData || '{}')
             existingCustomSearches = parsed.searches || []
           } catch (e) {
             console.error("Errore parsing custom topic searches esistenti:", e)
@@ -162,9 +164,9 @@ export async function POST(request: NextRequest) {
         
         updateData = {
           ...updateData,
-          customTopicAnalysisResults: JSON.stringify({
+          customTopicAnalysisResults: encryptIfSensitive(JSON.stringify({
             searches: existingCustomSearches
-          })
+          }))
         }
         break
       case 'semantic_frame':
@@ -179,7 +181,8 @@ export async function POST(request: NextRequest) {
           let existingFrames = {}
           if (existingAnalysis?.semanticFrameResults) {
             try {
-              existingFrames = JSON.parse(existingAnalysis.semanticFrameResults)
+              const decryptedData = decryptIfEncrypted(existingAnalysis.semanticFrameResults)
+              existingFrames = JSON.parse(decryptedData || '{}')
             } catch (e) {
               console.error("Errore parsing semantic frames esistenti:", e)
             }
@@ -187,7 +190,7 @@ export async function POST(request: NextRequest) {
           existingFrames[target_word] = analysisData
           updateData = {
             ...updateData,
-            semanticFrameResults: JSON.stringify(existingFrames)
+            semanticFrameResults: encryptIfSensitive(JSON.stringify(existingFrames))
           }
         }
         break

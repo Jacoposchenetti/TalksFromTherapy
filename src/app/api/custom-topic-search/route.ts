@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from '@/lib/supabase'
 import OpenAI from 'openai'
+import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -88,15 +89,10 @@ export async function POST(request: NextRequest) {
 
     if (!sessionIds || sessionIds.length === 0) {
       return createErrorResponse("Nessuna sessione selezionata", 400)
-        { status: 400 }
-      
     }
 
     if (!customTopics || customTopics.length === 0) {
-      return NextResponse.json(
-        { error: "Nessun topic personalizzato specificato" },
-        { status: 400 }
-      )
+      return createErrorResponse("Nessun topic personalizzato specificato", 400)
     }
 
     // Fetch sessions and their transcripts
@@ -107,17 +103,11 @@ export async function POST(request: NextRequest) {
       .eq('userId', authResult.user!.id)
 
     if (sessionsError) {
-      return NextResponse.json(
-        { error: "Errore nel recupero delle sessioni" },
-        { status: 500 }
-      )
+      return createErrorResponse("Errore nel recupero delle sessioni", 500)
     }
 
     if (!sessions || sessions.length === 0) {
-      return NextResponse.json(
-        { error: "Nessuna trascrizione trovata per le sessioni selezionate" },
-        { status: 404 }
-      )
+      return createErrorResponse("Nessuna trascrizione trovata per le sessioni selezionate", 404)
     }
 
     // Filter out sessions without transcripts
@@ -126,15 +116,15 @@ export async function POST(request: NextRequest) {
     )
 
     if (validSessions.length === 0) {
-      return NextResponse.json(
-        { error: "Nessuna trascrizione valida trovata" },
-        { status: 404 }
-      )
+      return createErrorResponse("Nessuna trascrizione valida trovata", 404)
     }
 
-    // Combina tutte le trascrizioni
+    // Decripta i transcript e combina le trascrizioni
     const combinedTranscript = validSessions
-      .map(session => `--- ${session.title} ---\n${session.transcript}`)
+      .map(session => {
+        const decryptedTranscript = decryptIfEncrypted(session.transcript)
+        return `--- ${session.title} ---\n${decryptedTranscript}`
+      })
       .join('\n\n')
 
     // Usa l'endpoint classify-text-segments per cercare i topic personalizzati
@@ -228,7 +218,8 @@ export async function POST(request: NextRequest) {
         let existingSearches = []
         if (existingAnalysis?.customTopicAnalysisResults) {
           try {
-            const parsed = JSON.parse(existingAnalysis.customTopicAnalysisResults)
+            const decryptedResults = decryptIfEncrypted(existingAnalysis.customTopicAnalysisResults)
+            const parsed = JSON.parse(decryptedResults)
             existingSearches = parsed.searches || []
           } catch (parseError) {
             console.warn('Error parsing existing searches:', parseError)
@@ -247,9 +238,9 @@ export async function POST(request: NextRequest) {
           .upsert([{
             sessionId: session.id,
             patientId: session.patientId,
-            customTopicAnalysisResults: JSON.stringify({
+            customTopicAnalysisResults: encryptIfSensitive(JSON.stringify({
               searches: limitedSearches
-            }),
+            })),
             updatedAt: new Date()
           }], {
             onConflict: 'sessionId'
@@ -267,16 +258,10 @@ export async function POST(request: NextRequest) {
       // Non fallire la richiesta per questo
     }
 
-    return NextResponse.json({
-      success: true,
-      data: searchResult
-    })
+    return createSuccessResponse(searchResult)
 
   } catch (error) {
     console.error('Errore nella ricerca di topic personalizzati:', error)
-    return NextResponse.json(
-      { error: "Errore interno del server durante la ricerca" },
-      { status: 500 }
-    )
+    return createErrorResponse("Errore interno del server durante la ricerca", 500)
   }
 }

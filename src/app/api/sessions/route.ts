@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, sanitizeInput, createErrorResponse, createSuccessResponse, hasResourceAccess } from "@/lib/auth-utils"
 import { supabase } from "@/lib/supabase"
+import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,7 +41,13 @@ export async function GET(request: NextRequest) {
       return createErrorResponse("Errore nel recupero sessioni", 500)
     }
     
-    return createSuccessResponse(sessions || [])
+    // Decripta i transcript sensibili
+    const decryptedSessions = sessions?.map(session => ({
+      ...session,
+      transcript: decryptIfEncrypted(session.transcript)
+    })) || []
+    
+    return createSuccessResponse(decryptedSessions)
   } catch (error) {
     console.error('Errore GET /api/sessions:', error)
     return createErrorResponse("Errore interno", 500)
@@ -97,7 +104,7 @@ export async function POST(request: NextRequest) {
           userId: authResult.user!.id, // Usa l'ID dall'auth unificato
           patientId: sanitizedPatientId,
           title: sanitizedTitle,
-          transcript,
+          transcript: encryptIfSensitive(transcript),
           sessionDate: new Date(),
           status: status || "TRANSCRIBED",
           documentMetadata: metadata ? JSON.stringify(metadata) : null,
@@ -110,8 +117,14 @@ export async function POST(request: NextRequest) {
         return createErrorResponse("Errore nella creazione sessione", 500)
       }
 
+      // Decripta il transcript per la risposta
+      const decryptedSession = {
+        ...newSession,
+        transcript: decryptIfEncrypted(newSession.transcript)
+      }
+
       console.log('[Supabase] Text session created successfully:', newSession.id)
-      return createSuccessResponse(newSession, "Sessione creata con successo")
+      return createSuccessResponse(decryptedSession, "Sessione creata con successo")
     }
 
     // STEP 7: Handle FormData requests (audio file uploads)
