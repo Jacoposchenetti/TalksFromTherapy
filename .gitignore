@@ -32,6 +32,19 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env.local
+.env.production
+.env.development
+
+# bitwarden backup files (just in case)
+bitwarden-*
+*.bw-backup
+
+# security keys and certificates
+*.key
+*.pem
+*.crt
+*.p12
 
 # vercel
 .vercel
