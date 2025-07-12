@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
 
 export default function RegisterPage() {
@@ -15,9 +16,12 @@ export default function RegisterPage() {
     email: "",
     password: "",
     confirmPassword: "",
-    licenseNumber: ""
+    licenseNumber: "",
+    acceptTerms: false,
+    acceptPrivacy: false
   })
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
@@ -25,6 +29,13 @@ export default function RegisterPage() {
     setFormData(prev => ({
       ...prev,
       [e.target.name]: e.target.value
+    }))
+  }
+
+  const handleCheckboxChange = (name: string, checked: boolean | "indeterminate") => {
+    setFormData(prev => ({
+      ...prev,
+      [name]: checked === true
     }))
   }
 
@@ -50,12 +61,23 @@ export default function RegisterPage() {
       return false
     }
 
+    if (!formData.acceptTerms) {
+      setError("You must accept the Terms of Service to register")
+      return false
+    }
+
+    if (!formData.acceptPrivacy) {
+      setError("You must accept the Privacy Policy to register")
+      return false
+    }
+
     return true
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setSuccess("")
 
     if (!validateForm()) return
 
@@ -71,21 +93,26 @@ export default function RegisterPage() {
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          licenseNumber: formData.licenseNumber || null
+          licenseNumber: formData.licenseNumber || null,
+          acceptTerms: formData.acceptTerms,
+          acceptPrivacy: formData.acceptPrivacy
         }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || "An error occurred during registration")
+        setError(data.error || "Si è verificato un errore durante la registrazione")
         return
       }
 
-      // Registrazione completata, reindirizza al login
-      router.push("/login?message=Registrazione completata! Ora puoi accedere.")
+      // Registrazione completata
+      setSuccess("Registrazione completata! Controlla la tua email per attivare l'account.")
+      setTimeout(() => {
+        router.push("/login?message=" + encodeURIComponent("Registrazione completata! Controlla la tua email per attivare l'account prima di accedere."))
+      }, 2000)
     } catch (error) {
-      setError("An error occurred during registration")
+      setError("Si è verificato un errore durante la registrazione")
     } finally {
       setIsLoading(false)
     }
@@ -172,10 +199,49 @@ export default function RegisterPage() {
                 disabled={isLoading}
               />
             </div>
+
+
+            
+            {/* GDPR Consent Section */}
+            <div className="space-y-4 pt-4 border-t border-gray-200">
+        
+              
+              <div className="flex items-start space-x-3">
+                <Checkbox 
+                  id="gdprTerms"
+                  checked={formData.acceptTerms}
+                  onCheckedChange={(checked) => handleCheckboxChange('acceptTerms', checked)}
+                  className="mt-1 flex-shrink-0"
+                />
+                <div className="text-sm leading-relaxed cursor-pointer" onClick={() => handleCheckboxChange('acceptTerms', !formData.acceptTerms)}>
+                  I accept the <Link href="/terms" className="text-blue-600 hover:text-blue-800 underline">Terms of Service</Link> and agree to the processing of my professional data to provide the transcription service.
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-3">
+                <Checkbox 
+                  id="gdprPrivacy"
+                  checked={formData.acceptPrivacy}
+                  onCheckedChange={(checked) => handleCheckboxChange('acceptPrivacy', checked)}
+                  className="mt-1 flex-shrink-0"
+                />
+                <div className="text-sm leading-relaxed cursor-pointer" onClick={() => handleCheckboxChange('acceptPrivacy', !formData.acceptPrivacy)}>
+                  I have read and accept the <Link href="/privacy" className="text-blue-600 hover:text-blue-800 underline">Privacy Policy</Link> and consent to the processing of personal data for therapeutic transcription services.
+                </div>
+              </div>
+            </div>
             
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {success && (
+              <Alert className="border-green-200 bg-green-50 text-green-800">
+                <AlertDescription>
+                  ✅ {success}
+                </AlertDescription>
               </Alert>
             )}
 

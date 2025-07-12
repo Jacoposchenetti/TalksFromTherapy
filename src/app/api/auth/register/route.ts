@@ -1,21 +1,23 @@
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
-import { hashPassword } from "@/lib/password"
 import { sanitizeInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
-    const rawBody = await request.json()
+    const body = await request.json()
     
-    // STEP 1: Sanitizzazione input per sicurezza
-    const name = sanitizeInput(rawBody.name || '')
-    const email = sanitizeInput(rawBody.email || '').toLowerCase()
-    const password = rawBody.password || ''
-    const licenseNumber = sanitizeInput(rawBody.licenseNumber || '')
+    // Sanitizzazione e validazione input
+    const name = sanitizeInput(body.name || '')
+    const email = sanitizeInput(body.email || '').toLowerCase()
+    const password = body.password || ''
+    const licenseNumber = sanitizeInput(body.licenseNumber || '')
+    const acceptTerms = body.acceptTerms === true
+    const acceptPrivacy = body.acceptPrivacy === true
 
-    // STEP 2: Validazione rigorosa
+    // Validazione base
     if (!name || name.length < 2 || name.length > 100) {
       return createErrorResponse("Il nome deve essere tra 2 e 100 caratteri", 400)
     }
@@ -24,83 +26,121 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("Nome, email e password sono obbligatori", 400)
     }
 
-    // Validazione email formato
+    if (password.length < 8) {
+      return createErrorResponse("La password deve essere di almeno 8 caratteri", 400)
+    }
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: "Formato email non valido" },
-        { status: 400 }
-      )
+      return createErrorResponse("Formato email non valido", 400)
     }
 
-    // Validazione password lunghezza
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: "La password deve essere di almeno 8 caratteri" },
-        { status: 400 }
-      )
+    // Verifica consenso GDPR
+    if (!acceptTerms || !acceptPrivacy) {
+      return createErrorResponse('Devi accettare i termini di servizio e la privacy policy', 400)
     }
 
-    // Controlla se l'email esiste già
-    const { data: existingUser, error: checkError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email.toLowerCase())
-      .single()
-
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('[Supabase] User check error:', checkError)
-      return NextResponse.json(
-        { error: "Errore durante il controllo utente" },
-        { status: 500 }
-      )
-    }
-
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "Un utente con questa email esiste già" },
-        { status: 409 }
-      )
-    }
-
-    // Hash della password
-    const hashedPassword = await hashPassword(password)
-
-    // Crea l'utente su Supabase
-    const { data: user, error: createError } = await supabase
-      .from('users')
-      .insert([{
-        name,
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        licenseNumber: licenseNumber || null
-      }])
-      .select('id, name, email, licenseNumber, createdAt')
-      .single()
-
-    if (createError) {
-      console.error('[Supabase] User creation error:', createError)
-      return NextResponse.json(
-        { error: "Errore durante la creazione utente" },
-        { status: 500 }
-      )
-    }
-
-    console.log('[Supabase] User created successfully:', user.id)
-
-    return NextResponse.json(
-      { 
-        message: "Utente creato con successo",
-        user 
-      },
-      { status: 201 }
+    // Crea client Supabase
+    const cookieStore = cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // Usiamo anon key per la registrazione
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value
+          },
+          set(name: string, value: string, options: CookieOptions) {
+            cookieStore.set({ name, value, ...options })
+          },
+          remove(name: string, options: CookieOptions) {
+            cookieStore.set({ name, value: '', ...options })
+          },
+        },
+      }
     )
+
+    // REGISTRAZIONE CON SUPABASE AUTH
+    const { data: authData, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+          license_number: licenseNumber || null
+        },
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`
+      }
+    })
+
+    if (signUpError) {
+      console.error('Supabase signup error:', signUpError)
+      return createErrorResponse('Errore durante la registrazione: ' + signUpError.message, 400)
+    }
+
+    if (!authData.user) {
+      return createErrorResponse('Errore durante la creazione dell\'account', 500)
+    }
+
+    // CREA RECORD NELLA TABELLA USERS CUSTOM
+    const clientIP = request.headers.get('x-forwarded-for') || 
+                     request.headers.get('x-real-ip') || 
+                     'localhost'
+
+    try {
+      // Client con service_role per operazioni admin
+      const adminSupabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+          cookies: {
+            get(name: string) {
+              return cookieStore.get(name)?.value
+            },
+            set(name: string, value: string, options: CookieOptions) {
+              cookieStore.set({ name, value, ...options })
+            },
+            remove(name: string, options: CookieOptions) {
+              cookieStore.set({ name, value: '', ...options })
+            },
+          },
+        }
+      )
+
+      const { error: insertError } = await adminSupabase
+        .from('users')
+        .insert([{
+          id: authData.user.id, // Usa lo stesso ID di Supabase Auth
+          email,
+          name,
+          licenseNumber: licenseNumber || null,
+          emailVerified: false, // Sarà true dopo verifica email
+          consent_terms_accepted: acceptTerms,
+          consent_privacy_accepted: acceptPrivacy,
+          consent_date: new Date().toISOString(),
+          consent_ip_address: clientIP
+        }])
+
+      if (insertError) {
+        console.error('Error inserting user in custom table:', insertError)
+        // Non restituire errore, l'account Supabase è già creato
+      }
+    } catch (error) {
+      console.error('Error with service_role operations:', error)
+      // Non bloccare la registrazione per questo errore
+    }
+
+    return createSuccessResponse({
+      message: 'Registrazione completata! Controlla la tua email per attivare l\'account.',
+      user: {
+        id: authData.user.id,
+        email: authData.user.email,
+        emailVerified: false
+      }
+    })
 
   } catch (error) {
-    console.error("Errore durante la registrazione:", error)
-    return NextResponse.json(
-      { error: "Errore interno del server" },
-      { status: 500 }
-    )
+    console.error('Registration error:', error)
+    return createErrorResponse('Errore interno del server', 500)
   }
 }

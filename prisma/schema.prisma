@@ -20,6 +20,10 @@ model User {
   password        String    // hashed with bcrypt
   name            String
   licenseNumber   String?   // numero ordine professionale
+  // GDPR Consent tracking
+  acceptedTermsAt DateTime? // When user accepted Terms of Service
+  acceptedPrivacyAt DateTime? // When user accepted Privacy Policy
+  consentVersion  String?   // Version of terms/privacy accepted
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   patients        Patient[]

@@ -167,11 +167,12 @@ export function hasResourceAccess(
  * @param status HTTP status code
  * @returns Response object
  */
-export function createErrorResponse(message: string, status: number = 400) {
+export function createErrorResponse(message: string, status: number = 400, extraData?: any) {
   return new Response(
     JSON.stringify({ 
       error: message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      ...extraData
     }), 
     { 
       status,
