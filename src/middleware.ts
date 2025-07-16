@@ -136,13 +136,28 @@ export default withAuth(
         // Public routes che non richiedono autenticazione
         const publicRoutes = ["/", "/login", "/register"]
         
+        // API routes che usano la propria autenticazione (non NextAuth)
+        const customAuthApiRoutes = [
+          "/api/emotion-analysis",
+          "/api/sentiment",
+          "/api/transcribe", 
+          "/api/sessions",
+          "/api/patients",
+          "/api/analyses"
+        ]
+        
         // Controlla se la route è pubblica
         const isPublicRoute = publicRoutes.some(route => 
           pathname === route || pathname.startsWith(route + "/")
         )
         
-        // Se la route è pubblica, permettila sempre
-        if (isPublicRoute) {
+        // Controlla se è un'API con autenticazione custom
+        const isCustomAuthApi = customAuthApiRoutes.some(route => 
+          pathname.startsWith(route)
+        )
+        
+        // Se la route è pubblica o usa autenticazione custom, permettila sempre
+        if (isPublicRoute || isCustomAuthApi) {
           return true
         }
         
@@ -159,13 +174,9 @@ export default withAuth(
 export const config = {
   matcher: [
     /*
-     * SECURITY ENHANCED MATCHER
-     * Cattura TUTTO per garantire blocco totale con GLOBAL_BLOCK_MODE
-     * Include TUTTE le API routes senza eccezioni
-     * Esclude solo i file statici essenziali per Next.js
+     * SIMPLIFIED MATCHER for debugging
+     * Match all routes except static files
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-    '/api/:path*',
-    '/(api|trpc)(.*)' // Extra safety for all API routes
+    '/((?!_next/static|_next/image|favicon.ico).*)'
   ],
 }

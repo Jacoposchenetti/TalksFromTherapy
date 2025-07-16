@@ -49,7 +49,10 @@ async function parseDocument(file: File) {
 }
 
 async function parseTxt(file: File) {
+  console.log(`📝 Parsing TXT file: ${file.name}, size: ${file.size}, type: ${file.type}`)
   const text = await file.text()
+  console.log(`📝 TXT parsing result: ${text.length} characters, first 100 chars: "${text.substring(0, 100)}"`)
+  
   return {
     text,
     metadata: {
@@ -245,16 +248,21 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("Nome file non valido", 400)
     }
 
-    console.log(`Parsing document: ${sanitizedFileName}, type: ${file.type}, size: ${file.size} bytes`)
-
-    // STEP 3: Parse the document (già con validazioni di sicurezza)
-    const parsedDocument = await parseDocument(file)
-    
-    if (!parsedDocument.text || parsedDocument.text.trim().length === 0) {
-      return createErrorResponse("Il documento sembra essere vuoto o non è stato possibile estrarre il testo", 400)
-    }
-
-    console.log(`Successfully parsed document: ${sanitizedFileName}, extracted ${parsedDocument.text.length} characters`)
+    console.log(`Parsing document: ${sanitizedFileName}, type: ${file.type}, size: ${file.size} bytes`)      // STEP 3: Parse the document (già con validazioni di sicurezza)
+      console.log(`🔍 About to parse document: ${sanitizedFileName}, type: ${file.type}, size: ${file.size}`)
+      const parsedDocument = await parseDocument(file)
+      console.log(`📄 Parse result:`, {
+        hasText: !!parsedDocument.text,
+        textLength: parsedDocument.text?.length || 0,
+        trimmedLength: parsedDocument.text?.trim().length || 0,
+        metadata: parsedDocument.metadata
+      })
+      
+      if (!parsedDocument.text || parsedDocument.text.trim().length === 0) {
+        console.error(`❌ Empty document detected - text: "${parsedDocument.text}", trimmed length: ${parsedDocument.text?.trim().length || 0}`)
+        return createErrorResponse("Il documento sembra essere vuoto o non è stato possibile estrarre il testo", 400)
+      }
+      console.log(`✅ Successfully parsed document: ${sanitizedFileName}, extracted ${parsedDocument.text.length} characters`)
 
     return createSuccessResponse(parsedDocument, "Documento analizzato con successo")
   } catch (error) {

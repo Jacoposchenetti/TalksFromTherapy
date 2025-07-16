@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, sanitizeInput, createErrorResponse, createSuccessResponse, hasResourceAccess } from "@/lib/auth-utils"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
+
+// Client supabase con service role per operazioni RLS
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +26,7 @@ export async function GET(request: NextRequest) {
     const patientId = searchParams.get("patientId")
     
     // STEP 3: Costruisci query sicura - SOLO sessioni dell'utente corrente
-    let query = supabase
+    let query = supabaseAdmin
       .from('sessions')
       .select('*, patient:patients(*)')
       .eq('userId', authResult.user!.id) // Usa l'ID dall'auth unificato
@@ -37,7 +43,7 @@ export async function GET(request: NextRequest) {
     // STEP 5: Esegui query
     const { data: sessions, error } = await query
     if (error) {
-      console.error('[Supabase] Sessions fetch error:', error)
+      console.error('[supabaseAdmin] Sessions fetch error:', error)
       return createErrorResponse("Errore nel recupero sessioni", 500)
     }
     
@@ -84,7 +90,7 @@ export async function POST(request: NextRequest) {
       const sanitizedTitle = sanitizeInput(title)
       
       // STEP 5: Verifica che il paziente appartenga all'utente
-      const { data: patient, error: patientError } = await supabase
+      const { data: patient, error: patientError } = await supabaseAdmin
         .from('patients')
         .select('id')
         .eq('id', sanitizedPatientId)
@@ -93,12 +99,12 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (patientError || !patient) {
-        console.error('[Supabase] Patient verification error:', patientError)
+        console.error('[supabaseAdmin] Patient verification error:', patientError)
         return createErrorResponse("Paziente non trovato o non autorizzato", 404)
       }
 
       // STEP 6: Crea sessione con transcript testuale
-      const { data: newSession, error: sessionError } = await supabase
+      const { data: newSession, error: sessionError } = await supabaseAdmin
         .from('sessions')
         .insert([{
           userId: authResult.user!.id, // Usa l'ID dall'auth unificato
@@ -113,7 +119,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (sessionError) {
-        console.error('[Supabase] Session creation error:', sessionError)
+        console.error('[supabaseAdmin] Session creation error:', sessionError)
         return createErrorResponse("Errore nella creazione sessione", 500)
       }
 
@@ -123,7 +129,7 @@ export async function POST(request: NextRequest) {
         transcript: decryptIfEncrypted(newSession.transcript)
       }
 
-      console.log('[Supabase] Text session created successfully:', newSession.id)
+      console.log('[supabaseAdmin] Text session created successfully:', newSession.id)
       return createSuccessResponse(decryptedSession, "Sessione creata con successo")
     }
 
@@ -143,7 +149,7 @@ export async function POST(request: NextRequest) {
     const sanitizedTitle = sanitizeInput(title)
 
     // STEP 10: Verifica che il paziente appartenga all'utente
-    const { data: patient, error: patientError } = await supabase
+    const { data: patient, error: patientError } = await supabaseAdmin
       .from('patients')
       .select('id')
       .eq('id', sanitizedPatientId)
@@ -152,11 +158,11 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (patientError || !patient) {
-      console.error('[Supabase] Patient verification error:', patientError)
+      console.error('[supabaseAdmin] Patient verification error:', patientError)
       return createErrorResponse("Paziente non trovato o non autorizzato", 404)
     }
 
-    // STEP 11: Upload del file audio su Supabase Storage
+    // STEP 11: Upload del file audio su supabaseAdmin Storage
     try {
       const bytes = await audioFile.arrayBuffer()
       const buffer = Buffer.from(bytes)
@@ -164,8 +170,8 @@ export async function POST(request: NextRequest) {
       const fileName = `${Date.now()}-${audioFile.name}`
       const filePath = `${authResult.user!.id}/${fileName}` // Organizza per utente con ID sicuro
       
-      // Upload su Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      // Upload su supabaseAdmin Storage
+      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
         .from('talksfromtherapy')
         .upload(filePath, buffer, {
           contentType: audioFile.type,
@@ -173,19 +179,19 @@ export async function POST(request: NextRequest) {
         })
 
       if (uploadError) {
-        console.error('[Supabase Storage] Upload error:', uploadError)
+        console.error('[supabaseAdmin Storage] Upload error:', uploadError)
         return createErrorResponse(`Upload fallito: ${uploadError.message}`, 500)
       }
 
       // STEP 12: Genera URL per l'accesso al file
-      const { data: urlData } = await supabase.storage
+      const { data: urlData } = await supabaseAdmin.storage
         .from('talksfromtherapy')
         .createSignedUrl(filePath, 3600) // URL valido per 1 ora
 
       const audioUrl = urlData?.signedUrl || null
 
       // STEP 13: Crea record sessione
-      const { data: newSession, error: sessionError } = await supabase
+      const { data: newSession, error: sessionError } = await supabaseAdmin
         .from('sessions')
         .insert([{
           userId: authResult.user!.id, // Usa l'ID dall'auth unificato
@@ -201,11 +207,11 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (sessionError) {
-        console.error('[Supabase] Session creation error:', sessionError)
+        console.error('[supabaseAdmin] Session creation error:', sessionError)
         return createErrorResponse("Errore nella creazione sessione", 500)
       }
 
-      console.log('[Supabase] Audio session created successfully:', newSession.id)
+      console.log('[supabaseAdmin] Audio session created successfully:', newSession.id)
       return createSuccessResponse(newSession, "Sessione audio creata con successo")
       
     } catch (uploadError) {

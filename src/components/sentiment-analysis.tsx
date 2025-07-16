@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Loader2, Brain, Heart, TrendingUp, AlertCircle } from 'lucide-react'
@@ -89,16 +89,33 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
     error: !!error
   })
 
-  // Filter sessions with transcripts
-  const validSessions = selectedSessions.filter(session => 
-    session.transcript && 
-    typeof session.transcript === 'string' && 
-    session.transcript.trim().length > 0
+  // Filter sessions with transcripts using useMemo to prevent re-creation
+  const validSessions = useMemo(() => 
+    selectedSessions.filter(session => 
+      session.transcript && 
+      typeof session.transcript === 'string' && 
+      session.transcript.trim().length > 0
+    ), [selectedSessions]
   )
 
   const runEmotionAnalysis = async () => {
     if (validSessions.length === 0) {
       setError('Nessuna trascrizione disponibile per le sessioni selezionate')
+      return
+    }
+
+    // Prevent multiple simultaneous requests
+    if (isAnalyzing) {
+      console.log('⚠️ Analysis already in progress, skipping request')
+      return
+    }
+
+    // Prevent if we already have results for these sessions
+    const currentSessionIds = validSessions.map(s => s.id).sort().join(',')
+    const existingSessionIds = analysisResult?.analysis?.individual_sessions?.map(s => s.session_id)?.sort()?.join(',') || ''
+    
+    if (analysisResult && currentSessionIds === existingSessionIds) {
+      console.log('⚠️ Analysis already exists for these sessions, skipping request')
       return
     }
 
@@ -108,7 +125,9 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
     try {
       const sessionIds = validSessions.map(s => s.id)
       
-      const response = await fetch('/api/emotion-analysis', {
+      console.log('🚀 Starting emotion analysis for sessions:', sessionIds)
+      
+      const response = await fetch('/api/sentiment', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -119,13 +138,19 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
         }),
       })
 
+      console.log('🌐 Response status:', response.status)
+      console.log('🌐 Response ok:', response.ok)
+
       if (!response.ok) {
         throw new Error(`Analisi emotiva fallita: ${response.status}`)
       }      const result = await response.json()
-        console.log('🎯 API Response received:', result)
+      console.log('🎯 API Response received:', result)
       console.log('🎯 Response success:', result.success)
+      console.log('🎯 Result keys:', Object.keys(result))
       console.log('🎯 Individual sessions count:', result.individual_sessions?.length)
+      console.log('🎯 Combined analysis available:', !!result.combined_analysis)
       console.log('🎯 Analysis structure available:', !!result.analysis)
+      
       if (result.analysis) {
         console.log('🎯 Analysis individual sessions:', result.analysis.individual_sessions?.length)
         console.log('🎯 First session example:', result.analysis.individual_sessions?.[0])
@@ -133,9 +158,6 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
       
       if (result.success) {
         console.log('✅ Setting analysis result:', result)
-        console.log('🔍 Full result structure:', JSON.stringify(result, null, 2))
-        console.log('🔍 Analysis object:', result.analysis)
-        console.log('🔍 Individual sessions:', result.analysis?.individual_sessions)
         setAnalysisResult(result)
         console.log('📞 Calling onAnalysisComplete callback')
         onAnalysisComplete?.(result)
@@ -155,37 +177,31 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
     setAnalysisResult(null)
     setError(null)
   }
+  
+  // Memoize session IDs to prevent infinite re-renders
+  const validSessionIds = useMemo(() => 
+    validSessions.map(s => s.id).sort().join(','), 
+    [validSessions]
+  )
+  
+  const analyzedSessionIds = useMemo(() => 
+    analysisResult?.analysis?.individual_sessions?.map(s => s.session_id)?.sort()?.join(',') || '', 
+    [analysisResult?.analysis?.individual_sessions]
+  )
+
   // Clear analysis only when the actual session selection changes meaningfully
   useEffect(() => {
     console.log('🔄 useEffect triggered - checking if analysis should be cleared')
     
     // Only clear if we have an analysis result and the sessions have actually changed
-    if (analysisResult) {
-      const currentSessionIds = new Set(validSessions.map(s => s.id))
-      const analyzedSessionIds = new Set(
-        analysisResult.analysis?.individual_sessions?.map(s => s.session_id) || []
-      )
-      
-      // Check if the sets are different
-      const sessionSetChanged = currentSessionIds.size !== analyzedSessionIds.size || 
-        Array.from(currentSessionIds).some(id => !analyzedSessionIds.has(id))
-      
-      console.log('🔄 Session comparison:', {
-        currentIds: Array.from(currentSessionIds).sort(),
-        analyzedIds: Array.from(analyzedSessionIds).sort(),
-        changed: sessionSetChanged
+    if (analysisResult && validSessionIds !== analyzedSessionIds) {
+      console.log('🔄 Session selection changed, clearing analysis', {
+        validIds: validSessionIds,
+        analyzedIds: analyzedSessionIds
       })
-      
-      if (sessionSetChanged) {
-        console.log('🔄 Session selection changed, clearing analysis')
-        clearAnalysis()
-      } else {
-        console.log('✅ Session selection unchanged, keeping analysis')
-      }
-    } else {
-      console.log('ℹ️ No analysis result to clear')
+      clearAnalysis()
     }
-  }, [validSessions.map(s => s.id).join(','), analysisResult?.analysis?.individual_sessions?.map(s => s.session_id)?.join(',') || ''])
+  }, [validSessionIds, analyzedSessionIds, analysisResult])
 
   // Function to transform EmoAtlas data to EmotionVisualizer format
   function transformEmoAtlasData(sessionAnalysis: any) {
@@ -270,7 +286,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
             New Analysis
           </Button>
         </div>        {/* Combined Analysis */}
-        {analysis.combined_analysis && (
+        {analysis && analysis.combined_analysis && (
           <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
             <CardContent className="p-4">
               {(() => {
@@ -297,7 +313,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
         )}
 
         {/* Individual Sessions */}
-        {analysis.individual_sessions && analysis.individual_sessions.length > 0 && (          <div className="space-y-4">
+        {analysis && analysis.individual_sessions && analysis.individual_sessions.length > 0 && (          <div className="space-y-4">
             <div className="flex items-center gap-2">
               <div className="h-px bg-gray-300 flex-1"></div>
               <h4 className="text-md font-medium text-gray-700">

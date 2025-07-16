@@ -22,7 +22,9 @@ export class DocumentParser {
       throw new Error(error.error || "Errore durante il parsing del documento")
     }
 
-    return await response.json()
+    const result = await response.json()
+    // Handle the API response structure { success: true, data: parsedDocument }
+    return result.data || result
   }
 
   static getSupportedFormats(): string[] {

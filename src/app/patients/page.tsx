@@ -36,13 +36,26 @@ export default function PatientsPage() {
   }, [session, status, router])
   const fetchPatients = async () => {
     try {
+      console.log("🔄 Fetching patients from API...")
       const response = await fetch("/api/patients")
+      console.log("📡 API Response status:", response.status, response.statusText)
+      
       if (response.ok) {
         const data = await response.json()
-        setPatients(data.patients || [])
+        console.log("📦 Raw API data:", data)
+        
+        // L'API restituisce { success: true, data: { patients: [...] } }
+        const patients = data.data?.patients || data.patients || []
+        console.log("👥 Patients array:", patients)
+        console.log("📊 Patients count:", patients?.length)
+        setPatients(patients)
+      } else {
+        console.error("❌ API error:", response.status, response.statusText)
+        const errorText = await response.text()
+        console.error("❌ Error body:", errorText)
       }
     } catch (error) {
-      console.error("Error fetching patients:", error)
+      console.error("💥 Fetch error:", error)
     } finally {
       setLoading(false)
     }

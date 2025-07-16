@@ -60,14 +60,22 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    // REGISTRAZIONE CON SUPABASE AUTH
+    // REGISTRAZIONE CON SUPABASE AUTH - Salva tutto nei metadati
+    const clientIP = request.headers.get('x-forwarded-for') || 
+                     request.headers.get('x-real-ip') || 
+                     'localhost'
+
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           name,
-          license_number: licenseNumber || null
+          license_number: licenseNumber || null,
+          consent_terms_accepted: acceptTerms,
+          consent_privacy_accepted: acceptPrivacy,
+          consent_date: new Date().toISOString(),
+          consent_ip_address: clientIP
         },
         emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`
       }
@@ -82,53 +90,7 @@ export async function POST(request: NextRequest) {
       return createErrorResponse('Errore durante la creazione dell\'account', 500)
     }
 
-    // CREA RECORD NELLA TABELLA USERS CUSTOM
-    const clientIP = request.headers.get('x-forwarded-for') || 
-                     request.headers.get('x-real-ip') || 
-                     'localhost'
-
-    try {
-      // Client con service_role per operazioni admin
-      const adminSupabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        {
-          cookies: {
-            get(name: string) {
-              return cookieStore.get(name)?.value
-            },
-            set(name: string, value: string, options: CookieOptions) {
-              cookieStore.set({ name, value, ...options })
-            },
-            remove(name: string, options: CookieOptions) {
-              cookieStore.set({ name, value: '', ...options })
-            },
-          },
-        }
-      )
-
-      const { error: insertError } = await adminSupabase
-        .from('users')
-        .insert([{
-          id: authData.user.id, // Usa lo stesso ID di Supabase Auth
-          email,
-          name,
-          licenseNumber: licenseNumber || null,
-          emailVerified: false, // Sarà true dopo verifica email
-          consent_terms_accepted: acceptTerms,
-          consent_privacy_accepted: acceptPrivacy,
-          consent_date: new Date().toISOString(),
-          consent_ip_address: clientIP
-        }])
-
-      if (insertError) {
-        console.error('Error inserting user in custom table:', insertError)
-        // Non restituire errore, l'account Supabase è già creato
-      }
-    } catch (error) {
-      console.error('Error with service_role operations:', error)
-      // Non bloccare la registrazione per questo errore
-    }
+    // Il trigger si occuperà di creare il record in public.users quando l'email viene confermata
 
     return createSuccessResponse({
       message: 'Registrazione completata! Controlla la tua email per attivare l\'account.',
