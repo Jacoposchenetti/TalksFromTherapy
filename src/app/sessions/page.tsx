@@ -167,7 +167,9 @@ function SessionsPageContent() {
       const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
-        setSessions(data)
+        // Extract sessions from API response structure
+        const sessions = data.data || data
+        setSessions(sessions)
       }
     } catch (error) {
       console.error("Error fetching sessions:", error)
@@ -201,8 +203,8 @@ function SessionsPageContent() {
       console.log('Fetching patients...')
       const response = await fetch("/api/patients")
       if (response.ok) {        const data = await response.json()
-        // API returns { patients: [...] }, so we need data.patients
-        const patientsArray = data.patients || []
+        // API returns { success: true, data: { patients: [...] } }
+        const patientsArray = data.data?.patients || data.patients || []
         setPatients(Array.isArray(patientsArray) ? patientsArray : [])
       } else {
         console.error("Failed to fetch patients:", response.statusText)

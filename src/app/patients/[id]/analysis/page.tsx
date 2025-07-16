@@ -148,8 +148,11 @@ export default function PatientAnalysisPage() {
       if (sessionsResponse.ok) {
         const sessionsData = await sessionsResponse.json()
         
+        // Extract sessions from API response structure
+        const sessions = sessionsData.data || sessionsData
+        
         // Filter sessions with transcripts for analysis
-        const transcribedSessions = sessionsData?.filter((s: Session) => 
+        const transcribedSessions = sessions?.filter((s: Session) => 
           s.transcript && 
           typeof s.transcript === 'string' && 
           s.transcript.trim().length > 0

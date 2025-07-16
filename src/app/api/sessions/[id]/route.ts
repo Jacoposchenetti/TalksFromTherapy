@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
+
+// Client Supabase con service role per operazioni RLS
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function DELETE(
   request: NextRequest,
@@ -22,7 +28,7 @@ export async function DELETE(
     const sessionId = sanitizeInput(params.id)
 
     // Trova la sessione e verifica ownership
-    const { data: sessionToDelete, error: sessionError } = await supabase
+    const { data: sessionToDelete, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .select('id, audioFileName, userId')
       .eq('id', sessionId)
@@ -43,7 +49,7 @@ export async function DELETE(
     if (sessionToDelete.audioFileName) {
       try {
         const filePath = `${authResult.user!.id}/${sessionToDelete.audioFileName}`
-        const { error: deleteError } = await supabase.storage
+        const { error: deleteError } = await supabaseAdmin.storage
           .from('talksfromtherapy')
           .remove([filePath])
         
@@ -57,7 +63,7 @@ export async function DELETE(
     }
 
     // Soft delete della sessione (imposta isActive a false)
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from('sessions')
       .update({ isActive: false })
       .eq('id', sessionId)
@@ -94,7 +100,7 @@ export async function GET(
     const sessionIdForGet = sanitizeInput(params.id)
 
     // Cerca la sessione con i dati del paziente
-    const { data: sessionData, error: sessionError } = await supabase
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .select('*, patient:patients(*)')
       .eq('id', sessionIdForGet)
@@ -169,7 +175,7 @@ export async function PATCH(
     }
 
     // Verify session exists and user owns it
-    const { data: existingSession, error: sessionError } = await supabase
+    const { data: existingSession, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .select('id, userId')
       .eq('id', sessionIdForPatch)
@@ -197,7 +203,7 @@ export async function PATCH(
       updateData.transcript = encryptIfSensitive(sanitizeInput(transcript).trim())
     }
 
-    const { data: updatedSession, error: updateError } = await supabase
+    const { data: updatedSession, error: updateError } = await supabaseAdmin
       .from('sessions')
       .update(updateData)
       .eq('id', sessionIdForPatch)

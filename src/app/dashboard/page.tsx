@@ -57,8 +57,8 @@ export default function DashboardPage() {
         sessionsRes.json(),
       ])
       
-      // L'API pazienti restituisce { patients: [...] }
-      const patients = patientsData.patients || []
+      // L'API pazienti restituisce { success: true, data: { patients: [...] } }
+      const patients = patientsData.data?.patients || patientsData.patients || []
       
       console.log("Dashboard: Data received - patients:", patients, "sessions:", sessions)
       console.log("Dashboard: Patients length:", patients?.length, "Sessions length:", sessions?.length)

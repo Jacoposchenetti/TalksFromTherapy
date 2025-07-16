@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, sanitizeInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
+
+// Client supabase con service role per operazioni RLS
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // GET /api/analyses?sessionId=xxx - Recupera analisi per una sessione
 export async function GET(request: NextRequest) {
@@ -21,7 +27,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verifica che la sessione appartenga all'utente
-    const { data: sessionData, error: sessionError } = await supabase
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .select('id, userId')
       .eq('id', sessionId)
@@ -33,7 +39,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Recupera l'analisi esistente
-    const { data: analysis, error: analysisError } = await supabase
+    const { data: analysis, error: analysisError } = await supabaseAdmin
       .from('analyses')
       .select('*')
       .eq('sessionId', sessionId)
@@ -98,7 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verifica che la sessione appartenga all'utente
-    const { data: sessionData, error: sessionError } = await supabase
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .select('id, userId, patientId')
       .eq('id', sanitizedSessionId)
@@ -137,7 +143,7 @@ export async function POST(request: NextRequest) {
         break
       case 'custom_topics':
         // Per i topic personalizzati, aggiungiamo alla lista esistente
-        const { data: existingCustomAnalysis } = await supabase
+        const { data: existingCustomAnalysis } = await supabaseAdmin
           .from('analyses')
           .select('customTopicAnalysisResults')
           .eq('sessionId', sanitizedSessionId)
@@ -173,7 +179,7 @@ export async function POST(request: NextRequest) {
         const { target_word } = analysisData
         if (target_word) {
           // Recupera risultati esistenti
-          const { data: existingAnalysis } = await supabase
+          const { data: existingAnalysis } = await supabaseAdmin
             .from('analyses')
             .select('semanticFrameResults')
             .eq('sessionId', sanitizedSessionId)
@@ -200,7 +206,7 @@ export async function POST(request: NextRequest) {
 
     // Upsert dell'analisi (crea se non esiste, aggiorna se esiste)
     // Prima controlla se esiste già
-    const { data: existing, error: existingError } = await supabase
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('analyses')
       .select('id')
       .eq('sessionId', sanitizedSessionId)
@@ -209,7 +215,7 @@ export async function POST(request: NextRequest) {
     let analysisId = null
     if (existing && existing.id) {
       // Aggiorna
-      const { data: updated, error: updateError } = await supabase
+      const { data: updated, error: updateError } = await supabaseAdmin
         .from('analyses')
         .update(updateData)
         .eq('id', existing.id)
@@ -221,7 +227,7 @@ export async function POST(request: NextRequest) {
       analysisId = updated.id
     } else {
       // Crea
-      const { data: created, error: createError } = await supabase
+      const { data: created, error: createError } = await supabaseAdmin
         .from('analyses')
         .insert([{ sessionId: sanitizedSessionId, ...updateData }])
         .select('id')
@@ -261,7 +267,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Verifica che la sessione appartenga all'utente
-    const { data: sessionData, error: sessionError } = await supabase
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .select('id, userId')
       .eq('id', sessionId)
@@ -273,7 +279,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Cancella l'analisi
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await supabaseAdmin
       .from('analyses')
       .delete()
       .eq('sessionId', sessionId)

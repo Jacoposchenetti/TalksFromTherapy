@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
 
 export const runtime = 'nodejs'
+
+// Client Supabase con service role per operazioni RLS
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // GET /api/patients - Lista pazienti dell'utente autenticato
 export async function GET(request: NextRequest) {
@@ -19,12 +25,16 @@ export async function GET(request: NextRequest) {
     })
 
     // STEP 2: Fetch pazienti usando l'ID dall'auth unificato
-    const { data: patients, error } = await supabase
+    console.log("🔍 Searching patients for userId:", authResult.user!.id)
+    
+    const { data: patients, error } = await supabaseAdmin
       .from('patients')
       .select('*')
       .eq('userId', authResult.user!.id)
       .eq('isActive', true)
       .order('createdAt', { ascending: false })
+
+    console.log("📊 Supabase response:", { patients, error, count: patients?.length })
 
     if (error) {
       console.error('[Supabase] Patients fetch error:', error)
@@ -78,7 +88,7 @@ export async function POST(request: NextRequest) {
       isActive: true
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('patients')
       .insert([patientData])
       .select()

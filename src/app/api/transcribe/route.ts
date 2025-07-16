@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, sanitizeInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 import { transcribeAudio, diarizeTranscript } from "@/lib/openai"
+
+// Client supabase con service role per operazioni RLS
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export const runtime = 'nodejs'
 
-// POST /api/transcribe - Avvia trascrizione di una sessione
+// POST /api/transcribe-new - Avvia trascrizione di una sessione
 export async function POST(request: NextRequest) {
   try {
     // STEP 1: Verifica autorizzazione
@@ -14,7 +20,7 @@ export async function POST(request: NextRequest) {
       return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    console.log("POST /api/transcribe - Richiesta autorizzata", { 
+    console.log("🚀🚀🚀 POST /api/transcribe-new - VERSIONE NUOVA - Richiesta autorizzata", { 
       userId: authResult.user?.id 
     })
 
@@ -26,13 +32,13 @@ export async function POST(request: NextRequest) {
     }
 
     const sessionId = sanitizeInput(requestData.sessionId)
-    console.log("Dati validati:", { sessionId })
+    console.log("🔍 Dati validati:", { sessionId })
 
     console.log(`🔍 Ricerca sessione con ID: ${sessionId}`)
     console.log(`👤 User ID: ${authResult.user!.id}`)
 
     // STEP 3: Verifica accesso alla risorsa
-    const { data: sessionRecord, error: sessionError } = await supabase
+    const { data: sessionRecord, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .select('id, userId, status, audioFileName, audioUrl, title')
       .eq('id', sessionId)
@@ -40,7 +46,7 @@ export async function POST(request: NextRequest) {
       .eq('isActive', true)
       .single()
 
-    console.log("Query Supabase completata", { 
+    console.log("📊 Query Supabase completata", { 
       found: !!sessionRecord, 
       sessionId,
       status: sessionRecord?.status,
@@ -83,8 +89,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log(`🔄 Aggiornamento stato a TRANSCRIBING...`)
+
     // Aggiorna lo stato a TRANSCRIBING su Supabase
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from('sessions')
       .update({ 
         status: "TRANSCRIBING",
@@ -100,22 +108,58 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log(`✅ Stato aggiornato a TRANSCRIBING`)
+
     try {
       // Scarica il file audio da Supabase Storage
       const filePath = `${sessionRecord.userId}/${sessionRecord.audioFileName}`
       
-      console.log(`🚀 Download file audio da Supabase Storage: ${filePath}`)
+      console.log(`🚀 DOWNLOAD FILE AUDIO DA SUPABASE STORAGE:`)
+      console.log(`   📁 Bucket: talksfromtherapy`)
+      console.log(`   📂 Path: ${filePath}`)
+      console.log(`   👤 User ID: ${sessionRecord.userId}`)
+      console.log(`   🎵 Audio File Name: ${sessionRecord.audioFileName}`)
+      
+      // Prima verifichiamo se il file esiste
+      console.log(`🔍 VERIFICA ESISTENZA FILE...`)
+      const { data: listData, error: listError } = await supabaseAdmin.storage
+        .from('talksfromtherapy')
+        .list(sessionRecord.userId, {
+          limit: 100,
+          search: sessionRecord.audioFileName
+        })
+      
+      console.log(`📋 RISULTATO VERIFICA:`)
+      console.log(`   ❌ List Error:`, listError)
+      console.log(`   📊 Files found:`, listData?.length || 0)
+      if (listData && listData.length > 0) {
+        console.log(`   📄 File details:`, listData[0])
+      }
+      
+      if (listError) {
+        throw new Error(`Errore nella verifica esistenza file: ${JSON.stringify(listError)}`)
+      }
+      
+      if (!listData || listData.length === 0) {
+        throw new Error(`File non trovato nel bucket. Path cercato: ${filePath}`)
+      }
+      
+      console.log(`✅ File trovato! Procedo con il download...`)
       
       // Scarica il file da Supabase Storage
-      const { data: fileData, error: downloadError } = await supabase.storage
+      const { data: fileData, error: downloadError } = await supabaseAdmin.storage
         .from('talksfromtherapy')
         .download(filePath)
 
+      console.log(`📥 RISULTATO DOWNLOAD:`)
+      console.log(`   ❌ Download Error:`, downloadError)
+      console.log(`   📄 File Data:`, fileData ? `Blob (${fileData.size} bytes)` : 'null')
+
       if (downloadError || !fileData) {
-        throw new Error(`Errore download file da Supabase Storage: ${downloadError?.message}`)
+        throw new Error(`Errore download file da Supabase Storage: ${JSON.stringify(downloadError)}`)
       }
       
-      console.log(`📁 File scaricato, dimensione: ${fileData.size} bytes (${(fileData.size / 1024 / 1024).toFixed(2)} MB)`)
+      console.log(`✅ File scaricato con successo, dimensione: ${fileData.size} bytes (${(fileData.size / 1024 / 1024).toFixed(2)} MB)`)
       
       // Converte il blob in buffer per OpenAI
       const arrayBuffer = await fileData.arrayBuffer()
@@ -149,7 +193,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Aggiorna la sessione con la trascrizione completata su Supabase
-      const { error: finalUpdateError } = await supabase
+      const { error: finalUpdateError } = await supabaseAdmin
         .from('sessions')
         .update({
           status: "TRANSCRIBED",
@@ -181,7 +225,7 @@ export async function POST(request: NextRequest) {
       console.error("❌ Errore durante la trascrizione:", error)
       
       // In caso di errore, aggiorna lo stato a ERROR su Supabase
-      const { error: errorUpdateError } = await supabase
+      const { error: errorUpdateError } = await supabaseAdmin
         .from('sessions')
         .update({
           status: "ERROR",
