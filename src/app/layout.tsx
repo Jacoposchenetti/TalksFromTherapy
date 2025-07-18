@@ -26,9 +26,13 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           <AudioPlayerProvider>
-            <ConditionalNavigation />
-            {children}
-            <AudioPlayer />
+            <div className="min-h-screen flex flex-col">
+              <ConditionalNavigation />
+              <main className="flex-1">
+                {children}
+              </main>
+              <AudioPlayer />
+            </div>
           </AudioPlayerProvider>
         </AuthProvider>
       </body>
