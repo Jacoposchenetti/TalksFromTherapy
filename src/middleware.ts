@@ -142,6 +142,7 @@ export default withAuth(
           "/api/sentiment",
           "/api/transcribe", 
           "/api/sessions",
+          "/api/notes",
           "/api/patients",
           "/api/analyses"
         ]
@@ -155,6 +156,16 @@ export default withAuth(
         const isCustomAuthApi = customAuthApiRoutes.some(route => 
           pathname.startsWith(route)
         )
+        
+        // Debug log per le API delle note
+        if (pathname.includes('/note') || pathname.includes('/sessions/')) {
+          console.log('Middleware debug:', {
+            pathname,
+            isCustomAuthApi,
+            token: !!token,
+            matchedRoute: customAuthApiRoutes.find(route => pathname.startsWith(route))
+          })
+        }
         
         // Se la route è pubblica o usa autenticazione custom, permettila sempre
         if (isPublicRoute || isCustomAuthApi) {

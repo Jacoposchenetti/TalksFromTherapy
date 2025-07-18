@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       return createErrorResponse(authResult.error || "Non autorizzato", 401)
     }
 
-    console.log("🔥 POST /api/transcribe - VERSION 2.0 - Richiesta autorizzata", { 
+    console.log("POST /api/transcribe - Richiesta autorizzata", { 
       userId: authResult.user?.id 
     })
 
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     if (!sessionRecord.audioFileName) {
       return NextResponse.json(
-        { error: "Nessun file audio trovato per questa sessione" },
+        { error: "File audio non trovato per questa sessione" },
         { status: 400 }
       )
     }
@@ -101,80 +101,61 @@ export async function POST(request: NextRequest) {
     if (updateError) {
       console.error('[Supabase] Error updating session status to TRANSCRIBING:', updateError)
       return NextResponse.json(
-        { error: "Errore nell'aggiornamento dello stato sessione" },
+        { error: "Errore durante l'aggiornamento dello stato della sessione" },
         { status: 500 }
       )
     }
 
+    console.log(`🔄 Stato sessione aggiornato a TRANSCRIBING`)
+
+    // STEP 4: Download e trascrizione file audio
     try {
-      // Scarica il file audio da Supabase Storage
-      const filePath = `${sessionRecord.userId}/${sessionRecord.audioFileName}`
+      console.log(`📁 Tentativo di download file: ${sessionRecord.audioFileName}`)
       
-      console.log(`🚀 Download file audio da Supabase Storage:`)
-      console.log(`   - Bucket: talksfromtherapy`)
-      console.log(`   - Path: ${filePath}`)
-      console.log(`   - User ID: ${sessionRecord.userId}`)
-      console.log(`   - Audio File Name: ${sessionRecord.audioFileName}`)
-      
-      // Prima verifichiamo se il file esiste
-      const { data: listData, error: listError } = await supabaseAdmin.storage
-        .from('talksfromtherapy')
-        .list(sessionRecord.userId, {
-          limit: 100,
-          search: sessionRecord.audioFileName
-        })
-      
-      console.log(`🔍 Verifica esistenza file:`)
-      console.log(`   - List Error:`, listError)
-      console.log(`   - Files found:`, listData?.length || 0)
-      if (listData && listData.length > 0) {
-        console.log(`   - File details:`, listData[0])
-      }
+      // Costruisci il path corretto per Supabase Storage
+      const filePath = `audio/${sessionRecord.audioFileName}`
+      console.log(`📍 Path completo file: ${filePath}`)
       
       // Scarica il file da Supabase Storage
       const { data: fileData, error: downloadError } = await supabaseAdmin.storage
         .from('talksfromtherapy')
         .download(filePath)
 
-      console.log(`📥 Download result:`)
-      console.log(`   - Download Error:`, downloadError)
-      console.log(`   - File Data:`, fileData ? `Blob (${fileData.size} bytes)` : 'null')
-
       if (downloadError || !fileData) {
-        throw new Error(`Errore download file da Supabase Storage: ${JSON.stringify(downloadError)}`)
+        throw new Error(`Errore download file da Supabase Storage: ${downloadError?.message}`)
       }
       
       console.log(`📁 File scaricato, dimensione: ${fileData.size} bytes (${(fileData.size / 1024 / 1024).toFixed(2)} MB)`)
       
-      // Converte il blob in buffer per OpenAI
-      const arrayBuffer = await fileData.arrayBuffer()
-      const buffer = Buffer.from(arrayBuffer)
+      // Converti il Blob in un File object per OpenAI
+      const audioFile = new File([fileData], sessionRecord.audioFileName, {
+        type: fileData.type || 'audio/mpeg'
+      })
       
-      // Step 1: Utilizza OpenAI Whisper per la trascrizione iniziale
-      console.log(`📝 Step 1: Trascrizione iniziale con Whisper...`)
-      const initialTranscript = await transcribeAudio(buffer, sessionRecord.audioFileName)
+      console.log(`🤖 Invio file ad OpenAI per trascrizione...`)
+      const transcript = await transcribeAudio(audioFile)
       
-      console.log(`📝 Trascrizione iniziale ricevuta: "${initialTranscript.substring(0, 100)}..."`)
-      console.log(`📏 Lunghezza trascrizione iniziale: ${initialTranscript.length} caratteri`)
-      
-      // Verifica se la trascrizione sembra valida
-      if (initialTranscript.length < 10 || initialTranscript.includes("Sottotitoli e revisione a cura di")) {
-        console.warn(`⚠️ Trascrizione sospetta: "${initialTranscript}"`)
-        console.warn(`💡 Potrebbe essere un watermark, file vuoto o audio di bassa qualità`)
+      if (!transcript || transcript.trim().length === 0) {
+        throw new Error("La trascrizione è vuota o non valida")
       }
       
-      // Step 2: Diarizzazione con GPT-3.5-turbo (con fallback)
-      console.log(`🎭 Step 2: Avvio diarizzazione con GPT-3.5-turbo...`)
-      let finalTranscript = initialTranscript // Fallback alla trascrizione base
+      console.log(`✅ Trascrizione completata, lunghezza: ${transcript.length} caratteri`)
+      console.log(`📝 Preview trascrizione: "${transcript.substring(0, 100)}..."`)
       
+      // STEP 5: Diarizzazione (opzionale, se richiesta)
+      let finalTranscript = transcript
       try {
-        const diarizedTranscript = await diarizeTranscript(initialTranscript, sessionRecord.title)
-        finalTranscript = diarizedTranscript
-        console.log(`🎭 Diarizzazione completata: "${diarizedTranscript.substring(0, 100)}..."`)
-        console.log(`📏 Lunghezza trascrizione diarizzata: ${diarizedTranscript.length} caratteri`)
+        console.log(`🎯 Tentativo di diarizzazione...`)
+        const diarizedTranscript = await diarizeTranscript(transcript)
+        if (diarizedTranscript && diarizedTranscript.trim().length > 0) {
+          finalTranscript = diarizedTranscript
+          console.log(`✅ Diarizzazione completata`)
+        } else {
+          console.log(`⚠️ Diarizzazione non riuscita, uso trascrizione originale`)
+        }
       } catch (diarizeError) {
-        console.warn(`⚠️ Diarizzazione fallita, usando trascrizione base:`, diarizeError)
-        console.log(`📝 Salvando trascrizione senza diarizzazione`)
+        console.log(`⚠️ Errore durante diarizzazione (non critico):`, diarizeError)
+        // Usa la trascrizione originale se la diarizzazione fallisce
       }
       
       // Aggiorna la sessione con la trascrizione completata su Supabase
@@ -192,18 +173,13 @@ export async function POST(request: NextRequest) {
         throw new Error('Errore nel salvataggio della trascrizione su Supabase')
       }
 
-      console.log(`✅ Processo completo (trascrizione${finalTranscript === initialTranscript ? '' : ' + diarizzazione'}) completato per sessione ${sessionId}`)
+      console.log(`✅ Trascrizione salvata su Supabase`)
 
-      return NextResponse.json({
-        message: `Trascrizione${finalTranscript === initialTranscript ? '' : ' e diarizzazione'} completate con successo`,
-        sessionId,
-        status: "TRANSCRIBED",
-        transcript: finalTranscript,
-        initialTranscriptLength: initialTranscript.length,
-        finalTranscriptLength: finalTranscript.length,
-        fileSize: fileData.size,
-        fileName: sessionRecord.audioFileName,
-        diarizationSuccessful: finalTranscript !== initialTranscript
+      return createSuccessResponse({
+        message: "Trascrizione completata con successo",
+        sessionId: sessionId,
+        transcriptLength: finalTranscript.length,
+        preview: finalTranscript.substring(0, 200)
       })
 
     } catch (error) {
@@ -223,13 +199,17 @@ export async function POST(request: NextRequest) {
         console.error('[Supabase] Error updating session status to ERROR:', errorUpdateError)
       }
 
-      return NextResponse.json({
-        error: "Errore durante la trascrizione",
-        details: error instanceof Error ? error.message : "Errore sconosciuto"
-      }, { status: 500 })
+      return NextResponse.json(
+        { 
+          error: "Errore durante la trascrizione",
+          details: error instanceof Error ? error.message : "Errore sconosciuto"
+        },
+        { status: 500 }
+      )
     }
+
   } catch (error) {
-    console.error("Errore durante l'avvio trascrizione:", error)
+    console.error("❌ Errore generale API transcribe:", error)
     console.error("Stack trace:", error instanceof Error ? error.stack : "N/A")
     return NextResponse.json(
       { 

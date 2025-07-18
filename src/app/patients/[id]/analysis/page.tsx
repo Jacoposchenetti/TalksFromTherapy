@@ -89,27 +89,61 @@ export default function PatientAnalysisPage() {
     fetchPatientData()
   }, [session, status, router, patientId])
 
-  // Carica analisi esistenti quando cambiano le sessioni selezionate
+  // Carica analisi esistenti quando cambiano le sessioni selezionate (WITH PROTECTION)
   useEffect(() => {
     if (selectedSessions.size > 0) {
-      loadAllAnalyses()
+      // Add a small delay to prevent rapid-fire requests
+      const timeoutId = setTimeout(() => {
+        loadAllAnalyses()
+      }, 500)
+      
+      return () => clearTimeout(timeoutId)
     }
-  }, [selectedSessions, loadAllAnalyses])
+  }, [selectedSessions])
 
-  // Aggiorna i risultati dell'emotion analysis quando cambiano le analisi
+  // Aggiorna i risultati dell'emotion analysis quando cambiano le analisi (ONLY ONCE)
   useEffect(() => {
     if (hasAllSentimentAnalyses && selectedSessions.size > 0) {
       const sentimentData = getSentimentData()
-      setEmotionAnalysisResults(sentimentData)
+      if (sentimentData && sentimentData.length > 0) {
+        setEmotionAnalysisResults(sentimentData)
+      }
     }
-  }, [hasAllSentimentAnalyses, selectedSessions.size]) // Rimuoviamo getSentimentData per evitare loop
+  }, [hasAllSentimentAnalyses])
 
-  // Carica analisi semantic frame passate quando cambiano le sessioni selezionate o le analisi
+  // Carica analisi semantic frame passate quando cambiano le sessioni selezionate (WITH PROTECTION)
   useEffect(() => {
     if (selectedSessions.size > 0) {
-      loadPastSemanticFrameAnalyses()
+      const timeoutId = setTimeout(() => {
+        loadPastSemanticFrameAnalyses()
+      }, 750)
+      
+      return () => clearTimeout(timeoutId)
     }
-  }, [selectedSessions, analyses])
+  }, [selectedSessions])
+
+  // Carica la nota quando cambia la sessione attiva per le note
+  useEffect(() => {
+    if (activeSessionForNote?.id) {
+      fetchSessionNote(activeSessionForNote.id)
+    } else {
+      setNote("")
+    }
+  }, [activeSessionForNote?.id])
+
+  // Imposta automaticamente la prima sessione come attiva per le note
+  useEffect(() => {
+    if (sessions.length > 0 && !activeSessionForNote) {
+      setActiveSessionForNote(sessions[0])
+    }
+  }, [sessions, activeSessionForNote])
+
+  // Imposta automaticamente la prima sessione come sessione attiva per le note
+  useEffect(() => {
+    if (sessions.length > 0 && !activeSessionForNote) {
+      setActiveSessionForNote(sessions[0])
+    }
+  }, [sessions, activeSessionForNote])
 
   const loadPastSemanticFrameAnalyses = async () => {
     if (selectedSessions.size === 0) return
@@ -178,10 +212,18 @@ export default function PatientAnalysisPage() {
 
   const fetchSessionNote = async (sessionId: string) => {
     try {
-      const response = await fetch(`/api/sessions/${sessionId}/note`)
+      console.log('🔍 Frontend fetchSessionNote called with sessionId:', sessionId)
+      // Usa l'API semplificata temporaneamente
+      const response = await fetch(`/api/notes/${sessionId}`)
+      console.log('🔍 Fetch URL:', `/api/notes/${sessionId}`)
       if (response.ok) {
-        const noteData = await response.json()
-        setNote(noteData.content || "")      } else {
+        const result = await response.json()
+        console.log('🔍 Fetch note result for sessionId', sessionId, ':', result)
+        // Gestisce sia il formato diretto che quello con success/data
+        const noteData = result.data || result
+        setNote(noteData.content || "")
+      } else {
+        console.error('Error fetching note, status:', response.status)
         setNote("")
       }
     } catch (error) {
@@ -194,7 +236,8 @@ export default function PatientAnalysisPage() {
     
     setSavingNote(true)
     try {
-      const response = await fetch(`/api/sessions/${activeSessionForNote.id}/note`, {
+      // Usa l'API semplificata temporaneamente
+      const response = await fetch(`/api/notes/${activeSessionForNote.id}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -204,6 +247,8 @@ export default function PatientAnalysisPage() {
 
       if (response.ok) {
         setEditingNote(false)
+        // Ricarica la nota per assicurarsi che sia aggiornata
+        await fetchSessionNote(activeSessionForNote.id)
         alert("Note saved successfully!")
       } else {
         alert("Error saving note")
@@ -511,13 +556,27 @@ export default function PatientAnalysisPage() {
                               className="rounded border-gray-300"
                             />
                             <button
-                              onClick={() => handleSessionSelectForNote(session)}
-                              className={`flex-1 text-left ${
-                                activeSessionForNote?.id === session.id ? "bg-blue-50 border-r-2 border-blue-500" : ""
+                              onClick={() => {
+                                console.log('🔍 Frontend session button clicked for:', session.id, session.title)
+                                console.log('🔍 Before setActiveSessionForNote, current activeSessionForNote:', activeSessionForNote?.id)
+                                setActiveSessionForNote(session)
+                                console.log('🔍 After setActiveSessionForNote, should be:', session.id)
+                                fetchSessionNote(session.id)
+                              }}
+                              className={`flex-1 text-left p-2 rounded transition-colors ${
+                                activeSessionForNote?.id === session.id 
+                                  ? "bg-blue-50 border border-blue-200 shadow-sm" 
+                                  : "hover:bg-gray-50"
                               }`}
+                              title="Click to select this session for notes"
                             >
-                              <div className="font-medium text-sm">
-                                {session.title}
+                              <div className="flex items-center gap-2">
+                                <div className="font-medium text-sm">
+                                  {session.title}
+                                </div>
+                                {activeSessionForNote?.id === session.id && (
+                                  <MessageSquare className="h-4 w-4 text-blue-600" />
+                                )}
                               </div>
                             </button>
                           </div>
@@ -726,17 +785,21 @@ export default function PatientAnalysisPage() {
                             onAnalysisComplete={async (result) => {
                               console.log('🎯 Sentiment analysis completed:', result)
                               
-                              // Transform data for EmotionTrends component
-                              if (result.success && result.analysis?.individual_sessions) {
-                                console.log('🔄 Setting emotionAnalysisResults:', result.analysis.individual_sessions)
-                                setEmotionAnalysisResults(result.analysis.individual_sessions)
+                              // ONLY transform data, don't trigger more requests
+                              if (result.success && result.individual_sessions) {
+                                console.log('🔄 Setting emotionAnalysisResults:', result.individual_sessions)
+                                setEmotionAnalysisResults(result.individual_sessions)
                                 
-                                // Salva ogni sessione nella cache
-                                const sessions = result.analysis.individual_sessions
-                                for (const session of sessions) {
-                                  await saveSessionAnalysis(session.session_id, 'sentiment', session.analysis)
+                                // Salva ogni sessione nella cache (do this quietly)
+                                try {
+                                  const sessions = result.individual_sessions
+                                  for (const session of sessions) {
+                                    await saveSessionAnalysis(session.session_id, 'sentiment', session.analysis)
+                                  }
+                                  console.log('✅ Analisi sentiment salvate nella cache')
+                                } catch (error) {
+                                  console.error('⚠️ Error saving to cache (non-blocking):', error)
                                 }
-                                console.log('✅ Analisi sentiment salvate nella cache')
                               }
                             }}
                             cachedData={hasAllSentimentAnalyses ? getSentimentData() : undefined}

@@ -105,6 +105,7 @@ class SessionAnalysis(BaseModel):
     session_id: str
     session_title: str
     analysis: Dict
+    flower_plot: Optional[str] = None  # Extract flower_plot to top level
     processing_time: float
 
 class EmotionTrendsResponse(BaseModel):
@@ -243,9 +244,6 @@ class EmoAtlasAnalysisService:
             # Generate flower plot as base64
             flower_plot = self._generate_flower_plot(emo, z_scores)
             
-            # Extract emotion words (if available in EmoAtlas)
-            emotion_words = self._extract_emotion_words(emo, language)
-            
             return {
                 'z_scores': z_scores,
                 'emotional_valence': emotional_valence,
@@ -254,7 +252,6 @@ class EmoAtlasAnalysisService:
                 'language': language,
                 'flower_plot': flower_plot,
                 'word_count': len(text.split()),
-                'emotion_words': emotion_words,
                 'significant_emotions': significant_emotions,
                 'original_text': text  # Store original text for combined analysis
             }
@@ -356,32 +353,6 @@ class EmoAtlasAnalysisService:
             print(f"❌ Error generating fallback flower plot: {e}")
             return None
     
-    def _extract_emotion_words(self, emo_scores, language: str) -> Dict[str, List[str]]:
-        """Extract emotion-associated words from the analysis"""
-        # This is a simplified version - real EmoAtlas might have word-level analysis
-        if language == 'italian':
-            return {
-                'joy': ['felice', 'contento', 'gioioso', 'allegro'],
-                'trust': ['fiducia', 'sicurezza', 'certezza', 'speranza'],
-                'fear': ['paura', 'ansia', 'timore', 'preoccupazione'],
-                'sadness': ['triste', 'melanconico', 'depresso', 'sconfortato'],
-                'anger': ['rabbia', 'arrabbiato', 'furioso', 'irritato'],
-                'disgust': ['disgustato', 'nauseato', 'schifato', 'ripugnanza'],
-                'surprise': ['sorpreso', 'stupito', 'meravigliato', 'scioccato'],
-                'anticipation': ['aspettativa', 'speranza', 'attesa', 'desiderio']
-            }
-        else:
-            return {
-                'joy': ['happy', 'joyful', 'glad', 'cheerful'],
-                'trust': ['trust', 'confidence', 'faith', 'hope'],
-                'fear': ['fear', 'anxiety', 'worry', 'concern'],
-                'sadness': ['sad', 'melancholy', 'depressed', 'down'],
-                'anger': ['angry', 'mad', 'furious', 'irritated'],
-                'disgust': ['disgusted', 'revolted', 'repulsed', 'sickened'],
-                'surprise': ['surprised', 'amazed', 'astonished', 'shocked'],
-                'anticipation': ['anticipation', 'expectation', 'hope', 'excitement']
-            }
-    
     def _generate_fallback_analysis(self, text: str) -> Dict:
         """Generate fallback analysis when EmoAtlas is not available"""
         import random
@@ -414,7 +385,6 @@ class EmoAtlasAnalysisService:
             'language': 'italian',
             'flower_plot': None,
             'word_count': len(text.split()),
-            'emotion_words': self._extract_emotion_words(None, 'italian'),
             'significant_emotions': significant_emotions
         }
 
@@ -507,10 +477,14 @@ async def analyze_emotion_trends(request: EmotionAnalysisRequest):
             
             processing_time = time.time() - session_start_time
             
+            # Extract flower_plot from analysis to top level
+            flower_plot = analysis.pop('flower_plot', None)
+            
             session_analysis = SessionAnalysis(
                 session_id=session.id,
                 session_title=session.title,
                 analysis=analysis,
+                flower_plot=flower_plot,
                 processing_time=processing_time
             )
             
@@ -1184,8 +1158,7 @@ def generate_combined_analysis(sessions: List[SessionAnalysis], language: str = 
                 'positive_score': combined_positive,
                 'negative_score': combined_negative,
                 'text_length': total_words,
-                'language': language,
-                'emotion_words': emoatlas_service._extract_emotion_words(None, language)
+                'language': language
             },
             'flower_plot': flower_plot
         }
