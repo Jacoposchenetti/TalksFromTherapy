@@ -11,7 +11,8 @@ import {
   Menu,
   X,
   Settings,
-  HelpCircle
+  HelpCircle,
+  Mail
 } from "lucide-react"
 import { useState } from "react"
 
@@ -31,7 +32,8 @@ export function Navigation() {
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Patients", href: "/patients", icon: Users },
     { name: "Sessions", href: "/sessions", icon: FileAudio },
-    { name: "Help", href: "/help", icon: HelpCircle },
+    { name: "Tutorial", href: "/help", icon: HelpCircle },
+    { name: "Contact", href: "/contact", icon: Mail },
   ]
 
   const handleLogout = async () => {

@@ -20,7 +20,11 @@ import {
   BookOpen,
   Video,
   CheckCircle,
-  Star
+  Star,
+  Zap,
+  Mail,
+  Phone,
+  ExternalLink
 } from "lucide-react"
 
 interface Tutorial {
@@ -230,6 +234,30 @@ export default function HelpPage() {
         </Card>
       </div>
 
+      {/* Tour guidato promo */}
+      <Card className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-100 rounded-full">
+                <Zap className="h-8 w-8 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Tour Guidato Interattivo</h3>
+                <p className="text-gray-600">Scopri la piattaforma passo dopo passo con il nostro tour guidato</p>
+              </div>
+            </div>
+            <Button 
+              onClick={() => router.push("/dashboard")}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Zap className="mr-2 h-4 w-4" />
+              Inizia Tour
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row gap-4 mb-8">
         <div className="relative flex-1">
@@ -254,6 +282,89 @@ export default function HelpPage() {
               {category}
             </Button>
           ))}
+        </div>
+      </div>
+
+      {/* Support Section */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Need Additional Support?</h2>
+        <div className="bg-blue-50 p-4 rounded-lg mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock className="h-5 w-5 text-blue-600" />
+            <h3 className="font-semibold text-blue-900">Support Hours</h3>
+          </div>
+          <p className="text-blue-800 text-sm">
+            Our technical support team is available Monday to Friday, 9:00 AM - 6:00 PM CET. 
+            Email responses within 24 hours.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-blue-100 rounded-full">
+                  <Mail className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900">Contact Support</h3>
+                  <p className="text-sm text-gray-600 mb-3">Get direct help from our technical team</p>
+                  <Button 
+                    onClick={() => router.push("/contact")}
+                    size="sm"
+                    className="w-full"
+                  >
+                    <Mail className="mr-2 h-4 w-4" />
+                    Contact Us
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-green-100 rounded-full">
+                  <Phone className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900">Phone Support</h3>
+                  <p className="text-sm text-gray-600 mb-3">Speak directly with our team</p>
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                  >
+                    <Phone className="mr-2 h-4 w-4" />
+                    +39 02 1234 5678
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-purple-100 rounded-full">
+                  <ExternalLink className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900">Documentation</h3>
+                  <p className="text-sm text-gray-600 mb-3">Comprehensive technical docs</p>
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    disabled
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Coming Soon
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
