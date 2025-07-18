@@ -80,8 +80,15 @@ export async function POST(request: NextRequest) {
       console.log(`🎯 EmoAtlas service response:`, {
         success: analysisResult.success,
         error: analysisResult.error,
-        sessionCount: analysisResult.individual_sessions?.length
+        sessionCount: analysisResult.individual_sessions?.length,
+        hasIndividualSessions: !!analysisResult.individual_sessions,
+        hasCombinedAnalysis: !!analysisResult.combined_analysis
       })
+      
+      // Log the first session for debugging
+      if (analysisResult.individual_sessions && analysisResult.individual_sessions.length > 0) {
+        console.log(`🔍 First session structure:`, JSON.stringify(analysisResult.individual_sessions[0], null, 2))
+      }
 
       if (!analysisResult.success) {
         console.error('EmoAtlas analysis failed:', analysisResult.error)
@@ -89,7 +96,9 @@ export async function POST(request: NextRequest) {
       }
 
       console.log(`✅ Sentiment analysis completed for ${analysisResult.individual_sessions.length} sessions`)
-      return createSuccessResponse(analysisResult, "Analisi emotiva completata con successo")
+      
+      // Return the analysisResult directly to match the frontend expectations
+      return NextResponse.json(analysisResult, { status: 200 })
       
     } catch (emoError) {
       console.error('🚨 EmoAtlas service call failed:', emoError)

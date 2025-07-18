@@ -26,11 +26,10 @@ export interface SessionData {
       positive_score: number
       negative_score: number
       language: string
-      flower_plot?: string
       word_count: number
-      emotion_words: Record<string, string[]>
       significant_emotions: Record<string, number>
     }
+    flower_plot?: string  // Moved to top level
     processing_time: number
   }
   
@@ -46,7 +45,6 @@ export interface SessionData {
         negative_score: number
         language: string
         text_length: number
-        emotion_words: Record<string, string[]>
         significant_emotions: Record<string, number>
         dominant_emotions: [string, number][]
       }

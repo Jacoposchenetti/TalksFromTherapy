@@ -21,38 +21,36 @@ interface SentimentAnalysisProps {
 
 interface EmotionAnalysisResult {
   success: boolean
-  analysis: {
-    individual_sessions: Array<{
-      session_id: string
-      session_title: string
-      analysis: {
-        emotions: Record<string, number>
-        z_scores: Record<string, number>
-        significant_emotions: Record<string, number>
-        dominant_emotions: [string, number][]
-        emotional_valence: number
-        positive_score: number
-        negative_score: number
-        text_length: number
-      }
-      flower_plot?: string // Base64 image from EmoAtlas
-    }>
-    combined_analysis: {
-      analysis: {
-        emotions: Record<string, number>
-        z_scores: Record<string, number>
-        significant_emotions: Record<string, number>
-        dominant_emotions: [string, number][]
-        emotional_valence: number
-        positive_score: number
-        negative_score: number
-        text_length: number
-      }
-      flower_plot?: string // Base64 image from EmoAtlas
-    } | null
-    total_sessions: number
-  }
-  processed_sessions: number
+  individual_sessions: Array<{
+    session_id: string
+    session_title: string
+    analysis: {
+      emotions: Record<string, number>
+      z_scores: Record<string, number>
+      significant_emotions: Record<string, number>
+      dominant_emotions: [string, number][]
+      emotional_valence: number
+      positive_score: number
+      negative_score: number
+      text_length: number
+    }
+    flower_plot?: string // Base64 image from EmoAtlas
+  }>
+  combined_analysis?: {
+    analysis: {
+      emotions: Record<string, number>
+      z_scores: Record<string, number>
+      significant_emotions: Record<string, number>
+      dominant_emotions: [string, number][]
+      emotional_valence: number
+      positive_score: number
+      negative_score: number
+      text_length: number
+    }
+    flower_plot?: string // Base64 image from EmoAtlas
+  } | null
+  total_sessions?: number
+  processed_sessions?: number
   error?: string
 }
 
@@ -61,24 +59,22 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
   const [analysisResult, setAnalysisResult] = useState<EmotionAnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Effect to load cached data when available
+  // Effect to load cached data when available (ONLY ONCE)
   useEffect(() => {
-    if (cachedData && cachedData.length > 0) {
-      console.log('🔄 Loading cached sentiment data:', cachedData)
+    if (cachedData && cachedData.length > 0 && !analysisResult) {
+      console.log('🔄 Loading cached sentiment data (one-time only):', cachedData)
       // Transform cached data to match the expected format
       const transformedResult: EmotionAnalysisResult = {
         success: true,
-        analysis: {
-          individual_sessions: cachedData,
-          combined_analysis: null, // Could be computed if needed
-          total_sessions: cachedData.length
-        },
+        individual_sessions: cachedData,
+        combined_analysis: null, // Could be computed if needed
+        total_sessions: cachedData.length,
         processed_sessions: cachedData.length
       }
       setAnalysisResult(transformedResult)
       setError(null)
     }
-  }, [cachedData])
+  }, [cachedData, analysisResult])
 
   // Add logging to understand what's happening
   console.log('🔍 SentimentAnalysis render:', {
@@ -104,20 +100,32 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
       return
     }
 
-    // Prevent multiple simultaneous requests
+    // CRITICAL: Prevent multiple simultaneous requests and loops
     if (isAnalyzing) {
-      console.log('⚠️ Analysis already in progress, skipping request')
+      console.log('⚠️ Analysis already in progress, BLOCKING request')
       return
     }
 
-    // Prevent if we already have results for these sessions
+    // CRITICAL: Prevent if we already have results for these sessions
     const currentSessionIds = validSessions.map(s => s.id).sort().join(',')
     const existingSessionIds = analysisResult?.analysis?.individual_sessions?.map(s => s.session_id)?.sort()?.join(',') || ''
     
     if (analysisResult && currentSessionIds === existingSessionIds) {
-      console.log('⚠️ Analysis already exists for these sessions, skipping request')
+      console.log('⚠️ Analysis already exists for these sessions, BLOCKING request')
       return
     }
+
+    // CRITICAL: Extra protection - check if we made a request in the last 5 seconds
+    const now = Date.now()
+    const lastRequestKey = 'lastEmotionAnalysisRequest'
+    const lastRequest = parseInt(localStorage.getItem(lastRequestKey) || '0')
+    
+    if (now - lastRequest < 5000) {
+      console.log('⚠️ Request made too recently, BLOCKING to prevent spam')
+      return
+    }
+    
+    localStorage.setItem(lastRequestKey, now.toString())
 
     setIsAnalyzing(true)
     setError(null)
@@ -143,17 +151,18 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
 
       if (!response.ok) {
         throw new Error(`Analisi emotiva fallita: ${response.status}`)
-      }      const result = await response.json()
+      }
+      
+      const result = await response.json()
       console.log('🎯 API Response received:', result)
       console.log('🎯 Response success:', result.success)
       console.log('🎯 Result keys:', Object.keys(result))
       console.log('🎯 Individual sessions count:', result.individual_sessions?.length)
       console.log('🎯 Combined analysis available:', !!result.combined_analysis)
-      console.log('🎯 Analysis structure available:', !!result.analysis)
       
-      if (result.analysis) {
-        console.log('🎯 Analysis individual sessions:', result.analysis.individual_sessions?.length)
-        console.log('🎯 First session example:', result.analysis.individual_sessions?.[0])
+      if (result.individual_sessions) {
+        console.log('🎯 Individual sessions:', result.individual_sessions.length)
+        console.log('🎯 First session example:', result.individual_sessions?.[0])
       }
       
       if (result.success) {
@@ -167,8 +176,13 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Errore sconosciuto'
       setError(errorMessage)
-      console.error('Emotion analysis error:', err)    } finally {
+      console.error('Emotion analysis error:', err)
+    } finally {
       setIsAnalyzing(false)
+      // CRITICAL: Clear the rate limiting after completion
+      setTimeout(() => {
+        localStorage.removeItem('lastEmotionAnalysisRequest')
+      }, 1000)
     }
   }
 
@@ -262,14 +276,12 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
     )
   }
   if (analysisResult) {
-    const { analysis } = analysisResult
-    
     console.log('🎨 Rendering analysis result:', {
-      hasAnalysis: !!analysis,
-      hasCombinedAnalysis: !!analysis?.combined_analysis,
-      hasIndividualSessions: !!analysis?.individual_sessions,
-      individualSessionsCount: analysis?.individual_sessions?.length,
-      individualSessions: analysis?.individual_sessions
+      hasAnalysisResult: !!analysisResult,
+      hasCombinedAnalysis: !!analysisResult.combined_analysis,
+      hasIndividualSessions: !!analysisResult.individual_sessions,
+      individualSessionsCount: analysisResult.individual_sessions?.length,
+      individualSessions: analysisResult.individual_sessions
     })
     
     return (
@@ -286,11 +298,11 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
             New Analysis
           </Button>
         </div>        {/* Combined Analysis */}
-        {analysis && analysis.combined_analysis && (
+        {analysisResult.combined_analysis && (
           <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
             <CardContent className="p-4">
               {(() => {
-                const transformedData = transformEmoAtlasData(analysis.combined_analysis.analysis)
+                const transformedData = transformEmoAtlasData(analysisResult.combined_analysis.analysis)
                 if (!transformedData) {
                   return (
                     <div className="text-center text-gray-500 py-4">
@@ -302,9 +314,9 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
                 return (
                   <EmotionVisualizer 
                     data={transformedData}
-                    title={`🌸 Combined Analysis (${analysis.total_sessions} sessions)`}
+                    title={`🌸 Combined Analysis (${analysisResult.total_sessions || analysisResult.individual_sessions?.length} sessions)`}
                     showDetails={false}
-                    flowerPlot={analysis.combined_analysis.flower_plot}
+                    flowerPlot={analysisResult.combined_analysis.flower_plot}
                   />
                 )
               })()}
@@ -313,21 +325,22 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
         )}
 
         {/* Individual Sessions */}
-        {analysis && analysis.individual_sessions && analysis.individual_sessions.length > 0 && (          <div className="space-y-4">
+        {analysisResult.individual_sessions && analysisResult.individual_sessions.length > 0 && (
+          <div className="space-y-4">
             <div className="flex items-center gap-2">
               <div className="h-px bg-gray-300 flex-1"></div>
               <h4 className="text-md font-medium text-gray-700">
-                {analysis.individual_sessions.length > 1 ? '📊 Analisi per Sessione' : '📊 Analisi Emotiva'}
+                {analysisResult.individual_sessions.length > 1 ? '📊 Analisi per Sessione' : '📊 Analisi Emotiva'}
                 <span className="text-sm text-gray-500 ml-2">
-                  ({analysis.individual_sessions.length} sessions)
+                  ({analysisResult.individual_sessions.length} sessions)
                 </span>
               </h4>
               <div className="h-px bg-gray-300 flex-1"></div>
             </div>
             <div className="space-y-3">
               {(() => {
-                console.log('🎨 Rendering individual sessions:', analysis.individual_sessions.length)
-                analysis.individual_sessions.forEach((sessionAnalysis, index) => {
+                console.log('🎨 Rendering individual sessions:', analysisResult.individual_sessions.length)
+                analysisResult.individual_sessions.forEach((sessionAnalysis, index) => {
                   console.log(`🎨 Session ${index + 1}:`, {
                     id: sessionAnalysis.session_id,
                     title: sessionAnalysis.session_title,
@@ -335,7 +348,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
                     hasFlowerPlot: !!sessionAnalysis.flower_plot
                   })
                 })
-                return analysis.individual_sessions.map((sessionAnalysis) => {
+                return analysisResult.individual_sessions.map((sessionAnalysis) => {
                   const transformedData = transformEmoAtlasData(sessionAnalysis.analysis)
                   if (!transformedData) {
                     return (
