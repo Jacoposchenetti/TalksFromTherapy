@@ -27,6 +27,7 @@ interface Session {
     initials: string
   }
   createdAt: string
+  _transcriptionStarted?: boolean // Aggiunto per segnalare che la trascrizione è già avviata
 }
 
 interface Patient {
@@ -143,6 +144,21 @@ function SessionsPageContent() {
     }
       loadData()
   }, [session, status, router, patientId])
+
+  // Aggiungo un useEffect per avviare la trascrizione automatica delle sessioni appena caricate
+  useEffect(() => {
+    // Trova tutte le sessioni con status 'UPLOADED' (non ancora trascritte)
+    const toTranscribe = sessions.filter(s => s.status === 'UPLOADED')
+    toTranscribe.forEach(session => {
+      // Avvia la trascrizione solo se non è già in corso
+      if (!session._transcriptionStarted) {
+        handleStartTranscription(session.id)
+        // Segna la sessione come già avviata (solo lato client)
+        session._transcriptionStarted = true
+      }
+    })
+    // eslint-disable-next-line
+  }, [sessions])
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -1011,26 +1027,7 @@ function SessionsPageContent() {
                         {currentSession?.id === session.id && isPlaying ? 'Playing' : 'Audio'}
                       </Button>
                     )}
-                    {session.status === "UPLOADED" && (
-                      <Button 
-                        variant="default" 
-                        size="sm"
-                        onClick={() => handleStartTranscription(session.id)}
-                      >
-                        <FileText className="h-4 w-4 mr-1" />
-                        Start Transcription
-                      </Button>
-                    )}
-                    {session.status === "TRANSCRIBING" && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        disabled
-                      >
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-1"></div>
-                        Transcribing...
-                      </Button>
-                    )}
+                    
                     {session.status === "ERROR" && (
                       <Button 
                         variant="destructive" 
