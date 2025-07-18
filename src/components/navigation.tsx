@@ -10,7 +10,8 @@ import {
   LogOut, 
   Menu,
   X,
-  Settings
+  Settings,
+  HelpCircle
 } from "lucide-react"
 import { useState } from "react"
 
@@ -30,6 +31,7 @@ export function Navigation() {
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Patients", href: "/patients", icon: Users },
     { name: "Sessions", href: "/sessions", icon: FileAudio },
+    { name: "Help", href: "/help", icon: HelpCircle },
   ]
 
   const handleLogout = async () => {
