@@ -108,7 +108,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
 
     // CRITICAL: Prevent if we already have results for these sessions
     const currentSessionIds = validSessions.map(s => s.id).sort().join(',')
-    const existingSessionIds = analysisResult?.analysis?.individual_sessions?.map(s => s.session_id)?.sort()?.join(',') || ''
+    const existingSessionIds = analysisResult?.individual_sessions?.map(s => s.session_id)?.sort()?.join(',') || ''
     
     if (analysisResult && currentSessionIds === existingSessionIds) {
       console.log('⚠️ Analysis already exists for these sessions, BLOCKING request')
@@ -134,6 +134,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
       const sessionIds = validSessions.map(s => s.id)
       
       console.log('🚀 Starting emotion analysis for sessions:', sessionIds)
+      console.log('🚀 Testo inviato per ogni sessione:', validSessions.map(s => ({ id: s.id, parole: s.transcript?.split(' ').length, preview: s.transcript?.slice(0, 100) })));
       
       const response = await fetch('/api/sentiment', {
         method: 'POST',
@@ -199,8 +200,8 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
   )
   
   const analyzedSessionIds = useMemo(() => 
-    analysisResult?.analysis?.individual_sessions?.map(s => s.session_id)?.sort()?.join(',') || '', 
-    [analysisResult?.analysis?.individual_sessions]
+    analysisResult?.individual_sessions?.map(s => s.session_id)?.sort()?.join(',') || '', 
+    [analysisResult?.individual_sessions]
   )
 
   // Clear analysis only when the actual session selection changes meaningfully

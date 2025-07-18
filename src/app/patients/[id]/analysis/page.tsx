@@ -80,6 +80,25 @@ export default function PatientAnalysisPage() {
     autoLoad: false  // We'll load manually when sessions are selected
   })
 
+  // Stato per le note di tutte le sessioni selezionate
+  const [sessionNotes, setSessionNotes] = useState<Record<string, string>>({})
+  const [editingNotes, setEditingNotes] = useState<Record<string, boolean>>({})
+  const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
+  // Per gestire il revert, salvo il valore originale della nota quando si entra in modalità editing
+  const [originalNotes, setOriginalNotes] = useState<Record<string, string>>({})
+
+  // Quando si entra in modalità editing, salvo il valore originale
+  const handleEnterEdit = (sessionId: string) => {
+    setOriginalNotes(prev => ({ ...prev, [sessionId]: sessionNotes[sessionId] || "" }))
+    setEditingNotes(prev => ({ ...prev, [sessionId]: true }))
+  }
+
+  // Quando si preme Cancel, ripristino il valore originale e chiudo la modalità editing
+  const handleCancelEdit = (sessionId: string) => {
+    setSessionNotes(prev => ({ ...prev, [sessionId]: originalNotes[sessionId] || "" }))
+    setEditingNotes(prev => ({ ...prev, [sessionId]: false }))
+  }
+
   useEffect(() => {
     if (status === "loading") return
     if (!session) {
@@ -122,14 +141,37 @@ export default function PatientAnalysisPage() {
     }
   }, [selectedSessions])
 
-  // Carica la nota quando cambia la sessione attiva per le note
+  // Carica le note di tutte le sessioni selezionate ogni volta che cambia la selezione
   useEffect(() => {
-    if (activeSessionForNote?.id) {
-      fetchSessionNote(activeSessionForNote.id)
-    } else {
-      setNote("")
+    const selected = Array.from(selectedSessions)
+    if (selected.length === 0) {
+      setSessionNotes({})
+      setEditingNotes({})
+      setSavingNotes({})
+      return
     }
-  }, [activeSessionForNote?.id])
+    const fetchAllNotes = async () => {
+      const notesObj: Record<string, string> = {}
+      await Promise.all(selected.map(async (sessionId) => {
+        try {
+          const response = await fetch(`/api/notes/${sessionId}`)
+          if (response.ok) {
+            const result = await response.json()
+            const noteData = result.data || result
+            notesObj[sessionId] = noteData.content || ""
+          } else {
+            notesObj[sessionId] = ""
+          }
+        } catch {
+          notesObj[sessionId] = ""
+        }
+      }))
+      setSessionNotes(notesObj)
+      setEditingNotes({})
+      setSavingNotes({})
+    }
+    fetchAllNotes()
+  }, [selectedSessions])
 
   // Imposta automaticamente la prima sessione come attiva per le note
   useEffect(() => {
@@ -197,7 +239,7 @@ export default function PatientAnalysisPage() {
         // Auto-select first session if available
         if (transcribedSessions.length > 0) {
           setActiveSessionForNote(transcribedSessions[0])
-          fetchSessionNote(transcribedSessions[0].id)
+          // fetchSessionNote(transcribedSessions[0].id) // This is now handled by the new useEffect
         }
       } else {
         setError('Error loading sessions')
@@ -249,7 +291,7 @@ export default function PatientAnalysisPage() {
         setEditingNote(false)
         // Ricarica la nota per assicurarsi che sia aggiornata
         await fetchSessionNote(activeSessionForNote.id)
-        alert("Note saved successfully!")
+        // alert("Note saved successfully!") // RIMOSSO: non mostrare più l'avviso di successo
       } else {
         alert("Error saving note")
       }    } catch (error) {
@@ -257,6 +299,31 @@ export default function PatientAnalysisPage() {
       alert("Error saving note")
     } finally {
       setSavingNote(false)
+    }
+  }
+
+  // Funzione per salvare la nota di una singola sessione
+  const handleSaveSessionNote = async (sessionId: string) => {
+    setSavingNotes(prev => ({ ...prev, [sessionId]: true }))
+    try {
+      const response = await fetch(`/api/notes/${sessionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: sessionNotes[sessionId] })
+      })
+      if (response.ok) {
+        setEditingNotes(prev => ({ ...prev, [sessionId]: false }))
+        // Ricarica la nota aggiornata
+        const result = await response.json()
+        const noteData = result.data || result
+        setSessionNotes(prev => ({ ...prev, [sessionId]: noteData.content || "" }))
+      } else {
+        // Gestione errore
+      }
+    } catch {
+      // Gestione errore
+    } finally {
+      setSavingNotes(prev => ({ ...prev, [sessionId]: false }))
     }
   }
 
@@ -328,7 +395,7 @@ export default function PatientAnalysisPage() {
   // Handle session selection for notes
   const handleSessionSelectForNote = (session: Session) => {
     setActiveSessionForNote(session)
-    fetchSessionNote(session.id)
+    // fetchSessionNote(session.id) // This is now handled by the new useEffect
   }
 
   // Get selected sessions data
@@ -561,7 +628,7 @@ export default function PatientAnalysisPage() {
                                 console.log('🔍 Before setActiveSessionForNote, current activeSessionForNote:', activeSessionForNote?.id)
                                 setActiveSessionForNote(session)
                                 console.log('🔍 After setActiveSessionForNote, should be:', session.id)
-                                fetchSessionNote(session.id)
+                                // fetchSessionNote(session.id) // This is now handled by the new useEffect
                               }}
                               className={`flex-1 text-left p-2 rounded transition-colors ${
                                 activeSessionForNote?.id === session.id 
@@ -1044,91 +1111,60 @@ export default function PatientAnalysisPage() {
             )}
 
             {/* Notes Section */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="h-5 w-5" />
-                    Therapeutic Notes - {activeSessionForNote ? 
-                      `${activeSessionForNote.title}` : 
-                      'Select a session'}
-                  </div>
-                  <div className="flex gap-2">
-                    {!editingNote ? (
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => setEditingNote(true)}
-                        disabled={!activeSessionForNote}
-                      >
-                        <Edit className="h-3 w-3 mr-1" />
-                        Edit
-                      </Button>
-                    ) : (
-                      <Button 
-                        size="sm" 
-                        onClick={handleSaveNote}
-                        disabled={savingNote}
-                      >
-                        <Save className="h-3 w-3 mr-1" />
-                        Save
-                      </Button>
-                    )}
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {editingNote ? (
-                  <div className="space-y-3">
-                    <textarea
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      placeholder="Here the therapist can freely write personal notes and remarks"
-                      className="w-full h-32 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    <div className="flex gap-2 justify-end">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => {
-                          setEditingNote(false)
-                          fetchSessionNote(activeSessionForNote?.id || "")
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        onClick={handleSaveNote}
-                        disabled={savingNote}
-                      >
-                        <Save className="h-3 w-3 mr-1" />
-                        {savingNote ? "Saving..." : "Save"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="h-32 overflow-y-auto bg-gray-50 p-3 rounded text-sm">
-                      {note || (
-                        <span className="text-gray-500 italic">
-                          Here the therapist can freely write personal notes and remarks
-                        </span>
+            {getSelectedSessionsData().length > 0 && (
+              <div className="space-y-4 mt-6">
+                {getSelectedSessionsData().map((session) => (
+                  <Card key={session.id}>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-3">
+                        <MessageSquare className="h-5 w-5" />
+                        Therapeutic Notes - {session.title}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {editingNotes[session.id] ? (
+                        <div className="space-y-3">
+                          <textarea
+                            value={sessionNotes[session.id] || ""}
+                            onChange={e => setSessionNotes(prev => ({ ...prev, [session.id]: e.target.value }))}
+                            placeholder="Here the therapist can freely write personal notes and remarks"
+                            className="w-full h-32 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            autoFocus
+                          />
+                          <div className="flex gap-2 justify-end">
+                            <Button size="sm" variant="outline" onClick={() => handleCancelEdit(session.id)}>
+                              Cancel
+                            </Button>
+                            <Button size="sm" onClick={() => handleSaveSessionNote(session.id)} disabled={savingNotes[session.id]}>
+                              <Save className="h-3 w-3 mr-1" />
+                              {savingNotes[session.id] ? "Saving..." : "Save"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div
+                            className="h-32 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
+                            onClick={() => handleEnterEdit(session.id)}
+                            tabIndex={0}
+                            role="textbox"
+                            title="Click to edit note"
+                            style={{ minHeight: '8rem' }}
+                          >
+                            {sessionNotes[session.id] || (
+                              <span className="text-gray-500 italic">
+                                Here the therapist can freely write personal notes and remarks
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       )}
-                    </div>
-                    <div className="flex justify-end">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => setEditingNote(true)}
-                        disabled={!activeSessionForNote}
-                      >
-                        Edit
-                      </Button>
-                    </div>
-                  </div>                )}
-              </CardContent>
-            </Card>          </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
