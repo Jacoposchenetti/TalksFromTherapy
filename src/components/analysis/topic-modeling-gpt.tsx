@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -39,16 +39,21 @@ interface AnalysisResult {
   }
 }
 
+// Aggiorno l'interfaccia CustomTopicSearchResult
 interface CustomTopicSearchResult {
   query: string
   timestamp: string
   sessions: Array<{ id: string; title: string }>
   results: Array<{
-    topic: string
-    relevantSegments: TextSegment[]
-    totalMatches: number
-    confidence: number
-    error?: string
+    sessionId: string
+    sessionTitle: string
+    topics: Array<{
+      topic: string
+      relevantSegments: TextSegment[]
+      totalMatches: number
+      confidence: number
+      error?: string
+    }>
   }>
   summary: string
 }
@@ -675,6 +680,28 @@ Rispondi SOLO con JSON:
     }
   }
 
+  // 1. Stato per gestire il mapping topicId -> ref
+  const topicRefs = useRef<{ [topicId: number]: HTMLSpanElement | null }>({})
+  const firstTopicSegmentRenderedRef = useRef<Record<number, boolean>>({})
+
+  // Resetto il tracking ogni volta che cambia l'analisi
+  useEffect(() => {
+    firstTopicSegmentRenderedRef.current = {}
+  }, [analysisResult, showTextView])
+
+  // Funzione per scrollare al primo segmento del topic
+  const scrollToTopic = (topicId: number) => {
+    const el = topicRefs.current[topicId]
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('ring-2', 'ring-blue-400')
+      setTimeout(() => el.classList.remove('ring-2', 'ring-blue-400'), 1200)
+    }
+  }
+
+  // Prima di mappare i segmenti nella modalità testo (dentro CardContent, showTextView true)
+  let firstTopicSegmentRendered: Record<number, boolean> = {}
+
   return (
     <div className="h-full space-y-6">
       <div className="flex items-center justify-between">
@@ -934,64 +961,40 @@ Rispondi SOLO con JSON:
               <CardContent>
                 {!showCustomTextView ? (
                   <div className="space-y-6">
-                    {customSearchResult.results.map((result, index) => (
-                      <div key={index} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-medium text-lg">"{result.topic}"</h4>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">
-                              {result.totalMatches} matches
-                            </Badge>
-                            {result.confidence > 0 && (
-                              <Badge variant="secondary">
-                                {Math.round(result.confidence * 100)}% confidence
-                              </Badge>
+                    {customSearchResult.results.map((sessionResult, sessionIndex) => (
+                      <div key={sessionIndex} className="border rounded-lg p-4">
+                        <h3 className="font-semibold text-lg mb-3">Session: {sessionResult.sessionTitle}</h3>
+                        {sessionResult.topics.map((topicResult, topicIdx) => (
+                          <div key={topicIdx} className="p-2 bg-blue-50 border-l-4 border-blue-400 rounded text-sm">
+                            <div className="flex justify-between items-start mb-1">
+                              <span className="text-xs text-gray-500">
+                                Confidence: {Math.round(topicResult.confidence * 100)}%
+                              </span>
+                            </div>
+                            <p className="text-gray-800">{topicResult.topic}</p>
+                            {topicResult.relevantSegments.length > 0 ? (
+                              topicResult.relevantSegments.map((segment, segIdx) => (
+                                <div key={segIdx} className="p-1 text-xs text-gray-600">
+                                  {segment.text} ({Math.round(segment.confidence * 100)}%)
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-gray-500 italic text-sm">No relevant segments found for this topic.</div>
                             )}
                           </div>
-                        </div>
-
-                        {result.error ? (
-                          <div className="text-red-600 text-sm">
-                            <AlertCircle className="h-4 w-4 inline mr-1" />
-                            {result.error}
-                          </div>
-                        ) : result.relevantSegments.length > 0 ? (
-                          <div className="space-y-2">
-                            <p className="text-sm text-gray-600 mb-2">
-                              Relevant segments found:
-                            </p>
-                            <div className="max-h-48 overflow-y-auto space-y-2">
-                              {result.relevantSegments.map((segment, segIndex) => (
-                                <div
-                                  key={segIndex}
-                                  className="p-2 bg-blue-50 border-l-4 border-blue-400 rounded text-sm"
-                                >
-                                  <div className="flex justify-between items-start mb-1">
-                                    <span className="text-xs text-gray-500">
-                                      Confidence: {Math.round(segment.confidence * 100)}%
-                                    </span>
-                                  </div>
-                                  <p className="text-gray-800">{segment.text}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-gray-500 italic text-sm">
-                            No relevant segments found for this topic.
-                          </p>
-                        )}
+                        ))}
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="max-h-96 overflow-y-auto pr-2">
+                    {/* Legenda topic (modalità testo) */}
                     <div className="mb-4">
                       <h4 className="font-medium mb-2">Topic Legend:</h4>
                       <div className="flex flex-wrap gap-2">
-                        {customSearchResult.results.map((result, index) => (
+                        {Array.from(new Set(customSearchResult.results.flatMap(sessionResult => sessionResult.topics.map(t => t.topic)))).map((topic, index) => (
                           <Badge key={index} className={getTopicColor(index + 1)}>
-                            {result.topic}
+                            {topic}
                           </Badge>
                         ))}
                       </div>
@@ -1002,18 +1005,20 @@ Rispondi SOLO con JSON:
                         // Creare una mappa di tutti i segmenti trovati con le loro posizioni nel testo
                         const segmentMap = new Map();
                         
-                        customSearchResult.results.forEach((result, topicIndex) => {
-                          result.relevantSegments.forEach(segment => {
-                            const startIndex = combinedTranscript.indexOf(segment.text);
-                            if (startIndex !== -1) {
-                              segmentMap.set(startIndex, {
-                                text: segment.text,
-                                topicIndex: topicIndex + 1,
-                                topic: result.topic,
-                                confidence: segment.confidence,
-                                endIndex: startIndex + segment.text.length
-                              });
-                            }
+                        customSearchResult.results.forEach((sessionResult) => {
+                          sessionResult.topics.forEach((topicResult) => {
+                            topicResult.relevantSegments.forEach(segment => {
+                              const startIndex = combinedTranscript.indexOf(segment.text);
+                              if (startIndex !== -1) {
+                                segmentMap.set(startIndex, {
+                                  text: segment.text,
+                                  topicIndex: topicResult.topic_id, // Use topic_id from topicResult
+                                  topic: topicResult.topic,
+                                  confidence: segment.confidence,
+                                  endIndex: startIndex + segment.text.length
+                                });
+                              }
+                            });
                           });
                         });
 
@@ -1145,21 +1150,11 @@ Rispondi SOLO con JSON:
                 </div>
               </div>
 
-              {/* Overlay dei topic badges in alto a destra */}
-              <div className="absolute top-4 right-4 z-10">
-                <div className="flex flex-wrap gap-1.5 max-w-md justify-end">
-                  {analysisResult.topics.map((topic) => (
-                    <Badge
-                      key={topic.topic_id}
-                      className={`${getTopicColor(topic.topic_id)} text-xs shadow-sm bg-white/90 backdrop-blur-sm`}
-                    >
-                      {topic.description.replace(/\s*\([^)]*\)$/, '')}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+              {/* Sezione statica per i badge dei topic */}
+              {/* Rimuovo la sezione statica dei badge dei topic sopra il CardHeader */}
+              {/* Mantengo solo la legenda topic nella modalità testo */}
 
-              <CardHeader className="pt-16">
+              <CardHeader className="pt-2">
                 <CardDescription>
                   {analysisResult.summary}
                 </CardDescription>
@@ -1200,11 +1195,17 @@ Rispondi SOLO con JSON:
                   </div>
                 ) : (
                   <div className="max-h-96 overflow-y-auto pr-2">
+                    {/* Legenda topic (modalità testo) */}
                     <div className="mb-4">
                       <h4 className="font-medium mb-2">Topic Legend:</h4>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 mb-2">
                         {analysisResult.topics.map((topic, index) => (
-                          <Badge key={topic.topic_id} className={getTopicColor(topic.topic_id)}>
+                          <Badge
+                            key={topic.topic_id}
+                            className={getTopicColor(topic.topic_id) + ' cursor-pointer transition-all'}
+                            onClick={() => scrollToTopic(topic.topic_id)}
+                            title="Vai al topic nel testo"
+                          >
                             {topic.description.replace(/\s*\([^)]*\)$/, '')}
                           </Badge>
                         ))}
@@ -1231,9 +1232,11 @@ Rispondi SOLO con JSON:
                           return (
                             <span
                               key={index}
-                              className={`inline-block p-1 rounded ${getTopicBackgroundColor(segment.topic_id)} ${
-                                segment.topic_id ? 'border-l-2 border-gray-400' : ''
-                              }`}
+                              ref={segment.topic_id && !firstTopicSegmentRenderedRef.current[segment.topic_id] ? (el) => {
+                                if (el) topicRefs.current[segment.topic_id!] = el
+                                firstTopicSegmentRenderedRef.current[segment.topic_id!] = true
+                              } : undefined}
+                              className={`inline-block p-1 rounded ${getTopicBackgroundColor(segment.topic_id)} ${segment.topic_id ? 'border-l-2 border-gray-400' : ''}`}
                               title={segment.topic_id ? `${analysisResult.topics.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)` : 'Unclassified'}
                             >
                               {segment.text}

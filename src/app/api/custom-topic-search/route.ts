@@ -3,6 +3,12 @@ import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResp
 import { supabase } from '@/lib/supabase'
 import OpenAI from 'openai'
 import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
+// Sostituisco l'import del client supabase standard con il service role
+import { createClient } from '@supabase/supabase-js'
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -96,7 +102,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch sessions and their transcripts
-    const { data: sessions, error: sessionsError } = await supabase
+    const { data: sessions, error: sessionsError } = await supabaseAdmin
       .from('sessions')
       .select('id, title, transcript, status, createdAt, patientId')
       .in('id', sessionIds)
@@ -119,90 +125,72 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("Nessuna trascrizione valida trovata", 404)
     }
 
-    // Decripta i transcript e combina le trascrizioni
-    const combinedTranscript = validSessions
-      .map(session => {
-        const decryptedTranscript = decryptIfEncrypted(session.transcript)
-        return `--- ${session.title} ---\n${decryptedTranscript}`
-      })
-      .join('\n\n')
+    // Dopo il fetch delle sessioni
+    console.log('Sessioni trovate:', sessions?.map(s => ({ id: s.id, title: s.title, transcriptLen: s.transcript?.length })));
 
-    // Usa l'endpoint classify-text-segments per cercare i topic personalizzati
-    const topicSearchResults = []
+    // Dopo il filtro delle sessioni valide
+    console.log('Sessioni valide (con transcript):', validSessions?.map(s => ({ id: s.id, title: s.title, transcriptLen: s.transcript?.length })));
 
-    for (const customTopic of customTopics) {
-      console.log(`Cercando topic personalizzato: "${customTopic}"`)
-      
-      let attempt = 0
-      const maxAttempts = 2
-      let success = false
-      
-      while (attempt < maxAttempts && !success) {
-        try {
-          // Dividi il testo in frasi per la classificazione
-          const sentences = combinedTranscript
-            .split(/[.!?]+/)
-            .map(s => s.trim())
-            .filter(s => s.length > 15)
-
-          console.log(`Classificando ${sentences.slice(0, 30).length} frasi per topic: "${customTopic}"`)
-
-          // Usa la funzione diretta invece della fetch
-          const classifications = await classifyTextForTopic(
-            sentences.slice(0, 30), 
-            customTopic, 
-            `custom_search_${Date.now()}_attempt_${attempt}`
-          )
-
-          const relevantSegments = classifications.filter((segment: any) => 
-            segment.topic_id === 1 && segment.confidence > 0.4
-          )
-
-          console.log(`Trovati ${relevantSegments.length} segmenti rilevanti per "${customTopic}"`)
-
-          topicSearchResults.push({
-            topic: customTopic,
-            relevantSegments: relevantSegments,
-            totalMatches: relevantSegments.length,
-            confidence: relevantSegments.length > 0 ? 
+    // Nuova struttura: risultati separati per sessione
+    const sessionResults = []
+    for (const session of validSessions) {
+      const decryptedTranscript = decryptIfEncrypted(session.transcript)
+      if (!decryptedTranscript || decryptedTranscript.trim().length === 0) continue
+      const sentences = decryptedTranscript
+        .split(/[.!?]+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 15)
+      const topicsResults = []
+      for (const customTopic of customTopics) {
+        let attempt = 0
+        const maxAttempts = 2
+        let success = false
+        let relevantSegments = []
+        let confidence = 0
+        while (attempt < maxAttempts && !success) {
+          try {
+            const classifications = await classifyTextForTopic(
+              sentences.slice(0, 30),
+              customTopic,
+              `${session.id}_${customTopic}_${Date.now()}_attempt_${attempt}`
+            )
+            relevantSegments = classifications.filter((segment: any) =>
+              segment.topic_id === 1 && segment.confidence > 0.4
+            )
+            confidence = relevantSegments.length > 0 ?
               relevantSegments.reduce((sum: number, seg: any) => sum + seg.confidence, 0) / relevantSegments.length : 0
-          })
-          success = true
-
-        } catch (error) {
-          console.error(`Errore nella ricerca del topic "${customTopic}" (tentativo ${attempt + 1}):`, error)
-          
-          if (attempt === maxAttempts - 1) {
-            // Ultimo tentativo fallito
-            topicSearchResults.push({
-              topic: customTopic,
-              relevantSegments: [],
-              totalMatches: 0,
-              confidence: 0,
-              error: error instanceof Error ? error.message : 'Errore sconosciuto'
-            })
+            success = true
+          } catch (error) {
+            if (attempt === maxAttempts - 1) {
+              relevantSegments = []
+              confidence = 0
+            }
+          }
+          attempt++
+          if (attempt < maxAttempts && !success) {
+            await new Promise(resolve => setTimeout(resolve, 2000))
           }
         }
-        
-        attempt++
-        
-        // Pausa tra i tentativi
-        if (attempt < maxAttempts && !success) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
-        }
+        topicsResults.push({
+          topic: customTopic,
+          relevantSegments,
+          totalMatches: relevantSegments.length,
+          confidence
+        })
+        await new Promise(resolve => setTimeout(resolve, 1000))
       }
-
-      // Pausa tra i topic per evitare rate limiting
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      sessionResults.push({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        topics: topicsResults
+      })
     }
-
     const searchResult = {
       query: customTopics.join(', '),
       timestamp: new Date().toISOString(),
       sessions: validSessions.map(s => ({ id: s.id, title: s.title })),
-      results: topicSearchResults,
-      summary: `Ricerca completata per ${customTopics.length} topic personalizzati su ${validSessions.length} sessioni. 
-                Trovati ${topicSearchResults.reduce((sum, r) => sum + r.totalMatches, 0)} segmenti rilevanti totali.`
+      results: sessionResults,
+      summary: `Ricerca completata per ${customTopics.length} topic personalizzati su ${validSessions.length} sessioni.`
     }
 
     // Salva i risultati per ogni sessione
