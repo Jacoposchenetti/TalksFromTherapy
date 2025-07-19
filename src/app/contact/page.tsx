@@ -108,7 +108,12 @@ export default function ContactPage() {
                 <Mail className="h-5 w-5 text-blue-600 mt-1" />
                 <div>
                   <h3 className="font-medium">Email Support</h3>
-                  <p className="text-sm text-gray-600">support@talksfromtherapy.com</p>
+                  <a 
+                    href="mailto:supporto@talksfromtherapy.com"
+                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    supporto@talksfromtherapy.com
+                  </a>
                   <p className="text-xs text-gray-500 mt-1">Response within 24 hours</p>
                 </div>
               </div>
@@ -307,6 +312,18 @@ export default function ContactPage() {
                       </>
                     )}
                   </Button>
+                  
+                  <div className="mt-4 p-3 bg-gray-50 rounded-lg text-center">
+                    <p className="text-sm text-gray-600">
+                      Per assistenza diretta scrivi a{" "}
+                      <a
+                        href="mailto:supporto@talksfromtherapy.com"
+                        className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                      >
+                        supporto@talksfromtherapy.com
+                      </a>
+                    </p>
+                  </div>
                 </form>
               )}
             </CardContent>
