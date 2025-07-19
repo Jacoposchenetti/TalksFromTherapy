@@ -52,54 +52,51 @@ export default function DashboardPage() {
   }, [session, hasCompletedTour, status, startTour])
 
   const fetchStats = async () => {
-    // Prevent multiple concurrent requests
-    if (isLoading) {
-      console.log("Dashboard: Already fetching stats, skipping...")
-      return
-    }
-
     try {
       setIsLoading(true)
       setError(null)
-      console.log("Dashboard: Fetching stats...")
       
-      const [patientsRes, sessionsRes] = await Promise.all([
-        fetch("/api/patients"),
-        fetch("/api/sessions"),
-      ])
+      console.log("🔄 Dashboard: Fetching patients from API...")
+      const patientsRes = await fetch("/api/patients")
+      console.log("📡 Dashboard: Patients API Response status:", patientsRes.status, patientsRes.statusText)
       
-      console.log("Dashboard: Response status - patients:", patientsRes.status, "sessions:", sessionsRes.status)
+      console.log("🔄 Dashboard: Fetching sessions from API...")
+      const sessionsRes = await fetch("/api/sessions")
+      console.log("📡 Dashboard: Sessions API Response status:", sessionsRes.status, sessionsRes.statusText)
       
-      if (!patientsRes.ok || !sessionsRes.ok) {
-        if (patientsRes.status === 429 || sessionsRes.status === 429) {
-          throw new Error("Too many requests. Please wait a moment before refreshing.")
+      if (patientsRes.ok && sessionsRes.ok) {
+        const patientsData = await patientsRes.json()
+        const sessionsData = await sessionsRes.json()
+        
+        console.log("📦 Dashboard: Raw patients API data:", patientsData)
+        console.log("📦 Dashboard: Raw sessions API data:", sessionsData)
+        
+        // Patients: { success: true, data: { patients: [...] } }
+        const patients = patientsData.data?.patients || patientsData.patients || []
+        
+        // Sessions: { success: true, data: [...sessions...] }
+        const sessions = sessionsData.data || sessionsData || []
+        
+        console.log("👥 Dashboard: Patients array:", patients)
+        console.log("📊 Dashboard: Patients count:", patients?.length)
+        console.log("📋 Dashboard: Sessions array:", sessions)
+        console.log("📊 Dashboard: Sessions count:", sessions?.length)
+        
+        const patientsCount = Array.isArray(patients) ? patients.length : 0
+        const sessionsCount = Array.isArray(sessions) ? sessions.length : 0
+        const transcriptionsCount = Array.isArray(sessions) ? sessions.filter((s: any) => s.transcript && s.transcript.trim().length > 0).length : 0
+        
+        const newStats = {
+          patientsCount: patientsCount,
+          sessionsCount: sessionsCount,
+          transcriptionsCount: transcriptionsCount,
         }
+        
+        console.log("Dashboard: New stats:", newStats)
+        setStats(newStats)
+      } else {
         throw new Error(`HTTP error - patients: ${patientsRes.status}, sessions: ${sessionsRes.status}`)
       }
-      
-      const [patientsData, sessions] = await Promise.all([
-        patientsRes.json(),
-        sessionsRes.json(),
-      ])
-      
-      // L'API pazienti restituisce { success: true, data: { patients: [...] } }
-      const patients = patientsData.data?.patients || patientsData.patients || []
-      
-      console.log("Dashboard: Data received - patients:", patients, "sessions:", sessions)
-      console.log("Dashboard: Patients length:", patients?.length, "Sessions length:", sessions?.length)
-      
-      const patientsCount = Array.isArray(patients) ? patients.length : 0
-      const sessionsCount = Array.isArray(sessions) ? sessions.length : 0
-      const transcriptionsCount = Array.isArray(sessions) ? sessions.filter((s: any) => s.transcript).length : 0
-      
-      const newStats = {
-        patientsCount: patientsCount,
-        sessionsCount: sessionsCount,
-        transcriptionsCount: transcriptionsCount,
-      }
-      
-      console.log("Dashboard: New stats:", newStats)
-      setStats(newStats)
     } catch (error) {
       console.error("Error fetching stats:", error)
       setError(error instanceof Error ? error.message : "Errore nel caricamento delle statistiche")
