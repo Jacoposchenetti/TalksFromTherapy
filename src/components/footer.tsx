@@ -60,7 +60,12 @@ export default function Footer() {
             <ul className="space-y-3 text-gray-300">
               <li className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
-                <span className="text-sm">support@talksfromtherapy.com</span>
+                <a 
+                  href="mailto:supporto@talksfromtherapy.com"
+                  className="text-sm hover:text-white transition-colors"
+                >
+                  supporto@talksfromtherapy.com
+                </a>
               </li>
               <li className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
