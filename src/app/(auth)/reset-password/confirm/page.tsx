@@ -25,10 +25,16 @@ export default function ResetPasswordConfirmPage() {
   const searchParams = useSearchParams()
   
   useEffect(() => {
-    // Debug completo: mostra tutti i parametri URL
+    // Debug SUPER completo
     console.log('🔍 URL Search Params:', Object.fromEntries(searchParams.entries()))
     console.log('🔍 Full URL:', window.location.href)
     console.log('🔍 URL Hash:', window.location.hash)
+    console.log('🔍 Window location:', {
+      href: window.location.href,
+      search: window.location.search,
+      hash: window.location.hash,
+      pathname: window.location.pathname
+    })
     
     // Controlla se abbiamo i parametri necessari per il reset
     let accessToken = searchParams.get('access_token') || searchParams.get('token')
@@ -36,6 +42,17 @@ export default function ResetPasswordConfirmPage() {
     let type = searchParams.get('type')
     const error = searchParams.get('error')
     const errorDescription = searchParams.get('error_description')
+    
+    console.log('🔍 Parametri estratti inizialmente:', {
+      accessToken: accessToken ? `${accessToken.substring(0, 30)}...` : 'NULL',
+      accessTokenFull: accessToken || 'NULL',
+      accessTokenLength: accessToken?.length || 0,
+      refreshToken: refreshToken ? `${refreshToken.substring(0, 30)}...` : 'NULL',
+      refreshTokenLength: refreshToken?.length || 0,
+      type,
+      error,
+      errorDescription
+    })
     
     // Se non troviamo i parametri negli URL params, controlliamo nell'hash
     if (!accessToken && window.location.hash) {
@@ -91,17 +108,35 @@ export default function ResetPasswordConfirmPage() {
       return
     }
     
-    if (type === 'recovery' && accessToken) {
-      console.log('✅ Token valido ricevuto')
+    // Accetta token anche senza type=recovery per compatibilità
+    if (accessToken) {
+      console.log('✅ Token valido ricevuto', { 
+        type, 
+        hasToken: !!accessToken,
+        tokenLength: accessToken.length,
+        tokenStart: accessToken.substring(0, 20)
+      })
       setIsValidToken(true)
     } else {
       setIsValidToken(false)
-      const missingParams = []
-      if (type !== 'recovery') missingParams.push(`type: "${type}" (expected: "recovery")`)
-      if (!accessToken) missingParams.push('access_token mancante')
+      console.error('❌ NESSUN TOKEN TROVATO!')
+      console.error('❌ Debug completo:', {
+        searchParamsKeys: Array.from(searchParams.keys()),
+        searchParamsValues: Object.fromEntries(searchParams.entries()),
+        urlSearch: window.location.search,
+        urlHash: window.location.hash,
+        accessTokenFromSearch: searchParams.get('access_token'),
+        tokenFromSearch: searchParams.get('token')
+      })
       
-      console.error('❌ Parametri mancanti o invalidi:', missingParams)
-      setError(`Link di reset password non valido. Parametri mancanti: ${missingParams.join(', ')}`)
+      setError(`❌ Token mancante! 
+      
+🔍 URL attuale: ${window.location.href}
+🔍 Parametri trovati: ${Array.from(searchParams.keys()).join(', ') || 'NESSUNO'}
+
+📧 Il link nell'email potrebbe essere danneggiato. Prova a:
+1. Richiedere un nuovo link di reset
+2. Copiare e incollare l'intero link dall'email`)
     }
   }, [searchParams])
 
