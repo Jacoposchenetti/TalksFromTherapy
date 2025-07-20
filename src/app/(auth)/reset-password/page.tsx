@@ -21,6 +21,8 @@ export default function ResetPasswordPage() {
     setError("")
     setSuccess("")
 
+    console.log("Reset form submitted with email:", email)
+
     if (!email) {
       setError("Inserisci la tua email")
       return
@@ -33,6 +35,7 @@ export default function ResetPasswordPage() {
     }
 
     setIsLoading(true)
+    console.log("Sending reset request...")
 
     try {
       const response = await fetch("/api/auth/reset-password", {
@@ -43,10 +46,12 @@ export default function ResetPasswordPage() {
         body: JSON.stringify({ email }),
       })
 
+      console.log("Response status:", response.status)
       const data = await response.json()
+      console.log("Response data:", data)
 
       if (response.ok) {
-        setSuccess(data.message || "Email inviata!")
+        setSuccess(data.message || "Ti è stato inviato un link per il reset della password. Controlla la tua email!")
         setEmail("") // Clear form
       } else {
         if (response.status === 429) {
@@ -56,6 +61,7 @@ export default function ResetPasswordPage() {
         }
       }
     } catch (error) {
+      console.error("Reset password error:", error)
       setError("Errore durante la richiesta di reset password")
     } finally {
       setIsLoading(false)
@@ -134,7 +140,7 @@ export default function ResetPasswordPage() {
               <p className="text-xs text-blue-800">
                 💡 <strong>Cosa fare ora:</strong><br/>
                 1. Controlla la tua email (anche spam)<br/>
-                2. Clicca sul link ricevuto<br/>
+                2. Clicca sul link ricevuto da noreply@talksfromtherapy.com<br/>
                 3. Imposta una nuova password sicura
               </p>
             </div>
