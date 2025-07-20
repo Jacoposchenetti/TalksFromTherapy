@@ -6,6 +6,7 @@ import type { NextAuthOptions } from "next-auth"
 // Estendi i tipi NextAuth
 declare module "next-auth" {
   interface User {
+    image?: string | null
     emailVerified?: Date | null
   }
   interface Session {
@@ -13,6 +14,7 @@ declare module "next-auth" {
       id: string
       email: string
       name: string
+      image?: string | null
       emailVerified?: Date | null
     }
   }
@@ -21,6 +23,7 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     id: string
+    image?: string | null
     emailVerified?: Date | null
   }
 }
@@ -65,7 +68,7 @@ export const authOptions: NextAuthOptions = {
           // Prendi i dati aggiuntivi da public.users
           const { data: userProfile } = await supabaseAdmin
             .from('users')
-            .select('name, licenseNumber')
+            .select('name, licenseNumber, image')
             .eq('id', data.user.id)
             .single()
 
@@ -75,6 +78,7 @@ export const authOptions: NextAuthOptions = {
             id: data.user.id,
             email: data.user.email!,
             name: userProfile?.name || data.user.user_metadata?.name || '',
+            image: userProfile?.image || null,
             emailVerified: data.user.email_confirmed_at ? new Date(data.user.email_confirmed_at) : null,
           }
         } catch (error) {
@@ -88,16 +92,24 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id
+        token.image = user.image
         token.emailVerified = user.emailVerified
       }
+      
+      // Se c'è un update della sessione (come quando cambiamo l'avatar)
+      if (trigger === "update" && session?.user?.image) {
+        token.image = session.user.image
+      }
+      
       return token
     },
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string
+        session.user.image = token.image as string | null
         session.user.emailVerified = token.emailVerified
       }
       return session
