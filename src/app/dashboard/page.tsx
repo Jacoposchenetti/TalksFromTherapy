@@ -242,14 +242,6 @@ export default function DashboardPage() {
                 <Mail className="mr-2 h-4 w-4" />
                 Contact Support
               </Button>
-              <Button 
-                className="w-full justify-start"
-                variant="outline"
-                disabled
-              >
-                <BarChart3 className="mr-2 h-4 w-4" />
-                Reports & Analysis (Coming Soon)
-              </Button>
             </CardContent>
           </Card>
 
