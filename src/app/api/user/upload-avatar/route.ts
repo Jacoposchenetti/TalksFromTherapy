@@ -49,13 +49,16 @@ export async function POST(request: NextRequest) {
 
     // Genera nome file unico
     const fileExtension = file.name.split('.').pop()
-    const fileName = `${userId}-${Date.now()}.${fileExtension}`
+    const fileName = `${session.user.id}-${Date.now()}.${fileExtension}`
     const filePath = `avatars/${fileName}`
+    console.log('📝 [Avatar Upload] Generated file path:', filePath)
 
     // Converti file in ArrayBuffer
     const fileBuffer = await file.arrayBuffer()
+    console.log('🔄 [Avatar Upload] File converted to buffer, size:', fileBuffer.byteLength)
 
     // Carica file su Supabase Storage
+    console.log('☁️ [Avatar Upload] Uploading to Supabase Storage...')
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('profilepictures')
       .upload(filePath, fileBuffer, {
@@ -64,26 +67,37 @@ export async function POST(request: NextRequest) {
       })
 
     if (uploadError) {
-      console.error('Upload error:', uploadError)
+      console.error('❌ [Avatar Upload] Storage upload error:', uploadError)
       return NextResponse.json({ error: "Errore durante il caricamento dell'immagine" }, { status: 500 })
     }
+
+    console.log('✅ [Avatar Upload] Storage upload successful:', uploadData)
 
     // Ottieni URL pubblico
     const { data: { publicUrl } } = supabase.storage
       .from('profilepictures')
       .getPublicUrl(filePath)
+    
+    console.log('🔗 [Avatar Upload] Public URL generated:', publicUrl)
 
     // Aggiorna il profilo utente nel database con il nuovo avatar
-    // Bypass temporaneo RLS per questo aggiornamento specifico
+    console.log('💾 [Avatar Upload] Updating user database record...')
     const { error: updateError } = await supabaseAdmin
       .from('users')
       .update({ image: publicUrl })
       .eq('id', session.user.id)
 
     if (updateError) {
-      console.error('Database update error:', updateError)
+      console.error('❌ [Avatar Upload] Database update error:', updateError)
       // Non bloccare se l'upload è riuscito ma l'aggiornamento DB fallisce
+      return NextResponse.json({ 
+        error: "Immagine caricata ma errore aggiornamento profilo",
+        details: updateError 
+      }, { status: 500 })
     }
+
+    console.log('✅ [Avatar Upload] Database update successful')
+    console.log('🎉 [Avatar Upload] Process completed successfully')
 
     return NextResponse.json({
       success: true,
@@ -92,7 +106,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Avatar upload error:', error)
-    return NextResponse.json({ error: "Errore interno del server" }, { status: 500 })
+    console.error('💥 [Avatar Upload] Unexpected error:', error)
+    return NextResponse.json({ error: "Errore interno del server", details: error }, { status: 500 })
   }
 }
