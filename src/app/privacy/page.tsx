@@ -14,7 +14,7 @@ export default function PrivacyPage() {
           </CardHeader>
           <CardContent className="prose max-w-none">
             
-            <h2>🔒 Data Protection Overview</h2>
+            <h2>Data Protection Overview</h2>
             <p>
               TalksFromTherapy is designed specifically for mental health professionals who need secure, 
               GDPR-compliant transcription services. We take your privacy and your patients' privacy seriously.
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
               <li><strong>Session Notes:</strong> Your therapeutic observations and notes</li>
             </ul>
 
-            <h2>🎯 Why We Process Data</h2>
+            <h2>Why We Process Data</h2>
             <ul>
               <li><strong>Service Delivery:</strong> Provide AI transcription and session management</li>
               <li><strong>Account Management:</strong> User authentication and account security</li>
@@ -72,6 +72,66 @@ export default function PrivacyPage() {
               <li><strong>Audio Files:</strong> Deleted immediately after transcription</li>
               <li><strong>Backups:</strong> Secure encrypted backups for disaster recovery</li>
             </ul>
+
+            <h2>🍪 Cookie Policy</h2>
+            <p>
+              TalksFromTherapy uses cookies to enhance your experience and ensure the platform functions correctly. 
+              We follow GDPR requirements for cookie consent and transparency.
+            </p>
+            
+            <h3>Necessary Cookies (Always Active)</h3>
+            <p>These cookies are essential for the platform to function and cannot be disabled:</p>
+            <div className="bg-gray-50 rounded-lg p-4 my-4">
+              <ul className="space-y-2">
+                <li><strong>next-auth.session-token:</strong> Maintains your secure login session (Expires: 30 days)</li>
+                <li><strong>next-auth.csrf-token:</strong> Protects against security attacks</li>
+                <li><strong>sb-*-auth-token:</strong> Supabase authentication tokens (Session duration)</li>
+              </ul>
+            </div>
+
+            <h3>Analytics Cookies (Optional - Requires Consent)</h3>
+            <p>Help us understand usage patterns to improve the platform:</p>
+            <div className="bg-blue-50 rounded-lg p-4 my-4">
+              <ul className="space-y-2">
+                <li><strong>_ga, _gid:</strong> Google Analytics for anonymous usage statistics (2 years)</li>
+                <li><strong>Performance metrics:</strong> Page load times and error tracking</li>
+                <li><strong>Usage patterns:</strong> Most used features (anonymized)</li>
+              </ul>
+            </div>
+
+            <h3>Functional Cookies (Optional - Enhances Experience)</h3>
+            <p>Remember your preferences for a personalized experience:</p>
+            <div className="bg-green-50 rounded-lg p-4 my-4">
+              <ul className="space-y-2">
+                <li><strong>theme-preference:</strong> Dark/light mode selection</li>
+                <li><strong>audio-settings:</strong> Playback speed and volume preferences</li>
+                <li><strong>ui-preferences:</strong> Layout and interface customizations</li>
+              </ul>
+            </div>
+
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 my-6">
+              <h4 className="text-blue-800 font-semibold mb-3 flex items-center gap-2">
+                Our Cookie Commitment
+              </h4>
+              <div className="grid md:grid-cols-2 gap-4 text-blue-700 text-sm">
+                <div>
+                  <p className="font-medium">Consent Before Tracking</p>
+                  <p>Non-essential cookies only after explicit consent</p>
+                </div>
+                <div>
+                  <p className="font-medium">Easy Control</p>
+                  <p>Disable cookies anytime in settings</p>
+                </div>
+                <div>
+                  <p className="font-medium">Granular Choices</p>
+                  <p>Choose specific cookie categories</p>
+                </div>
+                <div>
+                  <p className="font-medium">Regular Renewal</p>
+                  <p>Re-consent requested every 12 months</p>
+                </div>
+              </div>
+            </div>
 
             <h2>👤 Your Rights (GDPR)</h2>
             <p>As a data subject, you have the right to:</p>
@@ -117,7 +177,7 @@ export default function PrivacyPage() {
             </p>
 
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-8">
-              <h3 className="text-green-800 font-semibold">✅ GDPR Compliant</h3>
+              <h3 className="text-green-800 font-semibold">Privacy Protection</h3>
               <p className="text-green-700 text-sm mt-2">
                 This Privacy Policy meets all GDPR requirements for transparent data processing. 
                 Your data is protected with enterprise-grade security measures and you retain full control 

@@ -27,7 +27,7 @@ export default function Footer() {
             </p>
             <div className="flex items-center gap-2 text-sm text-gray-400">
               <Shield className="h-4 w-4" />
-              <span>GDPR Compliant & Encrypted</span>
+              <span>Secure & Encrypted</span>
             </div>
           </div>
 
