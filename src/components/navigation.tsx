@@ -12,15 +12,20 @@ import {
   X,
   Settings,
   HelpCircle,
-  Mail
+  Mail,
+  User,
+  ChevronDown
 } from "lucide-react"
-import { useState, useEffect } from "react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useState, useEffect, useRef } from "react"
 
 export function Navigation() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
   
   // Use useEffect for redirect to avoid setState during render
   useEffect(() => {
@@ -28,6 +33,20 @@ export function Navigation() {
       router.push('/login')
     }
   }, [status, session, router])
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [userMenuRef])
   
   // Don't render navigation if not authenticated or still loading
   if (status === "loading") return null
@@ -75,19 +94,98 @@ export function Navigation() {
           </div>
           
           <div className="hidden sm:ml-6 sm:flex sm:items-center">
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700">
-                Hi, {session.user?.name}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-                className="inline-flex items-center"
+            {/* User dropdown */}
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center space-x-3 text-sm rounded-full bg-white p-2 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
-                <LogOut className="h-4 w-4 mr-2" />
-                Log Out
-              </Button>
+                <div className="flex items-center space-x-2">
+                  <Avatar className="w-8 h-8 ring-2 ring-blue-500/20">
+                    <AvatarImage 
+                      src={session.user?.image || ""} 
+                      alt="Profile" 
+                      className="object-cover"
+                    />
+                    <AvatarFallback className="bg-blue-600 text-white text-sm">
+                      {session.user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="hidden md:block text-left">
+                    <div className="text-sm font-medium text-gray-900">
+                      {session.user?.name || 'User'}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {session.user?.email}
+                    </div>
+                  </div>
+                  <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </button>
+
+              {/* Dropdown menu */}
+              {userMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                  <div className="py-1">
+                    {/* User info header */}
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <div className="text-sm font-medium text-gray-900">
+                        {session.user?.name || 'User'}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {session.user?.email}
+                      </div>
+                    </div>
+                    
+                    {/* Menu items */}
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false)
+                        router.push('/profile')
+                      }}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      <User className="h-4 w-4 mr-3" />
+                      Il mio profilo
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false)
+                        router.push('/settings')
+                      }}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      <Settings className="h-4 w-4 mr-3" />
+                      Impostazioni
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false)
+                        router.push('/help')
+                      }}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      <HelpCircle className="h-4 w-4 mr-3" />
+                      Aiuto
+                    </button>
+                    
+                    <div className="border-t border-gray-100">
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false)
+                          handleLogout()
+                        }}
+                        className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                      >
+                        <LogOut className="h-4 w-4 mr-3" />
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -136,23 +234,61 @@ export function Navigation() {
             })}
           </div>
           <div className="pt-4 pb-3 border-t border-gray-200">
-            <div className="flex items-center px-4">
-              <div className="flex-shrink-0">
-                <span className="text-sm font-medium text-gray-800">
+            <div className="flex items-center px-4 py-3">
+              <Avatar className="w-8 h-8 mr-3 ring-2 ring-blue-500/20">
+                <AvatarImage 
+                  src={session.user?.image || ""} 
+                  alt="Profile" 
+                  className="object-cover"
+                />
+                <AvatarFallback className="bg-blue-600 text-white text-sm">
+                  {session.user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-gray-800">
                   {session.user?.name}
-                </span>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {session.user?.email}
+                </div>
               </div>
-              <div className="ml-auto">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLogout}
-                  className="inline-flex items-center"
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Log Out
-                </Button>
-              </div>
+            </div>
+            
+            {/* Mobile user menu items */}
+            <div className="mt-3 space-y-1 px-2">
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  router.push('/profile')
+                }}
+                className="flex items-center w-full px-3 py-2 rounded-md text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              >
+                <User className="h-4 w-4 mr-3" />
+                Il mio profilo
+              </button>
+              
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  router.push('/settings')
+                }}
+                className="flex items-center w-full px-3 py-2 rounded-md text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              >
+                <Settings className="h-4 w-4 mr-3" />
+                Impostazioni
+              </button>
+              
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  handleLogout()
+                }}
+                className="flex items-center w-full px-3 py-2 rounded-md text-sm text-red-600 hover:text-red-900 hover:bg-red-50"
+              >
+                <LogOut className="h-4 w-4 mr-3" />
+                Logout
+              </button>
             </div>
           </div>
         </div>
