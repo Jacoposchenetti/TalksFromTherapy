@@ -14,7 +14,7 @@ import {
   HelpCircle,
   Mail
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 export function Navigation() {
   const { data: session, status } = useSession()
@@ -22,12 +22,16 @@ export function Navigation() {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   
+  // Use useEffect for redirect to avoid setState during render
+  useEffect(() => {
+    if (status !== "loading" && !session) {
+      router.push('/login')
+    }
+  }, [status, session, router])
+  
   // Don't render navigation if not authenticated or still loading
   if (status === "loading") return null
-  if (!session) {
-    router.push('/login')
-    return null
-  }
+  if (!session) return null
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Patients", href: "/patients", icon: Users },
