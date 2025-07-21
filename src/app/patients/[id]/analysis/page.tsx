@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp, Network, Search, X, RefreshCw, Database } from "lucide-react"
@@ -40,6 +40,7 @@ export default function PatientAnalysisPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const patientId = params.id as string
   const [patient, setPatient] = useState<Patient | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
@@ -186,6 +187,16 @@ export default function PatientAnalysisPage() {
       setActiveSessionForNote(sessions[0])
     }
   }, [sessions, activeSessionForNote])
+
+  // Selezione automatica della sessione passata via query string
+  useEffect(() => {
+    if (sessions.length > 0 && searchParams) {
+      const sessionIdFromQuery = searchParams.get('sessionId')
+      if (sessionIdFromQuery && sessions.some(s => s.id === sessionIdFromQuery)) {
+        setSelectedSessions(new Set([sessionIdFromQuery]))
+      }
+    }
+  }, [sessions, searchParams])
 
   const loadPastSemanticFrameAnalyses = async () => {
     if (selectedSessions.size === 0) return
@@ -572,7 +583,7 @@ export default function PatientAnalysisPage() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="w-full py-8 flex justify-start"> {/* RIMOSSO max-w-full e padding orizzontale */}
         {sessions.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -587,490 +598,489 @@ export default function PatientAnalysisPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-8">
-            {/* Main Analysis Area with Slides */}
-            <div className="grid grid-cols-12 gap-6">              {/* Sidebar - Sessions List */}
-              <div className="col-span-2">
-                <Card className="h-[900px]">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Transcribed sessions
-                    </CardTitle>
-                    <div className="flex items-center gap-2 pt-2">
-                      <input
-                        type="checkbox"
-                        id="select-all"
-                        checked={selectedSessions.size === sessions.length && sessions.length > 0}
-                        onChange={handleSelectAll}
-                        className="rounded border-gray-300"
-                      />
-                      <label htmlFor="select-all" className="text-sm text-gray-600">
-                        Mark all
-                      </label>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <div className="space-y-1 max-h-[750px] overflow-y-auto">
-                      {sessions.map((session, index) => (
-                        <div key={session.id} className="border-b last:border-b-0">
-                          <div className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
-                            <input
-                              type="checkbox"
-                              id={`session-${session.id}`}
-                              checked={selectedSessions.has(session.id)}
-                              onChange={() => handleSessionToggle(session.id)}
-                              className="rounded border-gray-300"
-                            />
-                            <button
-                              onClick={() => {
-                                console.log('🔍 Frontend session button clicked for:', session.id, session.title)
-                                console.log('🔍 Before setActiveSessionForNote, current activeSessionForNote:', activeSessionForNote?.id)
-                                setActiveSessionForNote(session)
-                                console.log('🔍 After setActiveSessionForNote, should be:', session.id)
-                                // fetchSessionNote(session.id) // This is now handled by the new useEffect
-                              }}
-                              className={`flex-1 text-left p-2 rounded transition-colors ${
-                                activeSessionForNote?.id === session.id 
-                                  ? "bg-blue-50 border border-blue-200 shadow-sm" 
-                                  : "hover:bg-gray-50"
-                              }`}
-                              title="Click to select this session for notes"
-                            >
-                              <div className="flex items-center gap-2">
-                                <div className="font-medium text-sm">
-                                  {session.title}
-                                </div>
-                                {activeSessionForNote?.id === session.id && (
-                                  <MessageSquare className="h-4 w-4 text-blue-600" />
-                                )}
-                              </div>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>                </Card>
-              </div>
-
-              {/* Main Sliding Analysis Panel */}
-              <div className="col-span-10">
-                <Card className="h-[900px]">
-                  <CardHeader className="pb-4">
-                    {/* Slide Navigation */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        {slides.map((slide, index) => {
-                          const Icon = slide.icon
-                          return (
-                            <button
-                              key={index}
-                              onClick={() => goToSlide(index)}
-                              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all relative ${
-                                currentSlide === index
-                                  ? "bg-blue-100 text-blue-700 font-medium"
-                                  : "text-gray-600 hover:bg-gray-100"
-                              }`}
-                            >
-                              <Icon className="h-4 w-4" />
-                              {slide.title}
-                              {/* Database icon removed - cache indicator */}
-                            </button>
-                          )
-                        })}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {selectedSessions.size > 0 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={loadAllAnalyses}
-                            disabled={analysisLoading}
-                            className="h-8"
-                            title="Ricarica analisi dalla cache"
+          <div className="grid grid-cols-12 gap-6 w-full items-start"> {/* grid ora w-full */}
+            {/* Sidebar - Sessions List */}
+            <div className="col-span-2">
+              <Card className="h-[900px]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Transcribed sessions
+                  </CardTitle>
+                  <div className="flex items-center gap-2 pt-2">
+                    <input
+                      type="checkbox"
+                      id="select-all"
+                      checked={selectedSessions.size === sessions.length && sessions.length > 0}
+                      onChange={handleSelectAll}
+                      className="rounded border-gray-300"
+                    />
+                    <label htmlFor="select-all" className="text-sm text-gray-600">
+                      Mark all
+                    </label>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="space-y-1 max-h-[750px] overflow-y-auto">
+                    {sessions.map((session, index) => (
+                      <div key={session.id} className="border-b last:border-b-0">
+                        <div className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
+                          <input
+                            type="checkbox"
+                            id={`session-${session.id}`}
+                            checked={selectedSessions.has(session.id)}
+                            onChange={() => handleSessionToggle(session.id)}
+                            className="rounded border-gray-300"
+                          />
+                          <button
+                            onClick={() => {
+                              // Toggle selezione per analisi (checkbox)
+                              handleSessionToggle(session.id)
+                              // Seleziona anche per le note come prima
+                              setActiveSessionForNote(session)
+                            }}
+                            className={`flex-1 text-left p-2 rounded transition-colors ${
+                              activeSessionForNote?.id === session.id 
+                                ? "bg-blue-50 border border-blue-200 shadow-sm" 
+                                : "hover:bg-gray-50"
+                            }`}
+                            title="Click to select this session for notes"
                           >
-                            <RefreshCw className={`h-3 w-3 ${analysisLoading ? 'animate-spin' : ''}`} />
-                          </Button>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={prevSlide}
-                          className="h-8 w-8 p-0"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={nextSlide}
-                          className="h-8 w-8 p-0"
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium text-sm">
+                                {session.title}
+                              </div>
+                              {activeSessionForNote?.id === session.id && (
+                                <MessageSquare className="h-4 w-4 text-blue-600" />
+                              )}
+                            </div>
+                          </button>
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Main Sliding Analysis Panel */}
+            <div className="col-span-7">
+              <Card className="h-[900px]">
+                <CardHeader className="pb-4">
+                  {/* Slide Navigation */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      {slides.map((slide, index) => {
+                        const Icon = slide.icon
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => goToSlide(index)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all relative ${
+                              currentSlide === index
+                                ? "bg-blue-100 text-blue-700 font-medium"
+                                : "text-gray-600 hover:bg-gray-100"
+                            }`}
+                          >
+                            <Icon className="h-4 w-4" />
+                            {slide.title}
+                            {/* Database icon removed - cache indicator */}
+                          </button>
+                        )
+                      })}
                     </div>
-                  </CardHeader>                  
-                  <CardContent className="h-[800px] overflow-y-auto">
-                    <div className="h-full">
-                      {/* Slide 0: Trascrizioni */}
-                      {currentSlide === 0 && (
-                        <div className="h-full">
-                          <div className="mb-4">
-                            <h3 className="text-lg font-semibold mb-3">
-                              Trascrizioni - {selectedSessions.size > 0 ? 
-                                `${selectedSessions.size} sessions selected` : 
-                                'No session selected'}
-                            </h3>
-                            
-                            {/* Search Box */}
-                            {selectedSessions.size > 0 && (
-                              <div className="relative mb-4">
-                                <div className="relative">
-                                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                  <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                    placeholder="Search words in transcripts..."
-                                  />
-                                  {searchTerm && (
-                                    <button
-                                      onClick={() => setSearchTerm("")}
-                                      className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600"
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </button>
-                                  )}
-                                </div>
+                    <div className="flex items-center gap-2">
+                      {selectedSessions.size > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={loadAllAnalyses}
+                          disabled={analysisLoading}
+                          className="h-8"
+                          title="Ricarica analisi dalla cache"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${analysisLoading ? 'animate-spin' : ''}`} />
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={prevSlide}
+                        className="h-8 w-8 p-0"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={nextSlide}
+                        className="h-8 w-8 p-0"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>                  
+                <CardContent className="h-[800px] overflow-y-auto">
+                  <div className="h-full">
+                    {/* Slide 0: Trascrizioni */}
+                    {currentSlide === 0 && (
+                      <div className="h-full">
+                        <div className="mb-4">
+                          <h3 className="text-lg font-semibold mb-3">
+                            Trascrizioni - {selectedSessions.size > 0 ? 
+                              `${selectedSessions.size} sessions selected` : 
+                              'No session selected'}
+                          </h3>
+                          
+                          {/* Search Box */}
+                          {selectedSessions.size > 0 && (
+                            <div className="relative mb-4">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <input
+                                  type="text"
+                                  value={searchTerm}
+                                  onChange={(e) => setSearchTerm(e.target.value)}
+                                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                  placeholder="Search words in transcripts..."
+                                />
                                 {searchTerm && (
-                                  <div className="mt-2 text-xs text-gray-500">
-                                    {countSearchOccurrences(searchTerm)} results found
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <div className="h-[660px] overflow-y-auto bg-gray-50 p-4 rounded text-sm space-y-4">
-                            {selectedSessions.size > 0 ? (
-                              getSelectedSessionsData().map((session, index) => (
-                                <div key={session.id} className="border-b pb-3 last:border-b-0">
-                                  <div className="font-semibold text-blue-700 mb-2">
-                                    {session.title} - {new Date(session.createdAt).toLocaleDateString('it-IT')}
-                                  </div>
-                                  <div className="text-gray-700">
-                                    {session.transcript ? (
-                                      <div 
-                                        dangerouslySetInnerHTML={{
-                                          __html: highlightSearchTerm(session.transcript, searchTerm)
-                                        }}
-                                      />
-                                    ) : (
-                                      <span className="text-gray-400 italic">
-                                        Transcript not available (Status: {session.status})
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="h-full flex items-center justify-center text-gray-500">
-                                Select one or more sessions to view the transcripts
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Slide 1: Topic Modelling */}
-                      {currentSlide === 1 && (
-                        <div className="min-h-full">
-                          {/* Cache Status Indicator - only show if no cached data available */}
-                          {selectedSessions.size > 0 && !hasAllTopicAnalyses && (
-                            <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
-                              <div className="flex items-center gap-2">
-                                <BarChart3 className="h-4 w-4 text-gray-500" />
-                                <span className="text-sm text-gray-600">
-                                  Click "Analyze Topics" to run new analyses
-                                </span>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Banner removed - topic analysis cache notification */}
-
-                          <TopicAnalysisComponent 
-                            selectedSessions={getSelectedSessionsData().map(session => ({
-                              id: session.id,
-                              title: session.title,
-                              transcript: session.transcript || ""
-                            }))}
-                            combinedTranscript={getCombinedTranscript()}
-                            onAnalysisComplete={async (result) => {
-                              console.log('Topic analysis completed:', result)
-                              
-                              // Salva nella cache se abbiamo risultati
-                              if (result && getSelectedSessionsData().length > 0) {
-                                const firstSessionId = getSelectedSessionsData()[0].id
-                                await saveSessionAnalysis(firstSessionId, 'topics', result)
-                                console.log('✅ Analisi topic salvata nella cache')
-                              }
-                            }}
-                            cachedData={(() => {
-                              const topicData = hasAllTopicAnalyses ? getTopicData() : undefined
-                              console.log('🎯 Topic cached data being passed:', topicData)
-                              console.log('🎯 hasAllTopicAnalyses:', hasAllTopicAnalyses)
-                              return topicData
-                            })()}
-                          />
-                        </div>
-                      )}                      {/* Slide 2: Sentiment Analysis */}
-                      {currentSlide === 2 && (
-                        <div className="h-full pt-6">
-                          {/* Cache Status Indicator - only show if no cached data available */}
-                          {selectedSessions.size > 0 && !hasAllSentimentAnalyses && (
-                            <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
-                              <div className="flex items-center gap-2">
-                                <Heart className="h-4 w-4 text-gray-500" />
-                                <span className="text-sm text-gray-600">
-                                  Click "Analyze Emotions" to run new analyses
-                                </span>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Banner removed - sentiment analysis cache notification */}
-                          
-                          <SentimentAnalysis 
-                            selectedSessions={getSelectedSessionsData().map(session => ({
-                              id: session.id,
-                              title: session.title,
-                              transcript: session.transcript || "",
-                              sessionDate: session.sessionDate
-                            }))}
-                            onAnalysisComplete={async (result) => {
-                              console.log('🎯 Sentiment analysis completed:', result)
-                              
-                              // ONLY transform data, don't trigger more requests
-                              if (result.success && result.individual_sessions) {
-                                console.log('🔄 Setting emotionAnalysisResults:', result.individual_sessions)
-                                setEmotionAnalysisResults(result.individual_sessions)
-                                
-                                // Salva ogni sessione nella cache (do this quietly)
-                                try {
-                                  const sessions = result.individual_sessions
-                                  for (const session of sessions) {
-                                    await saveSessionAnalysis(session.session_id, 'sentiment', session.analysis)
-                                  }
-                                  console.log('✅ Analisi sentiment salvate nella cache')
-                                } catch (error) {
-                                  console.error('⚠️ Error saving to cache (non-blocking):', error)
-                                }
-                              }
-                            }}
-                            cachedData={hasAllSentimentAnalyses ? getSentimentData() : undefined}
-                          />
-                        </div>
-                      )}
-
-                      {/* Slide 3: Analisi Semantica */}
-                      {currentSlide === 3 && (
-                        <div className="h-full flex flex-col gap-6">
-                          <div className="mb-2">
-                            <h3 className="text-lg font-semibold flex items-center gap-2">
-                              <Network className="h-5 w-5 text-blue-700" />
-                              Word Analysis
-                            </h3>
-                            <p className="text-gray-600 text-sm mt-1">
-                              Explore the cognitive and emotional context of a keyword in the selected sessions.<br/>
-                              Enter a word and view its semantic network and associated emotional profile.
-                            </p>
-                          </div>
-                          
-                          {/* Menu Analisi Passate */}
-                          {Object.keys(pastAnalyses).length > 0 && (
-                            <div className="mb-4">
-                              <h4 className="text-md font-medium mb-3 flex items-center gap-2">
-                                Past Analyses
-                              </h4>
-                              <div className="flex gap-3 items-center">
-                                <select
-                                  value={selectedPastAnalysis}
-                                  onChange={(e) => {
-                                    setSelectedPastAnalysis(e.target.value)
-                                    if (e.target.value && pastAnalyses[e.target.value]) {
-                                      setSemanticFrameResult(pastAnalyses[e.target.value])
-                                      setTargetWord(e.target.value)
-                                      setSemanticFrameError(null)
-                                    }
-                                  }}
-                                  className="border rounded px-3 py-2 bg-white min-w-[200px] focus:ring-2 focus:ring-blue-400"
-                                >
-                                  <option value="">Select previous search </option>
-                                  {Object.keys(pastAnalyses).map(word => (
-                                    <option key={word} value={word}>
-                                      {word}
-                                    </option>
-                                  ))}
-                                </select>
-                                {selectedPastAnalysis && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedPastAnalysis("")
-                                      setSemanticFrameResult(null)
-                                      setTargetWord("")
-                                    }}
+                                  <button
+                                    onClick={() => setSearchTerm("")}
+                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600"
                                   >
                                     <X className="h-4 w-4" />
-                                  </Button>
+                                  </button>
                                 )}
                               </div>
-                              <p className="text-xs text-gray-500 mt-2">
-                                Select a previous analysis to view it again, or enter a new word below.
-                              </p>
-                            </div>
-                          )}
-                          
-                          {/* Input Controls */}
-                          <div className="flex flex-col md:flex-row gap-4 items-start">
-                            <input
-                              type="text"
-                              value={targetWord}
-                              onChange={(e) => setTargetWord(e.target.value)}
-                              className="border rounded px-3 py-2 w-full md:w-64 focus:ring-2 focus:ring-blue-400"
-                              placeholder="E.g.: mother, work, love..."
-                              disabled={semanticFrameLoading}
-                              onKeyPress={(e) => {
-                                if (e.key === 'Enter' && !semanticFrameLoading) {
-                                  performSemanticFrameAnalysis()
-                                }
-                              }}
-                            />
-                            <Button 
-                              onClick={() => performSemanticFrameAnalysis()}
-                              disabled={semanticFrameLoading || !targetWord.trim() || selectedSessions.size === 0}
-                              variant="default" 
-                              className="w-full md:w-auto"
-                            >
-                              {semanticFrameLoading ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                  Analyzing...
-                                </>
-                              ) : (
-                                <>
-                                  <Network className="mr-2 h-4 w-4" />
-                                  Analyze Frame
-                                </>
+                              {searchTerm && (
+                                <div className="mt-2 text-xs text-gray-500">
+                                  {countSearchOccurrences(searchTerm)} results found
+                                </div>
                               )}
-                            </Button>
-                          </div>
-
-                          {/* Error Message */}
-                          {semanticFrameError && (
-                            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                              <strong>Error:</strong> {semanticFrameError}
                             </div>
                           )}
-
-                          {/* Results Visualization */}
-                          <div className="flex-1 flex flex-col min-h-[400px]">
-                            {semanticFrameResult ? (
-                              <div className="space-y-6">
-                                {/* Network Visualization */}
-                                {semanticFrameResult.visualization?.frame_plot && (
-                                  <div className="bg-white rounded-lg border p-4">
-                                    <h4 className="font-semibold mb-3 flex items-center gap-2">
-                                      <Network className="h-5 w-5 text-blue-600" />
-                                      Semantic Network for "{semanticFrameResult.target_word}"
-                                    </h4>
-                                    <div className="flex justify-center mb-4">
-                                      <img 
-                                        src={`data:image/png;base64,${semanticFrameResult.visualization.frame_plot}`}
-                                        alt={`Semantic network for ${semanticFrameResult.target_word}`}
-                                        className="max-w-full h-auto rounded border"
-                                        style={{ maxHeight: '500px' }}
-                                      />
-                                    </div>
-                                    
-                                    {/* Legend */}
-                                    <div className="bg-gray-50 rounded-lg p-3 mt-4">
-                                      <h5 className="text-sm font-medium text-gray-700 mb-2">📋 Color Legend</h5>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                                          <span><strong>Red:</strong> Words with negative valence</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                                          <span><strong>Green:</strong> Words with positive valence</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-3 h-3 rounded-full bg-gray-500"></div>
-                                          <span><strong>Gray:</strong> Neutral words</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                                          <span><strong>Purple:</strong> Contrastive connections</span>
-                                        </div>
-                                      </div>
-                                      <div className="mt-2 text-xs text-gray-600">
-                                        <p><strong>Font size:</strong> Proportional to the centrality/importance of the word in the text</p>
-                                        <p><strong>Connections:</strong> Lines indicate syntactic relationships between words</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Semantic Network Visualization */}
-
-                                {semanticFrameResult.network_plot && (
-                                  <div className="bg-white rounded-lg border p-4 mb-4">
-                                    <h4 className="font-semibold mb-3 text-gray-700 flex items-center gap-2">
-                                      <Network className="w-5 h-5 text-green-600" />
-                                      🎯 Semantic Network Generated by EmoAtlas
-                                    </h4>
-                                    <div className="flex justify-center bg-gray-50 p-4 rounded-lg">
-                                      <img 
-                                        src={`data:image/png;base64,${semanticFrameResult.network_plot}`}
-                                        alt={`Semantic network for the word "${targetWord}"`}
-                                        className="max-w-full h-auto rounded-lg shadow-lg border-2 border-blue-200"
-                                        style={{ maxHeight: '600px', maxWidth: '100%' }}
-                                        onLoad={() => console.log('✅ Network plot image loaded successfully!')}
-                                        onError={(e) => {
-                                          console.error('❌ Errore nel caricamento immagine network plot:', e);
-                                          console.error('❌ Image src length:', e.currentTarget.src.length);
-                                          console.error('❌ Base64 data length:', semanticFrameResult.network_plot.length);
-                                        }}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
-                                <span className="text-gray-400 text-center">
-                                  <Network className="w-12 h-12 mx-auto mb-2" />
-                                  <span className="block font-medium">Visualizzazione frame semantico</span>
-                                  <span className="block text-sm mt-1">
-                                    {selectedSessions.size === 0 
-                                      ? "Select sessions and enter a word to start the analysis"
-                                      : "Enter a keyword and click 'Analyze Frame'"
-                                    }
-                                  </span>
-                                </span>
-                              </div>
-                            )}
-                          </div>
                         </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>            </div>            {/* Historical Sentiment Trends - Only visible in Sentiment Analysis tab */}
+                        <div className="h-[660px] overflow-y-auto bg-gray-50 p-4 rounded text-sm space-y-4">
+                          {selectedSessions.size > 0 ? (
+                            getSelectedSessionsData().map((session, index) => (
+                              <div key={session.id} className="border-b pb-3 last:border-b-0">
+                                <div className="font-semibold text-blue-700 mb-2">
+                                  {session.title} - {new Date(session.createdAt).toLocaleDateString('it-IT')}
+                                </div>
+                                <div className="text-gray-700">
+                                  {session.transcript ? (
+                                    <div 
+                                      dangerouslySetInnerHTML={{
+                                        __html: highlightSearchTerm(session.transcript, searchTerm)
+                                      }}
+                                    />
+                                  ) : (
+                                    <span className="text-gray-400 italic">
+                                      Transcript not available (Status: {session.status})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="h-full flex items-center justify-center text-gray-500">
+                              Select one or more sessions to view the transcripts
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Slide 1: Topic Modelling */}
+                    {currentSlide === 1 && (
+                      <div className="min-h-full">
+                        {/* Cache Status Indicator - only show if no cached data available */}
+                        {selectedSessions.size > 0 && !hasAllTopicAnalyses && (
+                          <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                            <div className="flex items-center gap-2">
+                              <BarChart3 className="h-4 w-4 text-gray-500" />
+                              <span className="text-sm text-gray-600">
+                                Click "Analyze Topics" to run new analyses
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Banner removed - topic analysis cache notification */}
+
+                        <TopicAnalysisComponent 
+                          selectedSessions={getSelectedSessionsData().map(session => ({
+                            id: session.id,
+                            title: session.title,
+                            transcript: session.transcript || ""
+                          }))}
+                          combinedTranscript={getCombinedTranscript()}
+                          onAnalysisComplete={async (result) => {
+                            console.log('Topic analysis completed:', result)
+                            
+                            // Salva nella cache se abbiamo risultati
+                            if (result && getSelectedSessionsData().length > 0) {
+                              const firstSessionId = getSelectedSessionsData()[0].id
+                              await saveSessionAnalysis(firstSessionId, 'topics', result)
+                              console.log('✅ Analisi topic salvata nella cache')
+                            }
+                          }}
+                          cachedData={(() => {
+                            const topicData = hasAllTopicAnalyses ? getTopicData() : undefined
+                            console.log('🎯 Topic cached data being passed:', topicData)
+                            console.log('🎯 hasAllTopicAnalyses:', hasAllTopicAnalyses)
+                            return topicData
+                          })()}
+                        />
+                      </div>
+                    )}                      {/* Slide 2: Sentiment Analysis */}
+                    {currentSlide === 2 && (
+                      <div className="h-full pt-6">
+                        {/* Cache Status Indicator - only show if no cached data available */}
+                        {selectedSessions.size > 0 && !hasAllSentimentAnalyses && (
+                          <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                            <div className="flex items-center gap-2">
+                              <Heart className="h-4 w-4 text-gray-500" />
+                              <span className="text-sm text-gray-600">
+                                Click "Analyze Emotions" to run new analyses
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Banner removed - sentiment analysis cache notification */}
+                        
+                        <SentimentAnalysis 
+                          selectedSessions={getSelectedSessionsData().map(session => ({
+                            id: session.id,
+                            title: session.title,
+                            transcript: session.transcript || "",
+                            sessionDate: session.sessionDate
+                          }))}
+                          onAnalysisComplete={async (result) => {
+                            console.log('🎯 Sentiment analysis completed:', result)
+                            
+                            // ONLY transform data, don't trigger more requests
+                            if (result.success && result.individual_sessions) {
+                              console.log('🔄 Setting emotionAnalysisResults:', result.individual_sessions)
+                              setEmotionAnalysisResults(result.individual_sessions)
+                              
+                              // Salva ogni sessione nella cache (do this quietly)
+                              try {
+                                const sessions = result.individual_sessions
+                                for (const session of sessions) {
+                                  await saveSessionAnalysis(session.session_id, 'sentiment', session.analysis)
+                                }
+                                console.log('✅ Analisi sentiment salvate nella cache')
+                              } catch (error) {
+                                console.error('⚠️ Error saving to cache (non-blocking):', error)
+                              }
+                            }
+                          }}
+                          cachedData={hasAllSentimentAnalyses ? getSentimentData() : undefined}
+                        />
+                      </div>
+                    )}
+
+                    {/* Slide 3: Analisi Semantica */}
+                    {currentSlide === 3 && (
+                      <div className="h-full flex flex-col gap-6">
+                        <div className="mb-2">
+                          <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <Network className="h-5 w-5 text-blue-700" />
+                            Word Analysis
+                          </h3>
+                          <p className="text-gray-600 text-sm mt-1">
+                            Explore the cognitive and emotional context of a keyword in the selected sessions.<br/>
+                            Enter a word and view its semantic network and associated emotional profile.
+                          </p>
+                        </div>
+                        
+                        {/* Menu Analisi Passate */}
+                        {Object.keys(pastAnalyses).length > 0 && (
+                          <div className="mb-4">
+                            <h4 className="text-md font-medium mb-3 flex items-center gap-2">
+                              Past Analyses
+                            </h4>
+                            <div className="flex gap-3 items-center">
+                              <select
+                                value={selectedPastAnalysis}
+                                onChange={(e) => {
+                                  setSelectedPastAnalysis(e.target.value)
+                                  if (e.target.value && pastAnalyses[e.target.value]) {
+                                    setSemanticFrameResult(pastAnalyses[e.target.value])
+                                    setTargetWord(e.target.value)
+                                    setSemanticFrameError(null)
+                                  }
+                                }}
+                                className="border rounded px-3 py-2 bg-white min-w-[200px] focus:ring-2 focus:ring-blue-400"
+                              >
+                                <option value="">Select previous search </option>
+                                {Object.keys(pastAnalyses).map(word => (
+                                  <option key={word} value={word}>
+                                    {word}
+                                  </option>
+                                ))}
+                              </select>
+                              {selectedPastAnalysis && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedPastAnalysis("")
+                                    setSemanticFrameResult(null)
+                                    setTargetWord("")
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">
+                              Select a previous analysis to view it again, or enter a new word below.
+                            </p>
+                          </div>
+                        )}
+                        
+                        {/* Input Controls */}
+                        <div className="flex flex-col md:flex-row gap-4 items-start">
+                          <input
+                            type="text"
+                            value={targetWord}
+                            onChange={(e) => setTargetWord(e.target.value)}
+                            className="border rounded px-3 py-2 w-full md:w-64 focus:ring-2 focus:ring-blue-400"
+                            placeholder="E.g.: mother, work, love..."
+                            disabled={semanticFrameLoading}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter' && !semanticFrameLoading) {
+                                performSemanticFrameAnalysis()
+                              }
+                            }}
+                          />
+                          <Button 
+                            onClick={() => performSemanticFrameAnalysis()}
+                            disabled={semanticFrameLoading || !targetWord.trim() || selectedSessions.size === 0}
+                            variant="default" 
+                            className="w-full md:w-auto"
+                          >
+                            {semanticFrameLoading ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                Analyzing...
+                              </>
+                            ) : (
+                              <>
+                                <Network className="mr-2 h-4 w-4" />
+                                Analyze Frame
+                              </>
+                            )}
+                          </Button>
+                        </div>
+
+                        {/* Error Message */}
+                        {semanticFrameError && (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                            <strong>Error:</strong> {semanticFrameError}
+                          </div>
+                        )}
+
+                        {/* Results Visualization */}
+                        <div className="flex-1 flex flex-col min-h-[400px]">
+                          {semanticFrameResult ? (
+                            <div className="space-y-6">
+                              {/* Network Visualization */}
+                              {semanticFrameResult.visualization?.frame_plot && (
+                                <div className="bg-white rounded-lg border p-4">
+                                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                    <Network className="h-5 w-5 text-blue-600" />
+                                    Semantic Network for "{semanticFrameResult.target_word}"
+                                  </h4>
+                                  <div className="flex justify-center mb-4">
+                                    <img 
+                                      src={`data:image/png;base64,${semanticFrameResult.visualization.frame_plot}`}
+                                      alt={`Semantic network for ${semanticFrameResult.target_word}`}
+                                      className="max-w-full h-auto rounded border"
+                                      style={{ maxHeight: '500px' }}
+                                    />
+                                  </div>
+                                  
+                                  {/* Legend */}
+                                  <div className="bg-gray-50 rounded-lg p-3 mt-4">
+                                    <h5 className="text-sm font-medium text-gray-700 mb-2">📋 Color Legend</h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                                        <span><strong>Red:</strong> Words with negative valence</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                        <span><strong>Green:</strong> Words with positive valence</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+                                        <span><strong>Gray:</strong> Neutral words</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                                        <span><strong>Purple:</strong> Contrastive connections</span>
+                                      </div>
+                                    </div>
+                                    <div className="mt-2 text-xs text-gray-600">
+                                      <p><strong>Font size:</strong> Proportional to the centrality/importance of the word in the text</p>
+                                      <p><strong>Connections:</strong> Lines indicate syntactic relationships between words</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Semantic Network Visualization */}
+
+                              {semanticFrameResult.network_plot && (
+                                <div className="bg-white rounded-lg border p-4 mb-4">
+                                  <h4 className="font-semibold mb-3 text-gray-700 flex items-center gap-2">
+                                    <Network className="w-5 h-5 text-green-600" />
+                                    🎯 Semantic Network Generated by EmoAtlas
+                                  </h4>
+                                  <div className="flex justify-center bg-gray-50 p-4 rounded-lg">
+                                    <img 
+                                      src={`data:image/png;base64,${semanticFrameResult.network_plot}`}
+                                      alt={`Semantic network for the word "${targetWord}"`}
+                                      className="max-w-full h-auto rounded-lg shadow-lg border-2 border-blue-200"
+                                      style={{ maxHeight: '600px', maxWidth: '100%' }}
+                                      onLoad={() => console.log('✅ Network plot image loaded successfully!')}
+                                      onError={(e) => {
+                                        console.error('❌ Errore nel caricamento immagine network plot:', e);
+                                        console.error('❌ Image src length:', e.currentTarget.src.length);
+                                        console.error('❌ Base64 data length:', semanticFrameResult.network_plot.length);
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
+                              <span className="text-gray-400 text-center">
+                                <Network className="w-12 h-12 mx-auto mb-2" />
+                                <span className="block font-medium">Visualizzazione frame semantico</span>
+                                <span className="block text-sm mt-1">
+                                  {selectedSessions.size === 0 
+                                    ? "Select sessions and enter a word to start the analysis"
+                                    : "Enter a keyword and click 'Analyze Frame'"
+                                  }
+                                </span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>            {/* Historical Sentiment Trends - Only visible in Sentiment Analysis tab */}
             {currentSlide === 2 && (
               <Card className="h-[600px]">
                 <CardHeader>
@@ -1110,15 +1120,14 @@ export default function PatientAnalysisPage() {
               </Card>
             )}
 
-            {/* Notes Section */}
-            {getSelectedSessionsData().length > 0 && (
-              <div className="space-y-4 mt-6">
-                {getSelectedSessionsData().map((session) => (
-                  <Card key={session.id}>
+            {/* Notes Section - ora a destra */}
+              <div className="col-span-3 flex flex-col gap-4 h-[900px] overflow-y-auto">
+                {getSelectedSessionsData().length > 0 && getSelectedSessionsData().map((session) => (
+                  <Card key={session.id} className="flex-0">
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-3">
                         <MessageSquare className="h-5 w-5" />
-                        Therapeutic Notes - {session.title}
+                        Note Terapeutiche - {session.title}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -1127,17 +1136,17 @@ export default function PatientAnalysisPage() {
                           <textarea
                             value={sessionNotes[session.id] || ""}
                             onChange={e => setSessionNotes(prev => ({ ...prev, [session.id]: e.target.value }))}
-                            placeholder="Here the therapist can freely write personal notes and remarks"
+                            placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
                             className="w-full h-32 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             autoFocus
                           />
                           <div className="flex gap-2 justify-end">
                             <Button size="sm" variant="outline" onClick={() => handleCancelEdit(session.id)}>
-                              Cancel
+                              Annulla
                             </Button>
                             <Button size="sm" onClick={() => handleSaveSessionNote(session.id)} disabled={savingNotes[session.id]}>
                               <Save className="h-3 w-3 mr-1" />
-                              {savingNotes[session.id] ? "Saving..." : "Save"}
+                              {savingNotes[session.id] ? "Salvataggio..." : "Salva"}
                             </Button>
                           </div>
                         </div>
@@ -1148,12 +1157,12 @@ export default function PatientAnalysisPage() {
                             onClick={() => handleEnterEdit(session.id)}
                             tabIndex={0}
                             role="textbox"
-                            title="Click to edit note"
+                            title="Clicca per modificare la nota"
                             style={{ minHeight: '8rem' }}
                           >
                             {sessionNotes[session.id] || (
                               <span className="text-gray-500 italic">
-                                Here the therapist can freely write personal notes and remarks
+                                Qui il terapeuta può scrivere liberamente note e osservazioni personali
                               </span>
                             )}
                           </div>
@@ -1163,7 +1172,6 @@ export default function PatientAnalysisPage() {
                   </Card>
                 ))}
               </div>
-            )}
           </div>
         )}
       </div>

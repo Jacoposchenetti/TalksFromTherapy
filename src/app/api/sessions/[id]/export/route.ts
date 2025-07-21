@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse, sanitizeInput, hasResourceAccess } from "@/lib/auth-utils"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 import { jsPDF } from "jspdf"
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx"
 import { decryptIfEncrypted } from "@/lib/encryption"
@@ -30,22 +30,43 @@ export async function GET(
       return createErrorResponse("Formato non valido. Usa 'txt', 'pdf', o 'docx'", 400)
     }
 
+    // Usa la service key per bypassare RLS come fanno le altre API
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    console.log('[EXPORT DEBUG] sessionId:', sessionId)
+    console.log('[EXPORT DEBUG] userId:', authResult.user?.id)
+    console.log('[EXPORT DEBUG] Query params:', {
+      id: sessionId,
+      userId: authResult.user?.id,
+      isActive: true
+    })
+
     // Find the session and verify ownership SICURO
-    const { data: sessionData, error: sessionError } = await supabase
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .select(`
         id,
         title,
-        session_date,
+        sessionDate,
         duration,
         transcript,
+        status,
         userId,
-        patients(id, initials, name, userId)
+        patients (
+          id,
+          initials,
+          userId
+        )
       `)
       .eq('id', sessionId)
-      .eq('userId', authResult.user!.id) // CRITICAL: Verifica ownership
+      .eq('userId', authResult.user!.id)
       .eq('isActive', true)
       .single()
+
+    console.log('[EXPORT DEBUG] Query result:', { data: sessionData, error: sessionError })
 
     if (sessionError || !sessionData) {
       return createErrorResponse("Sessione non trovata", 404)
@@ -75,29 +96,29 @@ export async function GET(
     }
 
     // Generate filename with safe characters
-    const date = new Date(sessionData.session_date).toISOString().split('T')[0]
+    const date = new Date(sessionData.sessionDate).toISOString().split('T')[0]
     const safeTitle = sanitizeInput(sessionData.title || 'sessione').replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_')
-    const patientInitials = sessionData.patients && sessionData.patients[0] 
-      ? sanitizeInput(sessionData.patients[0].initials || 'paziente')
-      : 'paziente'
-    const filename = `${patientInitials}_${date}_${safeTitle}`
+    const pazienteInitials = sessionData.patients && Array.isArray(sessionData.patients) && sessionData.patients.length > 0
+      ? sessionData.patients[0].initials
+      : 'N/A';
+    const filename = `${pazienteInitials}_${date}_${safeTitle}`
 
     if (format === 'pdf') {
       try {
-        return await generatePDFExport(sessionData, filename)
+        return await generatePDFExport(sessionData, filename, pazienteInitials)
       } catch (pdfError) {
         console.error("PDF generation error:", pdfError)
         return createErrorResponse("Errore nella generazione del PDF", 500)
       }
     } else if (format === 'docx') {
       try {
-        return await generateDOCXExport(sessionData, filename)
+        return await generateDOCXExport(sessionData, filename, pazienteInitials)
       } catch (docxError) {
         console.error("DOCX generation error:", docxError)
         return createErrorResponse("Errore nella generazione del DOCX", 500)
       }
     } else {
-      return generateTXTExport(sessionData, filename)
+      return generateTXTExport(sessionData, filename, pazienteInitials)
     }
   } catch (error) {
     console.error("Export error:", error)
@@ -105,8 +126,8 @@ export async function GET(
   }
 }
 
-async function generateTXTExport(sessionData: any, filename: string) {
-  const date = new Date(sessionData.session_date).toLocaleDateString('it-IT')
+async function generateTXTExport(sessionData: any, filename: string, pazienteInitials: string) {
+  const date = new Date(sessionData.sessionDate).toLocaleDateString('it-IT')
   const duration = sessionData.duration 
     ? `${Math.floor(sessionData.duration / 60)}:${(sessionData.duration % 60).toString().padStart(2, '0')}` 
     : 'N/A'
@@ -114,7 +135,7 @@ async function generateTXTExport(sessionData: any, filename: string) {
   const content = `TRASCRIZIONE SESSIONE TERAPEUTICA
 ==================================
 
-Paziente: ${sessionData.patients[0].initials}
+Paziente: ${pazienteInitials}
 Titolo Sessione: ${sessionData.title}
 Data: ${date}
 Durata: ${duration}
@@ -137,12 +158,12 @@ Esportato il: ${new Date().toLocaleDateString('it-IT')} alle ${new Date().toLoca
   })
 }
 
-async function generatePDFExport(sessionData: any, filename: string) {
+async function generatePDFExport(sessionData: any, filename: string, pazienteInitials: string) {
   try {
     console.log("Generating PDF with jsPDF...")
     
     // Prepare data
-    const date = new Date(sessionData.session_date).toLocaleDateString('it-IT')
+    const date = new Date(sessionData.sessionDate).toLocaleDateString('it-IT')
     const duration = sessionData.duration 
       ? `${Math.floor(sessionData.duration / 60)}:${(sessionData.duration % 60).toString().padStart(2, '0')}` 
       : 'N/A'
@@ -189,7 +210,7 @@ async function generatePDFExport(sessionData: any, filename: string) {
 
     // Info table
     const infoData = [
-      ['Paziente:', sessionData.patients[0].initials],
+      ['Paziente:', pazienteInitials],
       ['Titolo Sessione:', sessionData.title],
       ['Data:', date],
       ['Durata:', duration],
@@ -253,12 +274,12 @@ async function generatePDFExport(sessionData: any, filename: string) {
   }
 }
 
-async function generateDOCXExport(sessionData: any, filename: string) {
+async function generateDOCXExport(sessionData: any, filename: string, pazienteInitials: string) {
   try {
     console.log("Generating DOCX with docx library...")
     
     // Prepare data
-    const date = new Date(sessionData.session_date).toLocaleDateString('it-IT')
+    const date = new Date(sessionData.sessionDate).toLocaleDateString('it-IT')
     const duration = sessionData.duration 
       ? `${Math.floor(sessionData.duration / 60)}:${(sessionData.duration % 60).toString().padStart(2, '0')}` 
       : 'N/A'
@@ -290,7 +311,7 @@ async function generateDOCXExport(sessionData: any, filename: string) {
           new Paragraph({
             children: [
               new TextRun({ text: "Paziente: ", bold: true }),
-              new TextRun({ text: sessionData.patients[0].initials }),
+              new TextRun({ text: pazienteInitials }),
             ],
           }),
           

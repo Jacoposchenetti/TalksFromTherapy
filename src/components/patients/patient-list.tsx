@@ -63,7 +63,7 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
       {/* Search Bar */}
       <div className="flex gap-2">        <Input
           type="text"
-          placeholder="Search patients by initials or notes..."
+          placeholder="Cerca pazienti per iniziali o note..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="flex-1"
@@ -73,8 +73,8 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
       {/* Results Summary */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Users className="h-4 w-4" />
-        {filteredPatients.length} {filteredPatients.length === 1 ? 'patient found' : 'patients found'}
-        {searchTerm && ` for "${searchTerm}"`}
+        {filteredPatients.length} {filteredPatients.length === 1 ? 'paziente trovato' : 'pazienti trovati'}
+        {searchTerm && ` per "${searchTerm}"`}
       </div>
 
       {/* Patient List */}
@@ -84,22 +84,22 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
             <Users className="h-12 w-12 text-muted-foreground mb-4" />
             {searchTerm ? (
               <>
-                <h3 className="text-lg font-semibold mb-2">No patient found</h3>
+                <h3 className="text-lg font-semibold mb-2">Nessun paziente trovato</h3>
                 <p className="text-muted-foreground text-center mb-4">
-                  No patient matches your search.
+                  Nessun paziente corrisponde alla tua ricerca.
                 </p>
                 <Button 
                   variant="outline" 
                   onClick={() => setSearchTerm("")}
                 >
-                  Show all patients
+                  Mostra tutti i pazienti
                 </Button>
               </>
             ) : (
               <>
-                <h3 className="text-lg font-semibold mb-2">No patients registered</h3>
+                <h3 className="text-lg font-semibold mb-2">Nessun paziente registrato</h3>
                 <p className="text-muted-foreground text-center">
-                  Start by adding your first patient.
+                  Inizia aggiungendo il tuo primo paziente.
                 </p>
               </>
             )}
@@ -118,7 +118,7 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
                       {patient.dateOfBirth && (
                         <span className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
-                          {calculateAge(patient.dateOfBirth)} years old
+                          {calculateAge(patient.dateOfBirth)} anni
                           <span className="text-xs">
                             ({formatDate(patient.dateOfBirth)})
                           </span>
@@ -132,7 +132,7 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
                       onClick={() => onViewSessions(patient.id)}
                     >
                       <Eye className="h-4 w-4 mr-1" />
-                      Sessions
+                      Sessioni
                     </Button>
                     <Button
                       variant="outline"
@@ -140,7 +140,7 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
                       onClick={() => onViewAnalysis(patient.id)}
                     >
                       <BarChart3 className="h-4 w-4 mr-1" />
-                      Analysis
+                      Analisi
                     </Button>
                     <Button
                       variant="outline"
@@ -148,7 +148,7 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
                       onClick={() => onEdit(patient)}
                     >
                       <Edit className="h-4 w-4 mr-1" />
-                      Edit
+                      Modifica
                     </Button>
                     <Button
                       variant={deleteConfirm === patient.id ? "destructive" : "outline"}
@@ -156,7 +156,7 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
                       onClick={() => handleDeleteClick(patient.id)}
                     >
                       <Trash2 className="h-4 w-4 mr-1" />
-                      {deleteConfirm === patient.id ? "Confirm" : "Delete"}
+                      {deleteConfirm === patient.id ? "Conferma" : "Elimina"}
                     </Button>
                   </div>
                 </div>
@@ -168,7 +168,7 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
                     <div className="flex items-start gap-2">
                       <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="text-sm font-medium mb-1">Notes:</p>
+                        <p className="text-sm font-medium mb-1">Note:</p>
                         <p className="text-sm text-muted-foreground">{patient.notes}</p>
                       </div>
                     </div>
@@ -178,8 +178,8 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
               
               <CardContent className="pt-2">
                 <div className="text-xs text-muted-foreground">
-                  Created on {formatDate(patient.createdAt)} • 
-                  Last updated on {formatDate(patient.updatedAt)}
+                  Creato il {formatDate(patient.createdAt)} • 
+                  Ultima modifica il {formatDate(patient.updatedAt)}
                 </div>
               </CardContent>
             </Card>
@@ -193,8 +193,8 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
             <div className="flex items-center gap-2 text-destructive">
               <Trash2 className="h-4 w-4" />
               <p className="text-sm">
-                Click "Confirm" again to permanently delete the patient.
-                This action cannot be undone.
+                Premi "Conferma" di nuovo per eliminare definitivamente il paziente.<br />
+                Questa azione non può essere annullata.
               </p>
             </div>
           </CardContent>

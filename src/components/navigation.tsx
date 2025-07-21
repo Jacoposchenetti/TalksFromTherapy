@@ -29,7 +29,6 @@ export function Navigation() {
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Patients", href: "/patients", icon: Users },
-    { name: "Sessions", href: "/sessions", icon: FileAudio },
   ]
 
   const handleLogout = async () => {

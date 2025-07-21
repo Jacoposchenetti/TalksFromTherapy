@@ -907,23 +907,6 @@ Rispondi SOLO con JSON:
         </Card>
       ) : (
         <div className="grid gap-6">
-          {/* Informazioni sulla trascrizione */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Transcript Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="font-medium">Length:</span> {combinedTranscript.length} characters
-                </div>
-                <div>
-                  <span className="font-medium">Words:</span> {combinedTranscript.split(' ').length} words
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Risultati della ricerca personalizzata */}
           {customSearchResult && (
             <Card>
@@ -1006,13 +989,13 @@ Rispondi SOLO con JSON:
                         const segmentMap = new Map();
                         
                         customSearchResult.results.forEach((sessionResult) => {
-                          sessionResult.topics.forEach((topicResult) => {
+                          sessionResult.topics.forEach((topicResult, topicIdx) => {
                             topicResult.relevantSegments.forEach(segment => {
                               const startIndex = combinedTranscript.indexOf(segment.text);
                               if (startIndex !== -1) {
                                 segmentMap.set(startIndex, {
                                   text: segment.text,
-                                  topicIndex: topicResult.topic_id, // Use topic_id from topicResult
+                                  topicIndex: topicIdx + 1, // Usa l'indice come topicIndex
                                   topic: topicResult.topic,
                                   confidence: segment.confidence,
                                   endIndex: startIndex + segment.text.length
