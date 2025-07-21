@@ -121,12 +121,15 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const playSession = (session: Session) => {
-    if (!audioRef.current || !session.audioUrl) return
+  const playSession = async (session: Session) => {
+    if (!audioRef.current || !session.audioUrl) {
+      console.warn('[AUDIO DEBUG] audioRef o audioUrl mancante', { audioRef: !!audioRef.current, audioUrl: session.audioUrl })
+      return
+    }
 
     const audio = audioRef.current
     
-    // If same session, just toggle play/pause
+    // Se la stessa sessione è già selezionata, toggla play/pause
     if (state.currentSession?.id === session.id) {
       if (state.isPlaying) {
         audio.pause()
@@ -136,7 +139,6 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    // New session - load and play
     setState(prev => ({ 
       ...prev, 
       currentSession: session,
@@ -146,9 +148,24 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       error: null
     }))
 
-    audio.src = `/api/audio/${session.id}`
-    audio.load()
-    audio.play().catch(console.error)
+    try {
+      console.log('[AUDIO DEBUG] Chiedo signed URL per sessione', session.id)
+      const res = await fetch(`/api/sessions/${session.id}/audio`)
+      if (!res.ok) {
+        console.error('[AUDIO DEBUG] Errore fetch signed URL', res.status, res.statusText)
+        throw new Error('Impossibile ottenere URL audio')
+      }
+      const { url } = await res.json()
+      console.log('[AUDIO DEBUG] Signed URL ricevuto:', url)
+      console.log('[AUDIO DEBUG] audio.src PRIMA:', audio.src)
+      audio.src = url
+      console.log('[AUDIO DEBUG] audio.src DOPO:', audio.src)
+      audio.load()
+      audio.play().catch(e => console.error('[AUDIO DEBUG] Errore play:', e))
+    } catch (err) {
+      console.error('[AUDIO DEBUG] Errore generale playSession:', err)
+      setState(prev => ({ ...prev, isLoading: false, error: 'Errore nel caricamento audio' }))
+    }
   }
 
   const pause = () => {
