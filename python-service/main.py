@@ -435,7 +435,7 @@ async def single_document_analysis(request: SingleDocumentRequest):
             ))
         
         # Summary semplice
-        summary = f"Analisi di {len(words)} parole. Identificati {len(topics)} temi principali utilizzando GPT-3.5."
+        summary = ""#f"Analisi di {len(words)} parole. Identificati {len(topics)} temi principali utilizzando GPT-3.5."
         
         return SingleDocumentResponse(
             session_id=request.session_id,

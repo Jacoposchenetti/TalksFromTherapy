@@ -145,13 +145,17 @@ export default function TopicAnalysisComponent({
     }
   }
 
-  // Carica automaticamente i dati cachati quando il componente viene montato
+  // Carica automaticamente i dati cachati quando cambia la cache, la selezione o la modalità
   React.useEffect(() => {
-    if (cachedData && !isCustomMode && !analysisResult) {
-      console.log('🎯 Loading cached topic data:', cachedData)
+    if (
+      cachedData &&
+      !isCustomMode &&
+      !isAnalyzing &&
+      selectedSessions.length > 0
+    ) {
       setAnalysisResult(cachedData)
     }
-  }, [cachedData, isCustomMode, analysisResult])
+  }, [cachedData, isCustomMode, isAnalyzing, selectedSessions])
 
   // Carica le ricerche salvate quando si attiva la modalità custom
   React.useEffect(() => {

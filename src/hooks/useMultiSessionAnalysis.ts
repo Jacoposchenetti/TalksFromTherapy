@@ -35,24 +35,44 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
     setError(null)
 
     try {
+      const log = (...args: any[]) => {
+        if (typeof window === "undefined") {
+          // Node/SSR: log nel terminale
+          // eslint-disable-next-line no-console
+          console.log('[useMultiSessionAnalysis][SSR]', ...args)
+        } else {
+          // Browser: log normale
+          // eslint-disable-next-line no-console
+          console.log('[useMultiSessionAnalysis][CLIENT]', ...args)
+        }
+      }
+
+      log('Inizio caricamento analisi per sessioni:', memoizedSessionIds)
       const promises = memoizedSessionIds.map(async (sessionId) => {
+        log(`Richiesta a /api/analyses?sessionId=${sessionId}`)
         const response = await fetch(`/api/analyses?sessionId=${sessionId}`)
         const data = await response.json()
+        log(`Risposta per sessionId ${sessionId}:`, data)
         return { sessionId, data: response.ok ? data.analysis : null }
       })
 
       const results = await Promise.all(promises)
+      log('Tutte le risposte ricevute:', results)
       
       const newAnalyses: MultiSessionAnalysis = {}
       results.forEach(({ sessionId, data }) => {
         if (data) {
+          log(`Analisi trovata per sessionId ${sessionId}:`, data)
           newAnalyses[sessionId] = data
+        } else {
+          log(`Nessuna analisi trovata per sessionId ${sessionId}`)
         }
       })
 
       setAnalyses(newAnalyses)
+      log('Stato finale analyses:', newAnalyses)
     } catch (error) {
-      console.error('Errore nel caricamento analisi multiple:', error)
+      console.error('[useMultiSessionAnalysis] Errore nel caricamento analisi multiple:', error)
       setError('Errore di connessione')
     } finally {
       setLoading(false)
