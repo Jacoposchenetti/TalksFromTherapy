@@ -100,6 +100,18 @@ export default function PatientAnalysisPage() {
     setEditingNotes(prev => ({ ...prev, [sessionId]: false }))
   }
 
+  const [fullscreenFlower, setFullscreenFlower] = useState<{ src: string, title: string } | null>(null)
+
+  // Gestione ESC per chiudere il fullscreen
+  useEffect(() => {
+    if (!fullscreenFlower) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreenFlower(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [fullscreenFlower])
+
   useEffect(() => {
     if (status === "loading") return
     if (!session) {
@@ -192,6 +204,12 @@ export default function PatientAnalysisPage() {
       }
     }
   }, [sessions, searchParams])
+
+  useEffect(() => {
+    if (currentSlide === 1 && selectedSessions.size > 0) {
+      loadAllAnalyses()
+    }
+  }, [currentSlide, selectedSessions, loadAllAnalyses])
 
   const loadPastSemanticFrameAnalyses = async () => {
     if (selectedSessions.size === 0) return
@@ -871,8 +889,51 @@ export default function PatientAnalysisPage() {
                           }}
                           cachedData={hasAllSentimentAnalyses ? getSentimentData() : undefined}
                         />
+                        {/* Flower plot per ogni sessione selezionata */}
+                        {emotionAnalysisResults.length > 0 && (
+                          <>
+                            <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 my-8 mb-16">
+                              {emotionAnalysisResults.map((session, idx) => (
+                                <Card key={session.session_id || idx} className="flex flex-col items-center p-4">
+                                  <div className="font-semibold mb-2 text-center">
+                                    {session.session_title || `Session ${idx + 1}`}
+                                  </div>
+                                  {session.flower_plot ? (
+                                    <img
+                                      src={`data:image/png;base64,${session.flower_plot}`}
+                                      alt="Emotion Flower Plot"
+                                      className="max-w-full h-auto rounded border shadow cursor-pointer transition-transform hover:scale-105"
+                                      style={{ maxHeight: '220px' }}
+                                      onClick={() => setFullscreenFlower({ src: `data:image/png;base64,${session.flower_plot}`, title: session.session_title || `Session ${idx + 1}` })}
+                                    />
+                                  ) : (
+                                    <div className="text-gray-400 italic">No flower plot available</div>
+                                  )}
+                                </Card>
+                              ))}
+                            </div>
+                            {/* Overlay fullscreen per il flower plot */}
+                            {fullscreenFlower && (
+                              <div
+                                className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 cursor-zoom-out"
+                                onClick={() => setFullscreenFlower(null)}
+                              >
+                                <img
+                                  src={fullscreenFlower.src}
+                                  alt={fullscreenFlower.title}
+                                  className="max-h-[90vh] max-w-[90vw] rounded-lg border-4 border-white shadow-2xl"
+                                  style={{ objectFit: 'contain' }}
+                                  title="Clicca o premi Esc per chiudere"
+                                />
+                                <span className="absolute top-6 left-1/2 -translate-x-1/2 text-white text-lg font-semibold bg-black bg-opacity-60 px-4 py-2 rounded">
+                                  {fullscreenFlower.title}
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        )}
                         {/* Sentiment History/Emotion Trends sotto la tab principale */}
-                        <div className="w-full mt-8 px-2 sm:px-4 lg:px-6">
+                        <div className="w-full mt-16 px-2 sm:px-4 lg:px-6">
                           <Card className="h-[600px]">
                             <CardHeader>
                               <CardTitle className="flex items-center gap-2">
