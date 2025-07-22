@@ -109,17 +109,12 @@ export default function PatientAnalysisPage() {
     fetchPatientData()
   }, [session, status, router, patientId])
 
-  // Carica analisi esistenti quando cambiano le sessioni selezionate (WITH PROTECTION)
+  // Carica analisi esistenti ogni volta che cambia la selezione delle sessioni (FORZATO SEMPRE)
   useEffect(() => {
     if (selectedSessions.size > 0) {
-      // Add a small delay to prevent rapid-fire requests
-      const timeoutId = setTimeout(() => {
-        loadAllAnalyses()
-      }, 500)
-      
-      return () => clearTimeout(timeoutId)
+      loadAllAnalyses();
     }
-  }, [selectedSessions])
+  }, [selectedSessions, loadAllAnalyses]);
 
   // Aggiorna i risultati dell'emotion analysis quando cambiano le analisi (ONLY ONCE)
   useEffect(() => {
@@ -662,7 +657,6 @@ export default function PatientAnalysisPage() {
                 </CardContent>
               </Card>
             </div>
-
             {/* Main Sliding Analysis Panel */}
             <div className="col-span-7">
               <Card className="h-[900px]">
@@ -684,7 +678,6 @@ export default function PatientAnalysisPage() {
                           >
                             <Icon className="h-4 w-4" />
                             {slide.title}
-                            {/* Database icon removed - cache indicator */}
                           </button>
                         )
                       })}
@@ -720,7 +713,7 @@ export default function PatientAnalysisPage() {
                       </Button>
                     </div>
                   </div>
-                </CardHeader>                  
+                </CardHeader>
                 <CardContent className="h-[800px] overflow-y-auto">
                   <div className="h-full">
                     {/* Slide 0: Trascrizioni */}
@@ -837,7 +830,7 @@ export default function PatientAnalysisPage() {
                       </div>
                     )}                      {/* Slide 2: Sentiment Analysis */}
                     {currentSlide === 2 && (
-                      <div className="h-full pt-6">
+                      <div className="h-full pt-6 flex flex-col">
                         {/* Cache Status Indicator - only show if no cached data available */}
                         {selectedSessions.size > 0 && !hasAllSentimentAnalyses && (
                           <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
@@ -849,9 +842,6 @@ export default function PatientAnalysisPage() {
                             </div>
                           </div>
                         )}
-
-                        {/* Banner removed - sentiment analysis cache notification */}
-                        
                         <SentimentAnalysis 
                           selectedSessions={getSelectedSessionsData().map(session => ({
                             id: session.id,
@@ -881,6 +871,42 @@ export default function PatientAnalysisPage() {
                           }}
                           cachedData={hasAllSentimentAnalyses ? getSentimentData() : undefined}
                         />
+                        {/* Sentiment History/Emotion Trends sotto la tab principale */}
+                        <div className="w-full mt-8 px-2 sm:px-4 lg:px-6">
+                          <Card className="h-[600px]">
+                            <CardHeader>
+                              <CardTitle className="flex items-center gap-2">
+                                <TrendingUp className="h-5 w-5" />
+                                Sentiment History - Emotion Trends Over Time
+                              </CardTitle>
+                              <CardDescription>
+                                Evolution of the 8 core emotions throughout therapy sessions
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="min-h-[500px] max-h-none overflow-auto">
+                              {emotionAnalysisResults.length > 0 ? (
+                                <div className="w-full overflow-y-auto">
+                                  <EmotionTrends 
+                                    analysisData={{ individual_sessions: emotionAnalysisResults }}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="min-h-[500px] flex items-center justify-center text-gray-400">
+                                  <div className="text-center">
+                                    <TrendingUp className="h-16 w-16 mx-auto mb-4" />
+                                    <p className="text-lg mb-2">Sentiment History Chart</p>
+                                    <p className="text-sm">
+                                      Run the sentiment analysis first to view the chart
+                                    </p>
+                                    <p className="text-xs mt-2 text-gray-500">
+                                      Go to the "Sentiment Analysis" tab and analyze the selected sessions
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        </div>
                       </div>
                     )}
 
@@ -1080,101 +1106,64 @@ export default function PatientAnalysisPage() {
                   </div>
                 </CardContent>
               </Card>
-            </div>            {/* Historical Sentiment Trends - Only visible in Sentiment Analysis tab */}
-            {currentSlide === 2 && (
-              <Card className="h-[600px]">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Sentiment History - Emotion Trends Over Time
-                  </CardTitle>
-                  <CardDescription>
-                    Evolution of the 8 core emotions throughout therapy sessions
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="min-h-[500px] max-h-none overflow-auto">
-                  {(() => {
-                    console.log('🎨 Rendering trends section. emotionAnalysisResults:', emotionAnalysisResults)
-                    console.log('🎨 emotionAnalysisResults.length:', emotionAnalysisResults.length)
-                    return emotionAnalysisResults.length > 0 ? (
-                      <div className="w-full overflow-y-auto">
-                        <EmotionTrends 
-                          analysisData={{ individual_sessions: emotionAnalysisResults }}
+            </div>
+            {/* Notes Section - ora a destra */}
+            <div className="col-span-3 flex flex-col gap-4 h-[900px] overflow-y-auto">
+              {getSelectedSessionsData().length > 0 && getSelectedSessionsData().map((session) => (
+                <Card key={session.id} className="flex-0">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-3">
+                      <MessageSquare className="h-5 w-5" />
+                      Note Terapeutiche - {session.title}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {editingNotes[session.id] ? (
+                      <div className="space-y-3">
+                        <textarea
+                          value={sessionNotes[session.id] || ""}
+                          onChange={e => setSessionNotes(prev => ({ ...prev, [session.id]: e.target.value }))}
+                          placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
+                          className="w-full h-32 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          autoFocus
                         />
-                      </div>                    ) : (
-                      <div className="min-h-[500px] flex items-center justify-center text-gray-400">
-                        <div className="text-center">
-                          <TrendingUp className="h-16 w-16 mx-auto mb-4" />
-                          <p className="text-lg mb-2">Sentiment History Chart</p>
-                          <p className="text-sm">
-                            Run the sentiment analysis first to view the chart
-                          </p>
-                          <p className="text-xs mt-2 text-gray-500">
-                            Go to the "Sentiment Analysis" tab and analyze the selected sessions
-                          </p>
+                        <div className="flex gap-2 justify-end">
+                          <Button size="sm" variant="outline" onClick={() => handleCancelEdit(session.id)}>
+                            Annulla
+                          </Button>
+                          <Button size="sm" onClick={() => handleSaveSessionNote(session.id)} disabled={savingNotes[session.id]}>
+                            <Save className="h-3 w-3 mr-1" />
+                            {savingNotes[session.id] ? "Salvataggio..." : "Salva"}
+                          </Button>
                         </div>
                       </div>
-                    )
-                  })()}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Notes Section - ora a destra */}
-              <div className="col-span-3 flex flex-col gap-4 h-[900px] overflow-y-auto">
-                {getSelectedSessionsData().length > 0 && getSelectedSessionsData().map((session) => (
-                  <Card key={session.id} className="flex-0">
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-3">
-                        <MessageSquare className="h-5 w-5" />
-                        Note Terapeutiche - {session.title}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {editingNotes[session.id] ? (
-                        <div className="space-y-3">
-                          <textarea
-                            value={sessionNotes[session.id] || ""}
-                            onChange={e => setSessionNotes(prev => ({ ...prev, [session.id]: e.target.value }))}
-                            placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
-                            className="w-full h-32 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            autoFocus
-                          />
-                          <div className="flex gap-2 justify-end">
-                            <Button size="sm" variant="outline" onClick={() => handleCancelEdit(session.id)}>
-                              Annulla
-                            </Button>
-                            <Button size="sm" onClick={() => handleSaveSessionNote(session.id)} disabled={savingNotes[session.id]}>
-                              <Save className="h-3 w-3 mr-1" />
-                              {savingNotes[session.id] ? "Salvataggio..." : "Salva"}
-                            </Button>
-                          </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div
+                          className="h-32 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
+                          onClick={() => handleEnterEdit(session.id)}
+                          tabIndex={0}
+                          role="textbox"
+                          title="Clicca per modificare la nota"
+                          style={{ minHeight: '8rem' }}
+                        >
+                          {sessionNotes[session.id] || (
+                            <span className="text-gray-500 italic">
+                              Qui il terapeuta può scrivere liberamente note e osservazioni
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <div
-                            className="h-32 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
-                            onClick={() => handleEnterEdit(session.id)}
-                            tabIndex={0}
-                            role="textbox"
-                            title="Clicca per modificare la nota"
-                            style={{ minHeight: '8rem' }}
-                          >
-                            {sessionNotes[session.id] || (
-                              <span className="text-gray-500 italic">
-                                Qui il terapeuta può scrivere liberamente note e osservazioni personali
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
         )}
       </div>
+      {/* Sidebar informativa ora in basso, sempre visibile */}
+      {/* RIMOSSO: Sentiment History qui, ora solo sotto la tab Sentiment Analysis */}
     </div>
   )
 }
