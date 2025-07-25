@@ -133,9 +133,24 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
 
   function hasValidAnalysis(session: any) {
     if (!session || !session.analysis || typeof session.analysis !== 'object') return false;
-    const z = session.analysis.z_scores;
-    return z && typeof z === 'object' &&
-      ['joy','trust','fear','surprise','sadness','disgust','anger','anticipation'].every(e => e in z);
+    
+    const analysis = session.analysis;
+    const z = analysis.z_scores;
+    
+    // Controlla che z_scores esista e sia un oggetto
+    if (!z || typeof z !== 'object') return false;
+    
+    // Controlla che tutte le emozioni richieste siano presenti
+    const requiredEmotions = ['joy','trust','fear','surprise','sadness','disgust','anger','anticipation'];
+    if (!requiredEmotions.every(e => e in z)) return false;
+    
+    // Controlla che i valori siano numeri validi
+    if (!requiredEmotions.every(e => typeof z[e] === 'number' && !isNaN(z[e]))) return false;
+    
+    // Controlla che emotional_valence sia un numero valido
+    if (typeof analysis.emotional_valence !== 'number' || isNaN(analysis.emotional_valence)) return false;
+    
+    return true;
   }
 
   const allSessionsAnalyzed = analysisResult && analysisResult.individual_sessions &&
@@ -189,6 +204,15 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
   const showTrends = hasResults && analysisResult.individual_sessions.length > 1
   const currentSession = validSessions[currentSessionIndex]
 
+  // Controllo di sicurezza per currentSession
+  if (hasResults && validSessions.length > 0 && !currentSession) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[200px]">
+        <span className="text-gray-500 font-medium">Errore: sessione corrente non trovata</span>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col items-center w-full max-w-2xl mx-auto py-8 gap-6">
       <div className="w-full text-center">
@@ -229,7 +253,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
                     <span className="font-semibold text-gray-700">
                       Sessione {currentSessionIndex + 1} di {validSessions.length}
                     </span>
-                    <p className="text-sm text-gray-500 mt-1">{currentSession.session_title}</p>
+                    <p className="text-sm text-gray-500 mt-1">{currentSession?.session_title || 'Sessione senza titolo'}</p>
                   </div>
                   <Button
                     variant="outline"
@@ -246,13 +270,23 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
               {/* Visualizzazione sessione corrente */}
               <div className="mb-8">
                 <div className="flex flex-wrap gap-6 mb-2 items-center text-base">
-                  <span className="font-bold text-red-800">Sessione:</span> <span className="text-red-900">{currentSession.session_title}</span>
-                  <span className="font-bold text-red-800">Parole:</span> <span className="text-red-900">{currentSession.analysis.text_length}</span>
-                  <span className="font-bold text-red-800">Valenza:</span> <span className="text-red-900">{Number(currentSession.analysis.emotional_valence).toFixed(2)}</span>
-                  <span className="font-bold text-red-800">Positive:</span> <span className="text-red-900">{Number(currentSession.analysis.positive_score).toFixed(2)}</span>
-                  <span className="font-bold text-red-800">Negative:</span> <span className="text-red-900">{Number(currentSession.analysis.negative_score).toFixed(2)}</span>
+                  <span className="font-bold text-red-800">Sessione:</span> <span className="text-red-900">{currentSession?.session_title || 'Sessione senza titolo'}</span>
+                  <span className="font-bold text-red-800">Parole:</span> <span className="text-red-900">{currentSession.analysis?.text_length || 0}</span>
+                  <span className="font-bold text-red-800">Valenza:</span> <span className="text-red-900">{Number(currentSession.analysis?.emotional_valence || 0).toFixed(2)}</span>
+                  <span className="font-bold text-red-800">Positive:</span> <span className="text-red-900">{Number(currentSession.analysis?.positive_score || 0).toFixed(2)}</span>
+                  <span className="font-bold text-red-800">Negative:</span> <span className="text-red-900">{Number(currentSession.analysis?.negative_score || 0).toFixed(2)}</span>
                 </div>
-                <EmotionVisualizer data={currentSession.analysis} />
+                {currentSession.analysis ? (
+                  <EmotionVisualizer data={currentSession.analysis} />
+                ) : (
+                  <div className="flex items-center justify-center h-full min-h-[200px] bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                    <div className="text-center text-gray-500">
+                      <Heart className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-lg font-medium">Nessuna analisi sentiment disponibile</p>
+                      <p className="text-sm">Questa sessione non ha ancora un'analisi sentiment</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

@@ -26,7 +26,23 @@ interface EmotionVisualizerProps {
 
 export function EmotionVisualizer({ data, title, showDetails = false }: EmotionVisualizerProps) {
   const [zoomedChart, setZoomedChart] = useState<'scores' | 'valence' | null>(null)
-  if (!data) return null
+  
+  // Controllo di sicurezza per data
+  if (!data || typeof data !== 'object') {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[200px]">
+        <span className="text-gray-500 font-medium">Nessun dato disponibile per la visualizzazione</span>
+      </div>
+    )
+  }
+
+  // Assicurati che tutte le proprietà necessarie esistano
+  const safeData = {
+    z_scores: data.z_scores || {},
+    emotional_valence: data.emotional_valence || 0,
+    text_length: data.text_length || 0,
+    significant_emotions: data.significant_emotions || {}
+  }
 
   // Prepare data for bar chart
   const emotionNames = [
@@ -42,12 +58,12 @@ export function EmotionVisualizer({ data, title, showDetails = false }: EmotionV
   }
   const barData = emotionNames.map(emotion => ({
     emotion: emotionLabels[emotion],
-    value: data.z_scores[emotion] ?? 0,
+    value: safeData.z_scores?.[emotion] ?? 0,
     color: emotionColors[emotion]
   }))
 
   // --- Valenza Emotiva: badge + termometro ---
-  const valence = data.emotional_valence;
+  const valence = safeData.emotional_valence || 0;
   let valenceColor = '#B0BEC5';
   if (valence > 1) valenceColor = '#00C853';
   else if (valence < -1) valenceColor = '#D50000';
@@ -159,9 +175,9 @@ export function EmotionVisualizer({ data, title, showDetails = false }: EmotionV
       {/* Details */}
       {showDetails && (
         <div className="text-xs text-gray-600 space-y-1">
-          <div><strong>Parole analizzate:</strong> {data.text_length}</div>
+          <div><strong>Parole analizzate:</strong> {safeData.text_length || 0}</div>
           <div><strong>Soglia significatività:</strong> |Z| &gt; 1.96 (p &lt; 0.05)</div>
-          <div><strong>Emozioni significative:</strong> {Object.keys(data.significant_emotions).length}/8</div>
+          <div><strong>Emozioni significative:</strong> {Object.keys(safeData.significant_emotions || {}).length}/8</div>
         </div>
       )}
     </div>

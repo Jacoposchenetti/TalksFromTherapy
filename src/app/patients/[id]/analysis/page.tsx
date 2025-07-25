@@ -5,9 +5,8 @@ import { useSession } from "next-auth/react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp, Network, Search, X, RefreshCw, Database, History } from "lucide-react"
+import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, Network, Search, X, RefreshCw, Database, History } from "lucide-react"
 import { SentimentAnalysis } from "@/components/sentiment-analysis"
-import { EmotionTrends } from "@/components/emotion-trends"
 import TopicAnalysisComponent from "@/components/analysis/topic-modeling-gpt"
 import { useMultiSessionAnalysis } from "@/hooks/useMultiSessionAnalysis"
 
@@ -52,7 +51,6 @@ export default function PatientAnalysisPage() {
   const [editingNote, setEditingNote] = useState(false)
   const [activeSessionForNote, setActiveSessionForNote] = useState<Session | null>(null)
   const [currentSlide, setCurrentSlide] = useState(0) // 0: Trascrizioni, 1: Topic Modelling, 2: Sentiment Analysis, 3: Semantic Frame
-  const [emotionAnalysisResults, setEmotionAnalysisResults] = useState<any[]>([]) // Store emotion analysis results
   
   // Semantic Frame Analysis state
   const [targetWord, setTargetWord] = useState("")
@@ -126,16 +124,6 @@ export default function PatientAnalysisPage() {
     }
     fetchPatientData()
   }, [session, status, router, patientId])
-
-  // Aggiorna i risultati dell'emotion analysis quando cambiano le analisi (ONLY ONCE)
-  useEffect(() => {
-    if (hasAllSentimentAnalyses && selectedSessions.size > 0) {
-      const sentimentData = getSentimentData()
-      if (sentimentData && sentimentData.length > 0) {
-        setEmotionAnalysisResults(sentimentData)
-      }
-    }
-  }, [hasAllSentimentAnalyses])
 
   // Carica le analisi semantiche passate quando cambiano le sessioni
   useEffect(() => {
@@ -1068,64 +1056,9 @@ export default function PatientAnalysisPage() {
                             transcript: session.transcript || "",
                             sessionDate: session.sessionDate
                           }))}
-                          onAnalysisComplete={async (result) => {
-                            console.log('🎯 Sentiment analysis completed:', result)
-                            // Salva ogni sessione nella cache persistente (Supabase)
-                            if (result.success && result.individual_sessions) {
-                              try {
-                                const sessions = result.individual_sessions
-                                for (const session of sessions) {
-                                  // Ensure flower_plot is included in the saved analysis
-                                  await saveSessionAnalysis(session.session_id, 'sentiment', {
-                                    ...session.analysis,
-                                    flower_plot: session.flower_plot
-                                  })
-                                }
-                                console.log('✅ Analisi sentiment salvate nella cache')
-                              } catch (error) {
-                                console.error('⚠️ Error saving to cache (non-blocking):', error)
-                              }
-                            }
-                          }}
                           cachedData={getSentimentData()}
                           onRefreshResults={loadAllAnalyses}
                         />
-                        {/* Sentiment History/Emotion Trends sotto la tab principale */}
-                        <div className="w-full mt-16 px-2 sm:px-4 lg:px-6">
-                          <Card className="h-[600px]">
-                            <CardHeader>
-                              <CardTitle className="flex items-center gap-2">
-                                <TrendingUp className="h-5 w-5" />
-                                Sentiment History - Emotion Trends Over Time
-                              </CardTitle>
-                              <CardDescription>
-                                Evolution of the 8 core emotions throughout therapy sessions
-                              </CardDescription>
-                            </CardHeader>
-                            <CardContent className="min-h-[500px] max-h-none overflow-auto">
-                              {emotionAnalysisResults.length > 0 ? (
-                                <div className="w-full overflow-y-auto">
-                                  <EmotionTrends 
-                                    analysisData={{ individual_sessions: emotionAnalysisResults }}
-                                  />
-                                </div>
-                              ) : (
-                                <div className="min-h-[500px] flex items-center justify-center text-gray-400">
-                                  <div className="text-center">
-                                    <TrendingUp className="h-16 w-16 mx-auto mb-4" />
-                                    <p className="text-lg mb-2">Sentiment History Chart</p>
-                                    <p className="text-sm">
-                                      Run the sentiment analysis first to view the chart
-                                    </p>
-                                    <p className="text-xs mt-2 text-gray-500">
-                                      Go to the "Sentiment Analysis" tab and analyze the selected sessions
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        </div>
                       </div>
                     )}
 
