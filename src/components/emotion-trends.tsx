@@ -93,7 +93,6 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
 
   // Check if we have only one session
   if (analysisData.individual_sessions.length === 1) {
-    console.log('🎭 Only one session - showing single session message')
     return (
       <Card>
         <CardHeader>
@@ -127,9 +126,6 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
     return dateA - dateB
   })
 
-  console.log('🎭 Sessions before sorting:', analysisData.individual_sessions.map(s => ({ title: s.session_title, date: s.session_date })))
-  console.log('🎭 Sessions after sorting:', sortedSessions.map(s => ({ title: s.session_title, date: s.session_date })))
-
   // Prepara i dati per il grafico (ora ordinati cronologicamente)
   const trendData: EmotionTrendData[] = sortedSessions.map((session, index) => {
     const data = {
@@ -149,11 +145,9 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
       negative_score: session.analysis.negative_score
     }
     
-    console.log(`🎭 Transformed data for session ${index + 1} (${data.sessionDate}):`, data)
     return data
   })
 
-  console.log('🎭 Final trend data:', trendData)
   // Tooltip personalizzato
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {

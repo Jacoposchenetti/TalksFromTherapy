@@ -105,7 +105,6 @@ class SessionAnalysis(BaseModel):
     session_id: str
     session_title: str
     analysis: Dict
-    flower_plot: Optional[str] = None  # Extract flower_plot to top level
     processing_time: float
 
 class EmotionTrendsResponse(BaseModel):
@@ -241,16 +240,12 @@ class EmoAtlasAnalysisService:
                 if abs(score) >= 1.96
             }
             
-            # Generate flower plot as base64
-            flower_plot = self._generate_flower_plot(emo, z_scores)
-            
             return {
                 'z_scores': z_scores,
                 'emotional_valence': emotional_valence,
                 'positive_score': positive_score,
                 'negative_score': negative_score,
                 'language': language,
-                'flower_plot': flower_plot,
                 'word_count': len(text.split()),
                 'significant_emotions': significant_emotions,
                 'original_text': text  # Store original text for combined analysis
@@ -259,99 +254,6 @@ class EmoAtlasAnalysisService:
         except Exception as e:
             print(f"❌ EmoAtlas analysis error: {e}")
             return self._generate_fallback_analysis(text)
-    
-    def _generate_flower_plot(self, emo_scores, z_scores: Dict, text: str = None) -> Optional[str]:
-        """Generate the native EmoAtlas emotion flower plot as base64 string"""
-        try:
-            if not EMOATLAS_AVAILABLE or emo_scores is None:
-                print("❌ EmoAtlas not available for flower plot generation")
-                return self._generate_fallback_flower_plot(z_scores)
-            
-            # Use native EmoAtlas flower plot generation
-            print("🌸 Generating native EmoAtlas flower plot")
-            
-            # Create a temporary figure to capture the EmoAtlas plot
-            import matplotlib.pyplot as plt
-            plt.switch_backend('Agg')  # Ensure non-interactive backend
-            
-            # Clear any existing plots
-            plt.clf()
-            plt.close('all')
-            
-            # Create new figure
-            fig, ax = plt.subplots(figsize=(8, 8))
-            
-            # Use the native EmoAtlas draw_plutchik method with z_scores
-            emo_scores.draw_plutchik(
-                scores=z_scores,
-                ax=ax,
-                title="Emotional Flower Analysis",
-                reject_range=(-1.96, 1.96),  # Show statistically significant emotions
-                fontsize=12,
-                show_coordinates=True
-            )
-            
-            # Convert to base64
-            buffer = io.BytesIO()
-            plt.savefig(buffer, format='png', bbox_inches='tight', dpi=150, 
-                       facecolor='white', edgecolor='none', pad_inches=0.2)
-            buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.getvalue()).decode()
-            plt.close(fig)
-            plt.clf()  # Clear the figure
-            
-            print("✅ Native EmoAtlas flower plot generated successfully")
-            return image_base64
-            
-        except Exception as e:
-            print(f"❌ Error generating native EmoAtlas flower plot: {e}")
-            # Fallback to simple visualization
-            return self._generate_fallback_flower_plot(z_scores)
-    
-    def _generate_fallback_flower_plot(self, z_scores: Dict) -> Optional[str]:
-        """Generate a fallback flower plot when EmoAtlas native plot fails"""
-        try:
-            import matplotlib.pyplot as plt
-            
-            emotions = list(z_scores.keys())
-            values = list(z_scores.values())
-            
-            fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
-            
-            # Number of variables
-            N = len(emotions)
-            
-            # Angle for each emotion
-            angles = [n / float(N) * 2 * 3.14159 for n in range(N)]
-            angles += angles[:1]  # Complete the circle
-            
-            # Add values
-            values += values[:1]  # Complete the circle
-            
-            # Plot
-            ax.plot(angles, values, 'o-', linewidth=2, label='Emotion Intensity')
-            ax.fill(angles, values, alpha=0.25)
-            
-            # Add emotion labels
-            ax.set_xticks(angles[:-1])
-            ax.set_xticklabels(emotions)
-            
-            # Set y-axis limits
-            ax.set_ylim(-4, 4)
-            ax.set_title('Emotional Flower Plot (Fallback)', size=16, pad=20)
-            
-            # Convert to base64
-            buffer = io.BytesIO()
-            plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
-            buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.getvalue()).decode()
-            plt.close(fig)
-            
-            return image_base64
-            
-        except Exception as e:
-            print(f"❌ Error generating fallback flower plot: {e}")
-            return None
     
     def _generate_fallback_analysis(self, text: str) -> Dict:
         """Generate fallback analysis when EmoAtlas is not available"""
@@ -383,7 +285,6 @@ class EmoAtlasAnalysisService:
             'positive_score': positive_score,
             'negative_score': negative_score,
             'language': 'italian',
-            'flower_plot': None,
             'word_count': len(text.split()),
             'significant_emotions': significant_emotions
         }
@@ -477,14 +378,10 @@ async def analyze_emotion_trends(request: EmotionAnalysisRequest):
             
             processing_time = time.time() - session_start_time
             
-            # Extract flower_plot from analysis to top level
-            flower_plot = analysis.pop('flower_plot', None)
-            
             session_analysis = SessionAnalysis(
                 session_id=session.id,
                 session_title=session.title,
                 analysis=analysis,
-                flower_plot=flower_plot,
                 processing_time=processing_time
             )
             
@@ -494,7 +391,7 @@ async def analyze_emotion_trends(request: EmotionAnalysisRequest):
         if not individual_sessions:
             raise HTTPException(status_code=400, detail="No valid sessions to analyze")
         
-        # Generate combined analysis with flower plot
+        # Generate combined analysis
         combined_analysis = generate_combined_analysis(individual_sessions, request.language)
         
         # Calculate trends across sessions
@@ -1104,7 +1001,7 @@ def generate_fallback_semantic_analysis(text: str, target_word: str, session_id:
     }
 
 def generate_combined_analysis(sessions: List[SessionAnalysis], language: str = 'italian') -> Dict:
-    """Generate combined analysis with averaged emotions and flower plot"""
+    """Generate combined analysis with averaged emotions"""
     if not sessions:
         return None
     
@@ -1138,17 +1035,6 @@ def generate_combined_analysis(sessions: List[SessionAnalysis], language: str = 
             reverse=True
         )
         
-        # Generate flower plot for combined analysis
-        try:
-            if EMOATLAS_AVAILABLE:
-                emo = EmoScores(language=language)
-                flower_plot = emoatlas_service._generate_flower_plot(emo, combined_z_scores)
-            else:
-                flower_plot = emoatlas_service._generate_fallback_flower_plot(combined_z_scores)
-        except Exception as e:
-            print(f"❌ Error generating combined flower plot: {e}")
-            flower_plot = emoatlas_service._generate_fallback_flower_plot(combined_z_scores)
-        
         combined_analysis = {
             'analysis': {
                 'z_scores': combined_z_scores,
@@ -1159,8 +1045,7 @@ def generate_combined_analysis(sessions: List[SessionAnalysis], language: str = 
                 'negative_score': combined_negative,
                 'text_length': total_words,
                 'language': language
-            },
-            'flower_plot': flower_plot
+            }
         }
         
         print(f"✅ Combined analysis generated with {len(significant_emotions)} significant emotions")
