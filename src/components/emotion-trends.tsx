@@ -127,26 +127,27 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
   })
 
   // Prepara i dati per il grafico (ora ordinati cronologicamente)
-  const trendData: EmotionTrendData[] = sortedSessions.map((session, index) => {
-    const data = {
-      sessionTitle: session.session_title,
-      sessionDate: new Date(session.session_date).toLocaleDateString('it-IT'),
-      sessionIndex: index + 1,
-      joy: session.analysis.z_scores.joy || 0,
-      trust: session.analysis.z_scores.trust || 0,
-      fear: session.analysis.z_scores.fear || 0,
-      surprise: session.analysis.z_scores.surprise || 0,
-      sadness: session.analysis.z_scores.sadness || 0,
-      disgust: session.analysis.z_scores.disgust || 0,
-      anger: session.analysis.z_scores.anger || 0,
-      anticipation: session.analysis.z_scores.anticipation || 0,
-      emotional_valence: session.analysis.emotional_valence,
-      positive_score: session.analysis.positive_score,
-      negative_score: session.analysis.negative_score
-    }
-    
-    return data
-  })
+  const trendData: EmotionTrendData[] = sortedSessions
+    .filter(session => session.analysis && session.analysis.z_scores)
+    .map((session, index) => {
+      const data = {
+        sessionTitle: session.session_title,
+        sessionDate: new Date(session.session_date).toLocaleDateString('it-IT'),
+        sessionIndex: index + 1,
+        joy: session.analysis.z_scores.joy || 0,
+        trust: session.analysis.z_scores.trust || 0,
+        fear: session.analysis.z_scores.fear || 0,
+        surprise: session.analysis.z_scores.surprise || 0,
+        sadness: session.analysis.z_scores.sadness || 0,
+        disgust: session.analysis.z_scores.disgust || 0,
+        anger: session.analysis.z_scores.anger || 0,
+        anticipation: session.analysis.z_scores.anticipation || 0,
+        emotional_valence: session.analysis.emotional_valence,
+        positive_score: session.analysis.positive_score,
+        negative_score: session.analysis.negative_score
+      }
+      return data
+    })
 
   // Tooltip personalizzato
   const CustomTooltip = ({ active, payload, label }: any) => {

@@ -101,6 +101,7 @@ export default function PatientAnalysisPage() {
   }
 
   const [fullscreenFlower, setFullscreenFlower] = useState<{ src: string, title: string } | null>(null)
+  const [lastLoadedSlide, setLastLoadedSlide] = useState<number | null>(null);
 
   // Gestione ESC per chiudere il fullscreen
   useEffect(() => {
@@ -523,12 +524,23 @@ export default function PatientAnalysisPage() {
 
   const goToSlide = (index: number) => {
     setCurrentSlide(prev => {
-      if (index === 2 && prev !== 2 && selectedSessions.size > 0) {
+      if (
+        index === 2 &&
+        prev !== 2 &&
+        selectedSessions.size > 0 &&
+        lastLoadedSlide !== 2
+      ) {
         loadAllAnalyses();
+        setLastLoadedSlide(2);
       }
       return index;
     });
   }
+
+  // Reset lastLoadedSlide quando cambia la selezione delle sessioni
+  useEffect(() => {
+    setLastLoadedSlide(null);
+  }, [selectedSessions]);
 
   if (loading) {
     return (

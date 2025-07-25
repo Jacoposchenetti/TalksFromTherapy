@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Loader2, Brain, Heart, TrendingUp, AlertCircle } from 'lucide-react'
+import { Loader2, Brain, Heart, TrendingUp, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { EmotionVisualizer } from './emotion-visualizer'
 import { EmotionTrends } from './emotion-trends'
 
@@ -61,6 +61,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
   const [analysisResult, setAnalysisResult] = useState<EmotionAnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshCount, setRefreshCount] = useState(0)
+  const [currentSessionIndex, setCurrentSessionIndex] = useState(0)
 
   // Carica dati cached se disponibili
   useEffect(() => {
@@ -108,13 +109,27 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
     }
   }, [cachedData, selectedSessions, refreshCount])
 
-  const validSessions = useMemo(() => 
-    selectedSessions.filter(session => 
-      session.transcript && 
-      typeof session.transcript === 'string' && 
-      session.transcript.trim().length > 0
-    ), [selectedSessions]
-  )
+  // Ottieni le sessioni con analisi valide
+  const validSessions = useMemo(() => {
+    if (!analysisResult?.individual_sessions) return []
+    return analysisResult.individual_sessions.filter(hasValidAnalysis)
+  }, [analysisResult])
+
+  // Reset currentSessionIndex quando cambiano le sessioni valide
+  useEffect(() => {
+    if (validSessions.length > 0 && currentSessionIndex >= validSessions.length) {
+      setCurrentSessionIndex(0)
+    }
+  }, [validSessions, currentSessionIndex])
+
+  // Funzioni di navigazione
+  const goToPreviousSession = () => {
+    setCurrentSessionIndex(prev => prev > 0 ? prev - 1 : validSessions.length - 1)
+  }
+
+  const goToNextSession = () => {
+    setCurrentSessionIndex(prev => prev < validSessions.length - 1 ? prev + 1 : 0)
+  }
 
   function hasValidAnalysis(session: any) {
     if (!session || !session.analysis || typeof session.analysis !== 'object') return false;
@@ -126,7 +141,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
   const allSessionsAnalyzed = analysisResult && analysisResult.individual_sessions &&
     validSessions.length > 0 &&
     validSessions.every(sel => {
-      const found = analysisResult.individual_sessions.find(s => s.session_id === sel.id);
+      const found = analysisResult.individual_sessions.find(s => s.session_id === sel.session_id);
       return hasValidAnalysis(found);
     });
 
@@ -140,7 +155,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
     setIsAnalyzing(true)
     setError(null)
     try {
-      const sessionIds = validSessions.map(s => s.id)
+      const sessionIds = validSessions.map(s => s.session_id)
       const response = await fetch('/api/sentiment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,6 +187,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
   // --- RENDER ---
   const hasResults = analysisResult && analysisResult.individual_sessions && analysisResult.individual_sessions.some(hasValidAnalysis)
   const showTrends = hasResults && analysisResult.individual_sessions.length > 1
+  const currentSession = validSessions[currentSessionIndex]
 
   return (
     <div className="flex flex-col items-center w-full max-w-2xl mx-auto py-8 gap-6">
@@ -194,23 +210,50 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
             <p className="text-gray-500">Seleziona una o più sessioni con trascrizione e avvia una nuova analisi.</p>
           </div>
         )}
-        {hasResults && (
+        {hasResults && validSessions.length > 0 && (
           <Card className="w-full">
             <CardContent className="py-6">
-              {analysisResult.individual_sessions.map((session, idx) => (
-                hasValidAnalysis(session) && (
-                  <div key={session.session_id} className="mb-8">
-                    <div className="flex flex-wrap gap-6 mb-2 items-center text-base">
-                      <span className="font-bold text-red-800">Sessione:</span> <span className="text-red-900">{session.session_title}</span>
-                      <span className="font-bold text-red-800">Parole:</span> <span className="text-red-900">{session.analysis.text_length}</span>
-                      <span className="font-bold text-red-800">Valenza:</span> <span className="text-red-900">{Number(session.analysis.emotional_valence).toFixed(2)}</span>
-                      <span className="font-bold text-red-800">Positive:</span> <span className="text-red-900">{Number(session.analysis.positive_score).toFixed(2)}</span>
-                      <span className="font-bold text-red-800">Negative:</span> <span className="text-red-900">{Number(session.analysis.negative_score).toFixed(2)}</span>
-                    </div>
-                    <EmotionVisualizer data={session.analysis} />
+              {/* Controlli di navigazione */}
+              {validSessions.length > 1 && (
+                <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToPreviousSession}
+                    className="flex items-center gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Precedente
+                  </Button>
+                  <div className="text-center">
+                    <span className="font-semibold text-gray-700">
+                      Sessione {currentSessionIndex + 1} di {validSessions.length}
+                    </span>
+                    <p className="text-sm text-gray-500 mt-1">{currentSession.session_title}</p>
                   </div>
-                )
-              ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToNextSession}
+                    className="flex items-center gap-2"
+                  >
+                    Successiva
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+              
+              {/* Visualizzazione sessione corrente */}
+              <div className="mb-8">
+                <div className="flex flex-wrap gap-6 mb-2 items-center text-base">
+                  <span className="font-bold text-red-800">Sessione:</span> <span className="text-red-900">{currentSession.session_title}</span>
+                  <span className="font-bold text-red-800">Parole:</span> <span className="text-red-900">{currentSession.analysis.text_length}</span>
+                  <span className="font-bold text-red-800">Valenza:</span> <span className="text-red-900">{Number(currentSession.analysis.emotional_valence).toFixed(2)}</span>
+                  <span className="font-bold text-red-800">Positive:</span> <span className="text-red-900">{Number(currentSession.analysis.positive_score).toFixed(2)}</span>
+                  <span className="font-bold text-red-800">Negative:</span> <span className="text-red-900">{Number(currentSession.analysis.negative_score).toFixed(2)}</span>
+                </div>
+                <EmotionVisualizer data={currentSession.analysis} />
+              </div>
             </CardContent>
           </Card>
         )}
