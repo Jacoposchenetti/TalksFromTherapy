@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
       return createSuccessResponse({ cached: false, analysis: null })
     }
 
-    // Decodifica i campi base64 JSON
+    // Decodifica i campi base64 JSON per sentiment
     const z_scores = {
       joy: analysis.joy ?? 0,
       trust: analysis.trust ?? 0,
@@ -94,9 +94,17 @@ export async function GET(request: NextRequest) {
     const dominant_emotions = analysis.dominantemotions ? decodeBase64Json(analysis.dominantemotions) : [];
     const flower_plot = analysis.emotionFlowerPlot || null;
 
+    // Decodifica i campi per topic analysis
+    const keyTopics = analysis.keyTopics ? JSON.parse(decryptIfEncrypted(analysis.keyTopics)) : null;
+    const topicAnalysisResult = analysis.topicAnalysisResult ? JSON.parse(decryptIfEncrypted(analysis.topicAnalysisResult)) : null;
+    const customTopicAnalysisResults = analysis.customTopicAnalysisResults ? JSON.parse(decryptIfEncrypted(analysis.customTopicAnalysisResults)) : null;
+    const semanticFrameResults = analysis.semanticFrameResults ? JSON.parse(decryptIfEncrypted(analysis.semanticFrameResults)) : null;
+
     // DEBUG: Log the decoded fields
     console.log('[API/analyses] Decoded significant_emotions:', significant_emotions);
     console.log('[API/analyses] Decoded dominant_emotions:', dominant_emotions);
+    console.log('[API/analyses] Decoded keyTopics:', keyTopics);
+    console.log('[API/analyses] Decoded topicAnalysisResult:', topicAnalysisResult);
 
     const responseData = {
       cached: true,
@@ -112,7 +120,10 @@ export async function GET(request: NextRequest) {
           sentiment_score: analysis.sentimentScore,
           flower_plot
         },
-        // altri campi se servono
+        topics: keyTopics,
+        topicAnalysis: topicAnalysisResult,
+        customTopics: customTopicAnalysisResults,
+        semanticFrames: semanticFrameResults
       }
     }
     console.log('Sto restituendo:', JSON.stringify(responseData, null, 2));
@@ -195,7 +206,19 @@ export async function POST(request: NextRequest) {
         updateData = {
           ...updateData,
           keyTopics: encryptIfSensitive(JSON.stringify(analysisData.topics || [])),
-          topicAnalysisResult: encryptIfSensitive(JSON.stringify(analysisData))
+          topicAnalysisResult: encryptIfSensitive(JSON.stringify({
+            topics: analysisData.topics || [],
+            summary: analysisData.summary || '',
+            analysis_timestamp: analysisData.analysis_timestamp || new Date().toISOString(),
+            text_segments: analysisData.text_segments || [],
+            patient_content_stats: analysisData.patient_content_stats || null,
+            session_id: analysisData.session_id || null,
+            language: analysisData.language || 'italian',
+            version: analysisData.version || '1.0.0'
+          })),
+          topicAnalysisTimestamp: new Date(),
+          topicAnalysisVersion: analysisData.version || '1.0.0',
+          topicAnalysisLanguage: analysisData.language || 'italian'
         }
         break
       case 'custom_topics':
@@ -271,23 +294,7 @@ export async function POST(request: NextRequest) {
 
     let analysisId = null
     if (existing && existing.id) {
-      // Aggiorna
-      const { z_scores, ...otherFields } = analysisData;
-      await supabaseAdmin
-        .from('analyses')
-        .upsert({
-          ...otherFields,
-          sessionId: sanitizedSessionId,
-          joy: z_scores.joy ?? 0,
-          trust: z_scores.trust ?? 0,
-          fear: z_scores.fear ?? 0,
-          surprise: z_scores.surprise ?? 0,
-          sadness: z_scores.sadness ?? 0,
-          disgust: z_scores.disgust ?? 0,
-          anger: z_scores.anger ?? 0,
-          anticipation: z_scores.anticipation ?? 0,
-          // ...other fields
-        }, { onConflict: 'sessionId' });
+      // Aggiorna record esistente
       const { data: updated, error: updateError } = await supabaseAdmin
         .from('analyses')
         .update(updateData)
@@ -299,23 +306,7 @@ export async function POST(request: NextRequest) {
       }
       analysisId = updated.id
     } else {
-      // Crea
-      const { z_scores, ...otherFields } = analysisData;
-      await supabaseAdmin
-        .from('analyses')
-        .upsert({
-          ...otherFields,
-          sessionId: sanitizedSessionId,
-          joy: z_scores.joy ?? 0,
-          trust: z_scores.trust ?? 0,
-          fear: z_scores.fear ?? 0,
-          surprise: z_scores.surprise ?? 0,
-          sadness: z_scores.sadness ?? 0,
-          disgust: z_scores.disgust ?? 0,
-          anger: z_scores.anger ?? 0,
-          anticipation: z_scores.anticipation ?? 0,
-          // ...other fields
-        }, { onConflict: 'sessionId' });
+      // Crea nuovo record
       const { data: created, error: createError } = await supabaseAdmin
         .from('analyses')
         .insert([{ sessionId: sanitizedSessionId, ...updateData }])

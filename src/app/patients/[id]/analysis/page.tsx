@@ -838,19 +838,28 @@ export default function PatientAnalysisPage() {
                           combinedTranscript={getCombinedTranscript()}
                           onAnalysisComplete={async (result) => {
                             console.log('Topic analysis completed:', result)
-                            
-                            // Salva nella cache se abbiamo risultati
-                            if (result && getSelectedSessionsData().length > 0) {
-                              const firstSessionId = getSelectedSessionsData()[0].id
-                              await saveSessionAnalysis(firstSessionId, 'topics', result)
-                              console.log('✅ Analisi topic salvata nella cache')
-                            }
+                            // Il salvataggio ora viene gestito direttamente nel componente
+                            // Non serve più salvare qui
                           }}
                           cachedData={(() => {
                             const topicData = hasAllTopicAnalyses ? getTopicData() : undefined
                             console.log('🎯 Topic cached data being passed:', topicData)
                             console.log('🎯 hasAllTopicAnalyses:', hasAllTopicAnalyses)
-                            return topicData
+                            
+                            // Se abbiamo dati topic, prendi il primo risultato (per compatibilità)
+                            if (topicData && Array.isArray(topicData) && topicData.length > 0) {
+                              const firstResult = topicData[0]
+                              return {
+                                session_id: firstResult.session_id,
+                                topics: firstResult.topics || [],
+                                summary: firstResult.summary || '',
+                                analysis_timestamp: firstResult.analysis_timestamp || '',
+                                text_segments: firstResult.text_segments || [],
+                                patient_content_stats: firstResult.patient_content_stats || null
+                              }
+                            }
+                            
+                            return undefined
                           })()}
                         />
                       </div>

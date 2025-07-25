@@ -95,6 +95,10 @@ model Analysis {
   // Topic Analysis
   keyTopics        String?   // JSON string di topic principali
   topicAnalysisResult String? // JSON completo risultato topic modeling
+  topicAnalysisTimestamp DateTime? // Timestamp dell'analisi topic
+  topicAnalysisVersion String? // Versione dell'algoritmo topic
+  topicAnalysisLanguage String? // Lingua dell'analisi topic
+  customTopicAnalysisResults String? // JSON delle ricerche topic personalizzate
   
   // Semantic Frame Analysis
   semanticFrameResults String? // JSON dei risultati semantic frame per diverse parole
@@ -114,6 +118,7 @@ model Analysis {
 
   @@index([patientId])
   @@index([createdAt])
+  @@index([topicAnalysisTimestamp])
   @@map("analyses")
 }
 

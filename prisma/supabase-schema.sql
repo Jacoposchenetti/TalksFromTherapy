@@ -66,6 +66,9 @@ CREATE TABLE "analyses" (
   -- Topic Analysis
   "keyTopics" TEXT,
   "topicAnalysisResult" TEXT,
+  "topicAnalysisTimestamp" TIMESTAMP WITH TIME ZONE,
+  "topicAnalysisVersion" TEXT,
+  "topicAnalysisLanguage" TEXT,
   "customTopicAnalysisResults" TEXT,
   -- Semantic Frame Analysis
   "semanticFrameResults" TEXT,
@@ -85,6 +88,7 @@ CREATE TABLE "analyses" (
 );
 CREATE INDEX "analyses_patientId_idx" ON "analyses"("patientId");
 CREATE INDEX "analyses_createdAt_idx" ON "analyses"("createdAt");
+CREATE INDEX "analyses_topicAnalysisTimestamp_idx" ON "analyses"("topicAnalysisTimestamp");
 
 -- Tabella transcription_jobs
 CREATE TABLE "transcription_jobs" (
