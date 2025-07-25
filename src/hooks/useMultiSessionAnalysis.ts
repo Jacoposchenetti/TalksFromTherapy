@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 
 interface CachedAnalysis {
   sentiment?: any
@@ -27,6 +27,26 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
   // Memoizza sessionIds array per evitare dipendenze inutili
   const memoizedSessionIds = useMemo(() => sessionIds, [sessionIds.join(',')])
 
+  // Multi-session sentiment analysis cache (volatile, per combinazione di sessioni)
+  const multiSessionSentimentCache = useRef<{ [key: string]: any }>({})
+
+  // Helper per chiave combinazione sessioni
+  const getSessionComboKey = (ids: string[]) => ids.slice().sort().join('__')
+
+  // Memoizza la funzione getter per la sentiment analysis multi-sessione
+  const getMultiSessionSentimentData = useCallback((selectedIds: string[]) => {
+    const key = getSessionComboKey(selectedIds)
+    return multiSessionSentimentCache.current[key] || null
+  }, [])
+
+  // Quando viene fatta una nuova analisi multi-sessione, salvala nella cache locale
+  const saveMultiSessionSentimentData = useCallback((selectedIds: string[], result: any) => {
+    const key = getSessionComboKey(selectedIds)
+    multiSessionSentimentCache.current[key] = result
+  }, [])
+
+  // Rimuovi tutte le chiamate a console.log e debugLog
+
   // Carica analisi per tutte le sessioni
   const loadAllAnalyses = useCallback(async () => {
     if (!memoizedSessionIds.length) return
@@ -35,44 +55,31 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
     setError(null)
 
     try {
-      const log = (...args: any[]) => {
-        if (typeof window === "undefined") {
-          // Node/SSR: log nel terminale
-          // eslint-disable-next-line no-console
-          console.log('[useMultiSessionAnalysis][SSR]', ...args)
-        } else {
-          // Browser: log normale
-          // eslint-disable-next-line no-console
-          console.log('[useMultiSessionAnalysis][CLIENT]', ...args)
-        }
-      }
-
-      log('Inizio caricamento analisi per sessioni:', memoizedSessionIds)
       const promises = memoizedSessionIds.map(async (sessionId) => {
-        log(`Richiesta a /api/analyses?sessionId=${sessionId}`)
         const response = await fetch(`/api/analyses?sessionId=${sessionId}`)
         const data = await response.json()
-        log(`Risposta per sessionId ${sessionId}:`, data)
-        return { sessionId, data: response.ok ? data.analysis : null }
+        let analysisValue = null;
+        // FIX: estrai da data.analysis se presente
+        if (response.ok && data.data && data.data.analysis) {
+          analysisValue = data.data.analysis;
+        } else if (response.ok && data.analysis) {
+          // fallback legacy
+          analysisValue = data.analysis;
+        } else if (response.ok && data.success && Array.isArray(data.individual_sessions) && data.individual_sessions.length > 0 && data.individual_sessions[0].analysis) {
+          analysisValue = { sentiment: data.individual_sessions[0].analysis };
+        }
+        return { sessionId, data: analysisValue }
       })
 
       const results = await Promise.all(promises)
-      log('Tutte le risposte ricevute:', results)
-      
       const newAnalyses: MultiSessionAnalysis = {}
       results.forEach(({ sessionId, data }) => {
         if (data) {
-          log(`Analisi trovata per sessionId ${sessionId}:`, data)
           newAnalyses[sessionId] = data
-        } else {
-          log(`Nessuna analisi trovata per sessionId ${sessionId}`)
         }
       })
-
       setAnalyses(newAnalyses)
-      log('Stato finale analyses:', newAnalyses)
     } catch (error) {
-      console.error('[useMultiSessionAnalysis] Errore nel caricamento analisi multiple:', error)
       setError('Errore di connessione')
     } finally {
       setLoading(false)
@@ -98,7 +105,6 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
         // Ricarica l'analisi per questa sessione specifica
         const updatedResponse = await fetch(`/api/analyses?sessionId=${sessionId}`)
         const updatedData = await updatedResponse.json()
-        
         if (updatedResponse.ok && updatedData.analysis) {
           setAnalyses(prev => ({
             ...prev,
@@ -109,7 +115,6 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
       }
       return false
     } catch (error) {
-      console.error('Errore nel salvataggio analisi:', error)
       return false
     }
   }, [])
@@ -136,16 +141,22 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
   // Memoizza la funzione per ottenere analisi aggregate
   const getAggregatedAnalysis = useCallback((analysisType: string) => {
     const results: any[] = []
-    
     memoizedSessionIds.forEach(sessionId => {
       const analysis = analyses[sessionId]
       if (analysis) {
         switch (analysisType) {
           case 'sentiment':
             if (analysis.sentiment) {
+              // Provo a recuperare il titolo reale se presente
+              let sessionTitle = `Sessione ${sessionId}`
+              if (analysis && typeof analysis === 'object') {
+                if ('sessionTitle' in analysis && typeof analysis.sessionTitle === 'string') sessionTitle = analysis.sessionTitle
+                else if ('title' in analysis && typeof analysis.title === 'string') sessionTitle = analysis.title
+                else if ('session_title' in analysis && typeof analysis.session_title === 'string') sessionTitle = analysis.session_title
+              }
               results.push({
                 session_id: sessionId,
-                session_title: `Sessione ${sessionId}`, // TODO: Get real session title
+                session_title: sessionTitle,
                 analysis: analysis.sentiment,
                 flower_plot: analysis.sentiment.flower_plot
               })
@@ -153,14 +164,12 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
             break
           case 'topics':
             if (analysis.topics) {
-              // For topics, return the single analysis result since topic modeling is done on combined sessions
               return analysis.topics
             }
             break
         }
       }
     })
-
     return results
   }, [memoizedSessionIds, analyses])
 
@@ -169,7 +178,27 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
   const hasAllTopicAnalyses = useMemo(() => allSessionsHaveAnalysis('topics'), [allSessionsHaveAnalysis])
 
   // Memoizza le funzioni getter
-  const getSentimentData = useCallback(() => getAggregatedAnalysis('sentiment'), [getAggregatedAnalysis])
+  const getSentimentData = useCallback(() => {
+    // Aggrega sempre anche per una sola sessione
+    const results = [];
+    for (const sessionId of memoizedSessionIds) {
+      const analysis = analyses[sessionId];
+      let sessionTitle = `Sessione ${sessionId}`;
+      if (analysis && typeof analysis === 'object') {
+        if ('sessionTitle' in analysis && typeof analysis.sessionTitle === 'string') sessionTitle = analysis.sessionTitle;
+        else if ('title' in analysis && typeof analysis.title === 'string') sessionTitle = analysis.title;
+      }
+      if (analysis && analysis.sentiment) {
+        results.push({
+          session_id: sessionId,
+          session_title: sessionTitle,
+          analysis: analysis.sentiment,
+          flower_plot: analysis.sentiment.flower_plot
+        });
+      }
+    }
+    return results;
+  }, [memoizedSessionIds, analyses]);
   
   // Special getter for topic data (returns single analysis result)
   const getTopicData = useCallback(() => {
@@ -177,14 +206,10 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
     if (memoizedSessionIds.length > 0) {
       const firstSessionId = memoizedSessionIds[0]
       const analysis = analyses[firstSessionId]
-      console.log('🔍 getTopicData - firstSessionId:', firstSessionId)
-      console.log('🔍 getTopicData - analysis:', analysis)
       if (analysis?.topics) {
-        console.log('🔍 getTopicData - analysis.topics:', analysis.topics)
         return analysis.topics
       }
     }
-    console.log('🔍 getTopicData - returning null')
     return null
   }, [memoizedSessionIds, analyses])
 
@@ -209,6 +234,10 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
     hasAllTopicAnalyses,
     
     getSentimentData,
-    getTopicData
+    getTopicData,
+    // Multi-session sentiment helpers
+    getMultiSessionSentimentData,
+    saveMultiSessionSentimentData,
+    getSessionComboKey
   }
 }

@@ -121,13 +121,6 @@ export default function PatientAnalysisPage() {
     fetchPatientData()
   }, [session, status, router, patientId])
 
-  // Carica analisi esistenti ogni volta che cambia la selezione delle sessioni (FORZATO SEMPRE)
-  useEffect(() => {
-    if (selectedSessions.size > 0) {
-      loadAllAnalyses();
-    }
-  }, [selectedSessions, loadAllAnalyses]);
-
   // Aggiorna i risultati dell'emotion analysis quando cambiano le analisi (ONLY ONCE)
   useEffect(() => {
     if (hasAllSentimentAnalyses && selectedSessions.size > 0) {
@@ -197,19 +190,17 @@ export default function PatientAnalysisPage() {
 
   // Selezione automatica della sessione passata via query string
   useEffect(() => {
-    if (sessions.length > 0 && searchParams) {
+    if (
+      sessions.length > 0 &&
+      searchParams &&
+      selectedSessions.size === 0 // solo se non c'è già una selezione
+    ) {
       const sessionIdFromQuery = searchParams.get('sessionId')
       if (sessionIdFromQuery && sessions.some(s => s.id === sessionIdFromQuery)) {
         setSelectedSessions(new Set([sessionIdFromQuery]))
       }
     }
-  }, [sessions, searchParams])
-
-  useEffect(() => {
-    if (currentSlide === 1 && selectedSessions.size > 0) {
-      loadAllAnalyses()
-    }
-  }, [currentSlide, selectedSessions, loadAllAnalyses])
+  }, [sessions, searchParams, selectedSessions])
 
   const loadPastSemanticFrameAnalyses = async () => {
     if (selectedSessions.size === 0) return
@@ -531,7 +522,12 @@ export default function PatientAnalysisPage() {
   }
 
   const goToSlide = (index: number) => {
-    setCurrentSlide(index)
+    setCurrentSlide(prev => {
+      if (index === 2 && prev !== 2 && selectedSessions.size > 0) {
+        loadAllAnalyses();
+      }
+      return index;
+    });
   }
 
   if (loading) {
@@ -869,17 +865,16 @@ export default function PatientAnalysisPage() {
                           }))}
                           onAnalysisComplete={async (result) => {
                             console.log('🎯 Sentiment analysis completed:', result)
-                            
-                            // ONLY transform data, don't trigger more requests
+                            // Salva ogni sessione nella cache persistente (Supabase)
                             if (result.success && result.individual_sessions) {
-                              console.log('🔄 Setting emotionAnalysisResults:', result.individual_sessions)
-                              setEmotionAnalysisResults(result.individual_sessions)
-                              
-                              // Salva ogni sessione nella cache (do this quietly)
                               try {
                                 const sessions = result.individual_sessions
                                 for (const session of sessions) {
-                                  await saveSessionAnalysis(session.session_id, 'sentiment', session.analysis)
+                                  // Ensure flower_plot is included in the saved analysis
+                                  await saveSessionAnalysis(session.session_id, 'sentiment', {
+                                    ...session.analysis,
+                                    flower_plot: session.flower_plot
+                                  })
                                 }
                                 console.log('✅ Analisi sentiment salvate nella cache')
                               } catch (error) {
@@ -887,51 +882,9 @@ export default function PatientAnalysisPage() {
                               }
                             }
                           }}
-                          cachedData={hasAllSentimentAnalyses ? getSentimentData() : undefined}
+                          cachedData={getSentimentData()}
+                          onRefreshResults={loadAllAnalyses}
                         />
-                        {/* Flower plot per ogni sessione selezionata */}
-                        {emotionAnalysisResults.length > 0 && (
-                          <>
-                            <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 my-8 mb-16">
-                              {emotionAnalysisResults.map((session, idx) => (
-                                <Card key={session.session_id || idx} className="flex flex-col items-center p-4">
-                                  <div className="font-semibold mb-2 text-center">
-                                    {session.session_title || `Session ${idx + 1}`}
-                                  </div>
-                                  {session.flower_plot ? (
-                                    <img
-                                      src={`data:image/png;base64,${session.flower_plot}`}
-                                      alt="Emotion Flower Plot"
-                                      className="max-w-full h-auto rounded border shadow cursor-pointer transition-transform hover:scale-105"
-                                      style={{ maxHeight: '220px' }}
-                                      onClick={() => setFullscreenFlower({ src: `data:image/png;base64,${session.flower_plot}`, title: session.session_title || `Session ${idx + 1}` })}
-                                    />
-                                  ) : (
-                                    <div className="text-gray-400 italic">No flower plot available</div>
-                                  )}
-                                </Card>
-                              ))}
-                            </div>
-                            {/* Overlay fullscreen per il flower plot */}
-                            {fullscreenFlower && (
-                              <div
-                                className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 cursor-zoom-out"
-                                onClick={() => setFullscreenFlower(null)}
-                              >
-                                <img
-                                  src={fullscreenFlower.src}
-                                  alt={fullscreenFlower.title}
-                                  className="max-h-[90vh] max-w-[90vw] rounded-lg border-4 border-white shadow-2xl"
-                                  style={{ objectFit: 'contain' }}
-                                  title="Clicca o premi Esc per chiudere"
-                                />
-                                <span className="absolute top-6 left-1/2 -translate-x-1/2 text-white text-lg font-semibold bg-black bg-opacity-60 px-4 py-2 rounded">
-                                  {fullscreenFlower.title}
-                                </span>
-                              </div>
-                            )}
-                          </>
-                        )}
                         {/* Sentiment History/Emotion Trends sotto la tab principale */}
                         <div className="w-full mt-16 px-2 sm:px-4 lg:px-6">
                           <Card className="h-[600px]">

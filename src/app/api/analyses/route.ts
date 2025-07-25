@@ -2,12 +2,34 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, sanitizeInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 import { createClient } from "@supabase/supabase-js"
 import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
+import { visualizzaAnalisiSentimentBackend } from "@/components/sentiment-analysis";
 
 // Client supabase con service role per operazioni RLS
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+// Funzione robusta per il parsing JSON/text
+function safeJsonParse(str: string) {
+  if (!str) return null;
+  try {
+    return JSON.parse(str)
+  } catch {
+    return str // fallback: restituisci la stringa grezza
+  }
+}
+
+// Funzione per decodificare base64 JSON
+function decodeBase64Json(str: string) {
+  if (!str) return {};
+  try {
+    const jsonString = Buffer.from(str, 'base64').toString('utf-8');
+    return JSON.parse(jsonString);
+  } catch {
+    return {};
+  }
+}
 
 // GET /api/analyses?sessionId=xxx - Recupera analisi per una sessione
 export async function GET(request: NextRequest) {
@@ -25,6 +47,11 @@ export async function GET(request: NextRequest) {
     if (!validateApiInput({ sessionId }, ['sessionId'])) {
       return createErrorResponse("sessionId richiesto", 400)
     }
+
+    console.log('[API/analyses] GET called with sessionId:', sessionId);
+
+    // DEBUG: Log the sessionId parameter
+    console.log('[API/analyses] sessionId param:', sessionId);
 
     // Verifica che la sessione appartenga all'utente
     const { data: sessionData, error: sessionError } = await supabaseAdmin
@@ -45,41 +72,54 @@ export async function GET(request: NextRequest) {
       .eq('sessionId', sessionId)
       .single()
 
+    console.log('[API/analyses] Row fetched:', analysis);
+
     if (analysisError || !analysis) {
       return createSuccessResponse({ cached: false, analysis: null })
     }
 
-    // Trasforma i dati per l'uso nel frontend
+    // Decodifica i campi base64 JSON
+    const z_scores = {
+      joy: analysis.joy ?? 0,
+      trust: analysis.trust ?? 0,
+      fear: analysis.fear ?? 0,
+      surprise: analysis.surprise ?? 0,
+      sadness: analysis.sadness ?? 0,
+      disgust: analysis.disgust ?? 0,
+      anger: analysis.anger ?? 0,
+      anticipation: analysis.anticipation ?? 0,
+    };
+    console.log('[API/analyses] z_scores:', z_scores);
+    const significant_emotions = analysis.significantEmotions ? decodeBase64Json(analysis.significantEmotions) : {};
+    const dominant_emotions = analysis.dominantemotions ? decodeBase64Json(analysis.dominantemotions) : [];
+    const flower_plot = analysis.emotionFlowerPlot || null;
+
+    // DEBUG: Log the decoded fields
+    console.log('[API/analyses] Decoded significant_emotions:', significant_emotions);
+    console.log('[API/analyses] Decoded dominant_emotions:', dominant_emotions);
+
     const responseData = {
       cached: true,
       analysis: {
-        // Sentiment Analysis
-        sentiment: analysis.emotions ? {
-          z_scores: JSON.parse(decryptIfEncrypted(analysis.emotions) || '{}'),
+        sentiment: {
+          z_scores,
+          significant_emotions,
+          dominant_emotions,
           emotional_valence: analysis.emotionalValence,
-          significant_emotions: analysis.significantEmotions ? JSON.parse(decryptIfEncrypted(analysis.significantEmotions) || '{}') : {},
-          flower_plot: decryptIfEncrypted(analysis.emotionFlowerPlot),
-          sentiment_score: analysis.sentimentScore
-        } : null,
-        // Topic Analysis  
-        topics: analysis.topicAnalysisResult ? JSON.parse(decryptIfEncrypted(analysis.topicAnalysisResult) || 'null') : null,
-        // Custom Topic Searches
-        customTopicSearches: analysis.customTopicAnalysisResults ? 
-          JSON.parse(decryptIfEncrypted(analysis.customTopicAnalysisResults) || '{}').searches || [] : [],
-        // Semantic Frame Analysis
-        semanticFrames: analysis.semanticFrameResults ? JSON.parse(decryptIfEncrypted(analysis.semanticFrameResults) || '{}') : {},
-        // Metadata
-        analysisVersion: analysis.analysisVersion,
-        language: analysis.language,
-        createdAt: analysis.createdAt,
-        updatedAt: analysis.updatedAt
+          positive_score: analysis.positivescore,
+          negative_score: analysis.negativescore,
+          text_length: analysis.wordcount,
+          sentiment_score: analysis.sentimentScore,
+          flower_plot
+        },
+        // altri campi se servono
       }
     }
-
+    console.log('Sto restituendo:', JSON.stringify(responseData, null, 2));
     return createSuccessResponse(responseData)
   } catch (error) {
-    console.error("Errore nel recupero analisi:", error)
-    return createErrorResponse("Errore interno del server", 500)
+    console.error('[API/analyses] Uncaught error:', error);
+    return createErrorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -125,13 +165,30 @@ export async function POST(request: NextRequest) {
 
     switch (sanitizedAnalysisType) {
       case 'sentiment':
+        // Calcola positive/negative score se mancano
+        let z_scores = analysisData.z_scores || {};
+        let positive_score = analysisData.positive_score ?? ((z_scores.joy ?? 0) + (z_scores.trust ?? 0) + (z_scores.anticipation ?? 0));
+        let negative_score = analysisData.negative_score ?? ((z_scores.fear ?? 0) + (z_scores.sadness ?? 0) + (z_scores.anger ?? 0) + (z_scores.disgust ?? 0));
+        let word_count = analysisData.word_count ?? analysisData.text_length ?? 0;
+        let dominant_emotions = analysisData.dominant_emotions ? JSON.stringify(analysisData.dominant_emotions) : null;
         updateData = {
           ...updateData,
-          emotions: encryptIfSensitive(JSON.stringify(analysisData.z_scores || {})),
+          // Salva ogni emozione come colonna separata, come per emotionalValence
+          joy: z_scores.joy ?? 0,
+          trust: z_scores.trust ?? 0,
+          fear: z_scores.fear ?? 0,
+          surprise: z_scores.surprise ?? 0,
+          sadness: z_scores.sadness ?? 0,
+          disgust: z_scores.disgust ?? 0,
+          anger: z_scores.anger ?? 0,
+          anticipation: z_scores.anticipation ?? 0,
           emotionalValence: analysisData.emotional_valence || 0,
           sentimentScore: analysisData.sentiment_score || 0,
           significantEmotions: encryptIfSensitive(JSON.stringify(analysisData.significant_emotions || {})),
-          emotionFlowerPlot: encryptIfSensitive(analysisData.flower_plot || null)
+          positivescore: positive_score,
+          negativescore: negative_score,
+          wordcount: word_count,
+          dominantemotions: dominant_emotions
         }
         break
       case 'topics':
@@ -215,6 +272,22 @@ export async function POST(request: NextRequest) {
     let analysisId = null
     if (existing && existing.id) {
       // Aggiorna
+      const { z_scores, ...otherFields } = analysisData;
+      await supabaseAdmin
+        .from('analyses')
+        .upsert({
+          ...otherFields,
+          sessionId: sanitizedSessionId,
+          joy: z_scores.joy ?? 0,
+          trust: z_scores.trust ?? 0,
+          fear: z_scores.fear ?? 0,
+          surprise: z_scores.surprise ?? 0,
+          sadness: z_scores.sadness ?? 0,
+          disgust: z_scores.disgust ?? 0,
+          anger: z_scores.anger ?? 0,
+          anticipation: z_scores.anticipation ?? 0,
+          // ...other fields
+        }, { onConflict: 'sessionId' });
       const { data: updated, error: updateError } = await supabaseAdmin
         .from('analyses')
         .update(updateData)
@@ -227,6 +300,22 @@ export async function POST(request: NextRequest) {
       analysisId = updated.id
     } else {
       // Crea
+      const { z_scores, ...otherFields } = analysisData;
+      await supabaseAdmin
+        .from('analyses')
+        .upsert({
+          ...otherFields,
+          sessionId: sanitizedSessionId,
+          joy: z_scores.joy ?? 0,
+          trust: z_scores.trust ?? 0,
+          fear: z_scores.fear ?? 0,
+          surprise: z_scores.surprise ?? 0,
+          sadness: z_scores.sadness ?? 0,
+          disgust: z_scores.disgust ?? 0,
+          anger: z_scores.anger ?? 0,
+          anticipation: z_scores.anticipation ?? 0,
+          // ...other fields
+        }, { onConflict: 'sessionId' });
       const { data: created, error: createError } = await supabaseAdmin
         .from('analyses')
         .insert([{ sessionId: sanitizedSessionId, ...updateData }])
