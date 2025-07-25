@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp, Network, Search, X, RefreshCw, Database } from "lucide-react"
+import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, TrendingUp, Network, Search, X, RefreshCw, Database, History } from "lucide-react"
 import { SentimentAnalysis } from "@/components/sentiment-analysis"
 import { EmotionTrends } from "@/components/emotion-trends"
 import TopicAnalysisComponent from "@/components/analysis/topic-modeling-gpt"
@@ -56,11 +56,12 @@ export default function PatientAnalysisPage() {
   
   // Semantic Frame Analysis state
   const [targetWord, setTargetWord] = useState("")
+  const [currentDisplayedWord, setCurrentDisplayedWord] = useState("")
   const [semanticFrameLoading, setSemanticFrameLoading] = useState(false)
   const [semanticFrameResult, setSemanticFrameResult] = useState<any>(null)
   const [semanticFrameError, setSemanticFrameError] = useState<string | null>(null)
-  const [pastAnalyses, setPastAnalyses] = useState<{[key: string]: any}>({})
-  const [selectedPastAnalysis, setSelectedPastAnalysis] = useState<string>("")
+  const [currentSemanticFrameIndex, setCurrentSemanticFrameIndex] = useState(0)
+  const [analyzingWord, setAnalyzingWord] = useState<string | null>(null)
   
   // Transcript search state
   const [searchTerm, setSearchTerm] = useState("")
@@ -75,10 +76,14 @@ export default function PatientAnalysisPage() {
     hasAllSentimentAnalyses,
     hasAllTopicAnalyses,
     getSentimentData,
-    getTopicData
+    getTopicData,
+    getSemanticFrameData,
+    hasSemanticFrameAnalysis,
+    getAllSemanticFrameWords,
+    deleteSemanticFrameAnalysis
   } = useMultiSessionAnalysis({ 
     sessionIds: Array.from(selectedSessions),
-    autoLoad: false  // We'll load manually when sessions are selected
+    autoLoad: false
   })
 
   // Stato per le note di tutte le sessioni selezionate
@@ -132,16 +137,99 @@ export default function PatientAnalysisPage() {
     }
   }, [hasAllSentimentAnalyses])
 
-  // Carica analisi semantic frame passate quando cambiano le sessioni selezionate (WITH PROTECTION)
+  // Carica le analisi semantiche passate quando cambiano le sessioni
   useEffect(() => {
     if (selectedSessions.size > 0) {
-      const timeoutId = setTimeout(() => {
-        loadPastSemanticFrameAnalyses()
-      }, 750)
-      
-      return () => clearTimeout(timeoutId)
+      const semanticFrameData = getSemanticFrameData()
+      if (semanticFrameData.length > 0) {
+        // Prendi la prima sessione con analisi semantiche
+        const firstSession = semanticFrameData[0]
+        if (firstSession.semanticFrames && Object.keys(firstSession.semanticFrames).length > 0) {
+          // Prendi la prima parola analizzata
+          const firstWord = Object.keys(firstSession.semanticFrames)[0]
+          setSemanticFrameResult(firstSession.semanticFrames[firstWord])
+          setCurrentDisplayedWord(firstWord)
+        } else {
+          setSemanticFrameResult(null)
+        }
+      } else {
+        setSemanticFrameResult(null)
+      }
+      // Reset selezione quando cambiano le sessioni
+      setCurrentSemanticFrameIndex(0)
     }
-  }, [selectedSessions])
+  }, [selectedSessions, getSemanticFrameData])
+
+  // Aggiorna la visualizzazione quando cambiano i dati della cache
+  useEffect(() => {
+    if (selectedSessions.size > 0) {
+      const semanticFrameData = getSemanticFrameData()
+      if (semanticFrameData.length > 0 && getAllSemanticFrameWords().length > 0) {
+        // Se non c'è un'analisi corrente, mostra la prima disponibile
+        if (!semanticFrameResult) {
+          const allWords = getAllSemanticFrameWords()
+          if (allWords.length > 0 && currentSemanticFrameIndex < allWords.length) {
+            const currentWord = allWords[currentSemanticFrameIndex]
+            for (const sessionData of semanticFrameData) {
+              if (sessionData.semanticFrames && sessionData.semanticFrames[currentWord]) {
+                console.log(`[Frontend] Auto-loading analysis for "${currentWord}" from cache`)
+                setSemanticFrameResult(sessionData.semanticFrames[currentWord])
+                setCurrentDisplayedWord(currentWord)
+                break
+              }
+            }
+          }
+        }
+      } else {
+        // Se non ci sono analisi nella cache, resetta la visualizzazione
+        setSemanticFrameResult(null)
+        setCurrentDisplayedWord("")
+      }
+    }
+  }, [analyses, selectedSessions, currentSemanticFrameIndex, getSemanticFrameData, getAllSemanticFrameWords, semanticFrameResult])
+
+  // Funzioni di navigazione per semantic frame analysis
+  const goToPreviousSemanticFrame = () => {
+    const allWords = getAllSemanticFrameWords()
+    if (allWords.length > 0) {
+      const newIndex = currentSemanticFrameIndex > 0 ? currentSemanticFrameIndex - 1 : allWords.length - 1
+      const newWord = allWords[newIndex]
+      
+      setCurrentSemanticFrameIndex(newIndex)
+      setCurrentDisplayedWord(newWord)
+      
+      // Carica l'analisi dalla cache
+      const semanticFrameData = getSemanticFrameData()
+      for (const sessionData of semanticFrameData) {
+        if (sessionData.semanticFrames && sessionData.semanticFrames[newWord]) {
+          console.log(`[Frontend] Loading analysis for "${newWord}" via navigation`)
+          setSemanticFrameResult(sessionData.semanticFrames[newWord])
+          break
+        }
+      }
+    }
+  }
+
+  const goToNextSemanticFrame = () => {
+    const allWords = getAllSemanticFrameWords()
+    if (allWords.length > 0) {
+      const newIndex = currentSemanticFrameIndex < allWords.length - 1 ? currentSemanticFrameIndex + 1 : 0
+      const newWord = allWords[newIndex]
+      
+      setCurrentSemanticFrameIndex(newIndex)
+      setCurrentDisplayedWord(newWord)
+      
+      // Carica l'analisi dalla cache
+      const semanticFrameData = getSemanticFrameData()
+      for (const sessionData of semanticFrameData) {
+        if (sessionData.semanticFrames && sessionData.semanticFrames[newWord]) {
+          console.log(`[Frontend] Loading analysis for "${newWord}" via navigation`)
+          setSemanticFrameResult(sessionData.semanticFrames[newWord])
+          break
+        }
+      }
+    }
+  }
 
   // Carica le note di tutte le sessioni selezionate ogni volta che cambia la selezione
   useEffect(() => {
@@ -202,21 +290,6 @@ export default function PatientAnalysisPage() {
       }
     }
   }, [sessions, searchParams, selectedSessions])
-
-  const loadPastSemanticFrameAnalyses = async () => {
-    if (selectedSessions.size === 0) return
-    
-    const firstSessionId = Array.from(selectedSessions)[0]
-    const analysis = analyses[firstSessionId]
-    
-    if (analysis?.semanticFrames) {
-      setPastAnalyses(analysis.semanticFrames)
-    } else {
-      setPastAnalyses({})
-    }
-    // Reset selezione quando cambiano le sessioni
-    setSelectedPastAnalysis("")
-  }
 
   const fetchPatientData = async () => {
     try {
@@ -432,7 +505,7 @@ export default function PatientAnalysisPage() {
     const wordToAnalyze = word || targetWord.trim()
     
     if (!wordToAnalyze) {
-      setSemanticFrameError("Inserisci una parola chiave per l'analisi")
+      setSemanticFrameError("Inserisci una parola da analizzare")
       return
     }
 
@@ -443,15 +516,37 @@ export default function PatientAnalysisPage() {
     }
 
     // Prima verifica se abbiamo già questa analisi nella cache
-    const firstSessionId = getSelectedSessionsData()[0]?.id
-    if (firstSessionId && analyses[firstSessionId]?.semanticFrames?.[wordToAnalyze]) {
-      setSemanticFrameResult(analyses[firstSessionId].semanticFrames[wordToAnalyze])
-      return
+    if (hasSemanticFrameAnalysis(wordToAnalyze)) {
+      console.log(`✅ Analisi semantica per "${wordToAnalyze}" trovata nella cache`)
+      const semanticFrameData = getSemanticFrameData()
+      
+      for (const sessionData of semanticFrameData) {
+        if (sessionData.semanticFrames && sessionData.semanticFrames[wordToAnalyze]) {
+          setSemanticFrameResult(sessionData.semanticFrames[wordToAnalyze])
+          setTargetWord(wordToAnalyze)
+          setCurrentDisplayedWord(wordToAnalyze)
+          setSemanticFrameError(null)
+          
+          // Aggiorna l'indice corrente
+          const allWords = getAllSemanticFrameWords()
+          const wordIndex = allWords.indexOf(wordToAnalyze)
+          if (wordIndex !== -1) {
+            setCurrentSemanticFrameIndex(wordIndex)
+          }
+          return
+        }
+      }
     }
 
     setSemanticFrameLoading(true)
     setSemanticFrameError(null)
     setSemanticFrameResult(null)
+    setAnalyzingWord(wordToAnalyze)
+
+    // Se la parola è stata passata come parametro, aggiorna targetWord
+    if (word) {
+      setTargetWord(word)
+    }
 
     try {
       const response = await fetch('/api/semantic-frame-analysis', {
@@ -462,7 +557,7 @@ export default function PatientAnalysisPage() {
         body: JSON.stringify({
           text: combinedTranscript,
           targetWord: wordToAnalyze,
-          sessionId: firstSessionId,
+          sessionId: getSelectedSessionsData()[0]?.id,
           language: 'italian'
         }),
       })
@@ -471,12 +566,53 @@ export default function PatientAnalysisPage() {
 
       if (data.success) {
         setSemanticFrameResult(data)
+        setTargetWord(wordToAnalyze)
+        setCurrentDisplayedWord(wordToAnalyze)
         console.log('Semantic Frame Analysis successful:', data)
         
-        // Salva il risultato nella cache per la prima sessione
-        if (firstSessionId) {
-          await saveSessionAnalysis(firstSessionId, 'semantic_frame', data)
-          console.log('✅ Semantic frame salvato nella cache')
+        // Salva il risultato nella cache per ogni sessione selezionata
+        for (const session of getSelectedSessionsData()) {
+          try {
+            const saveData = {
+              target_word: wordToAnalyze,
+              semantic_frame: data.semantic_frame,
+              emotional_analysis: data.emotional_analysis,
+              context_analysis: data.context_analysis,
+              statistics: data.statistics,
+              network_plot: data.network_plot,
+              timestamp: data.timestamp,
+              session_id: session.id
+            }
+            console.log(`[Frontend] Saving semantic frame data for "${wordToAnalyze}":`, saveData)
+            
+            await saveSessionAnalysis(session.id, 'semantic_frame', saveData)
+            console.log(`✅ Semantic frame analysis salvata per sessione: ${session.id}`)
+          } catch (error) {
+            console.error(`❌ Errore nel salvataggio semantic frame per sessione ${session.id}:`, error)
+          }
+        }
+        
+        // Ricarica la cache per aggiornare immediatamente la visualizzazione
+        await loadAllAnalyses()
+        
+        // Forza l'aggiornamento della visualizzazione
+        const semanticFrameData = getSemanticFrameData()
+        console.log(`[Frontend] After save, semantic frame data:`, semanticFrameData)
+        for (const sessionData of semanticFrameData) {
+          if (sessionData.semanticFrames && sessionData.semanticFrames[wordToAnalyze]) {
+            console.log(`[Frontend] Found saved analysis for "${wordToAnalyze}":`, sessionData.semanticFrames[wordToAnalyze])
+            setSemanticFrameResult(sessionData.semanticFrames[wordToAnalyze])
+            setTargetWord(wordToAnalyze)
+            setCurrentDisplayedWord(wordToAnalyze)
+            break
+          }
+        }
+        
+        // Aggiorna l'indice corrente
+        const allWords = getAllSemanticFrameWords()
+        const wordIndex = allWords.indexOf(wordToAnalyze)
+        if (wordIndex !== -1) {
+          setCurrentSemanticFrameIndex(wordIndex)
         }
       } else {
         setSemanticFrameError(data.error || 'Errore durante l\'analisi semantica')
@@ -487,6 +623,7 @@ export default function PatientAnalysisPage() {
       setSemanticFrameError('Errore di connessione durante l\'analisi')
     } finally {
       setSemanticFrameLoading(false)
+      setAnalyzingWord(null)
     }
   }
 
@@ -533,6 +670,15 @@ export default function PatientAnalysisPage() {
         loadAllAnalyses();
         setLastLoadedSlide(2);
       }
+      if (
+        index === 3 &&
+        prev !== 3 &&
+        selectedSessions.size > 0 &&
+        lastLoadedSlide !== 3
+      ) {
+        loadAllAnalyses();
+        setLastLoadedSlide(3);
+      }
       return index;
     });
   }
@@ -541,6 +687,44 @@ export default function PatientAnalysisPage() {
   useEffect(() => {
     setLastLoadedSlide(null);
   }, [selectedSessions]);
+
+  // Funzione per eliminare semantic frame analysis
+  const handleDeleteSemanticFrameAnalysis = async (targetWord: string) => {
+    if (!targetWord) return
+
+    // Elimina da tutte le sessioni selezionate
+    const selectedSessionsData = getSelectedSessionsData()
+    let successCount = 0
+    let errorCount = 0
+
+    for (const session of selectedSessionsData) {
+      const result = await deleteSemanticFrameAnalysis(session.id, targetWord)
+      if (result.success) {
+        successCount++
+      } else {
+        errorCount++
+        console.error(`Errore eliminazione per sessione ${session.id}:`, result.error)
+      }
+    }
+
+    if (successCount > 0) {
+      // Ricarica le analisi per aggiornare la cache
+      await loadAllAnalyses()
+      
+      // Reset della visualizzazione se l'analisi eliminata era quella corrente
+      if (semanticFrameResult && semanticFrameResult.target_word === targetWord) {
+        setSemanticFrameResult(null)
+        setTargetWord("")
+        setCurrentSemanticFrameIndex(0)
+      }
+      
+      console.log(`✅ Eliminata semantic frame analysis "${targetWord}" da ${successCount} sessioni`)
+    }
+
+    if (errorCount > 0) {
+      console.error(`❌ Errori nell'eliminazione: ${errorCount} sessioni`)
+    }
+  }
 
   if (loading) {
     return (
@@ -960,48 +1144,133 @@ export default function PatientAnalysisPage() {
                         </div>
                         
                         {/* Menu Analisi Passate */}
-                        {Object.keys(pastAnalyses).length > 0 && (
+                        {getAllSemanticFrameWords().length > 0 && (
                           <div className="mb-4">
                             <h4 className="text-md font-medium mb-3 flex items-center gap-2">
-                              Past Analyses
+                              <History className="h-4 w-4" />
+                              Analisi Precedenti
                             </h4>
+                            
+                            {/* Controlli di navigazione */}
+                            {getAllSemanticFrameWords().length > 1 && (
+                              <div className="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-lg">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={goToPreviousSemanticFrame}
+                                  className="flex items-center gap-2"
+                                >
+                                  <ChevronLeft className="w-4 h-4" />
+                                  Precedente
+                                </Button>
+                                <div className="text-center">
+                                  <span className="font-semibold text-gray-700">
+                                    Analisi {currentSemanticFrameIndex + 1} di {getAllSemanticFrameWords().length}
+                                  </span>
+                                  <p className="text-sm text-gray-500 mt-1">
+                                    Parola: "{currentDisplayedWord}"
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={goToNextSemanticFrame}
+                                  className="flex items-center gap-2"
+                                >
+                                  Successiva
+                                  <ChevronRight className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+                            
+                            {/* Selezione manuale */}
                             <div className="flex gap-3 items-center">
                               <select
-                                value={selectedPastAnalysis}
+                                value={currentDisplayedWord}
                                 onChange={(e) => {
-                                  setSelectedPastAnalysis(e.target.value)
-                                  if (e.target.value && pastAnalyses[e.target.value]) {
-                                    setSemanticFrameResult(pastAnalyses[e.target.value])
-                                    setTargetWord(e.target.value)
-                                    setSemanticFrameError(null)
+                                  const selectedWord = e.target.value
+                                  setCurrentDisplayedWord(selectedWord)
+                                  if (selectedWord) {
+                                    const wordIndex = getAllSemanticFrameWords().indexOf(selectedWord)
+                                    if (wordIndex !== -1) {
+                                      setCurrentSemanticFrameIndex(wordIndex)
+                                      
+                                      // Carica l'analisi dalla cache
+                                      const semanticFrameData = getSemanticFrameData()
+                                      for (const sessionData of semanticFrameData) {
+                                        if (sessionData.semanticFrames && sessionData.semanticFrames[selectedWord]) {
+                                          console.log(`[Frontend] Loading analysis for "${selectedWord}" via dropdown`)
+                                          setSemanticFrameResult(sessionData.semanticFrames[selectedWord])
+                                          break
+                                        }
+                                      }
+                                    }
+                                  } else {
+                                    setSemanticFrameResult(null)
+                                    setCurrentSemanticFrameIndex(0)
                                   }
                                 }}
                                 className="border rounded px-3 py-2 bg-white min-w-[200px] focus:ring-2 focus:ring-blue-400"
                               >
-                                <option value="">Select previous search </option>
-                                {Object.keys(pastAnalyses).map(word => (
+                                <option value="">Seleziona analisi precedente</option>
+                                {getAllSemanticFrameWords().map((word, index) => (
                                   <option key={word} value={word}>
-                                    {word}
+                                    {word} (Analisi {index + 1})
                                   </option>
                                 ))}
                               </select>
-                              {selectedPastAnalysis && (
+                              {currentDisplayedWord && (
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => {
-                                    setSelectedPastAnalysis("")
+                                    console.log(`[Frontend] Clearing semantic frame analysis`)
+                                    setCurrentDisplayedWord("")
                                     setSemanticFrameResult(null)
-                                    setTargetWord("")
+                                    setCurrentSemanticFrameIndex(0)
                                   }}
                                 >
                                   <X className="h-4 w-4" />
                                 </Button>
                               )}
                             </div>
-                            <p className="text-xs text-gray-500 mt-2">
-                              Select a previous analysis to view it again, or enter a new word below.
-                            </p>
+                            
+                            {/* Lista delle analisi con pulsanti di eliminazione */}
+                            {getAllSemanticFrameWords().length > 0 && (
+                              <div className="mt-3">
+                                <h5 className="text-sm font-medium text-gray-700 mb-2">Analisi disponibili:</h5>
+                                <div className="flex flex-wrap gap-2">
+                                  {getAllSemanticFrameWords().map((word, index) => (
+                                    <div key={word} className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1">
+                                      <button
+                                        onClick={() => {
+                                          setTargetWord(word)
+                                          const wordIndex = getAllSemanticFrameWords().indexOf(word)
+                                          if (wordIndex !== -1) {
+                                            setCurrentSemanticFrameIndex(wordIndex)
+                                          }
+                                        }}
+                                        className="text-sm text-blue-800 font-medium hover:text-blue-600 hover:underline cursor-pointer"
+                                      >
+                                        {word}
+                                      </button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleDeleteSemanticFrameAnalysis(word)}
+                                        className="h-5 w-5 p-0 hover:bg-red-100 hover:text-red-600"
+                                        title={`Elimina analisi per "${word}"`}
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2">
+                                  Clicca su una parola per visualizzarla, o usa la X per eliminarla. Inserisci una nuova parola sotto per fare una nuova analisi.
+                                </p>
+                              </div>
+                            )}
                           </div>
                         )}
                         
@@ -1047,92 +1316,144 @@ export default function PatientAnalysisPage() {
                           </div>
                         )}
 
+                        {/* Loading Indicator for Connected Word Analysis */}
+                        {analyzingWord && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-700">
+                            <div className="flex items-center gap-2">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-600"></div>
+                              <strong>Analizzando parola connessa:</strong> "{analyzingWord}"
+                            </div>
+                            <p className="mt-1 text-xs">L'analisi verrà salvata automaticamente e aggiunta alla lista delle analisi precedenti.</p>
+                          </div>
+                        )}
+
                         {/* Results Visualization */}
                         <div className="flex-1 flex flex-col min-h-[400px]">
                           {semanticFrameResult ? (
-                            <div className="space-y-6">
+                            <div className="bg-white rounded-lg border p-6 h-full overflow-y-auto">
+                              {/* Header con informazioni dell'analisi */}
+                              <div className="mb-6">
+                                <h4 className="text-xl font-bold text-gray-800 mb-2">
+                                  Analisi Semantica: "{semanticFrameResult.target_word || currentDisplayedWord}"
+                                </h4>
+                                <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                                  <span>
+                                    <strong>Parole connesse:</strong> {semanticFrameResult.semantic_frame?.connected_words?.length || 0}
+                                  </span>
+                                  <span>
+                                    <strong>Valenza emotiva:</strong> {semanticFrameResult.emotional_analysis?.emotional_valence?.toFixed(2) || 'N/A'}
+                                  </span>
+                                  <span>
+                                    <strong>Connessioni totali:</strong> {semanticFrameResult.semantic_frame?.total_connections || 0}
+                                  </span>
+                                </div>
+                              </div>
+
                               {/* Network Visualization */}
-                              {semanticFrameResult.visualization?.frame_plot && (
-                                <div className="bg-white rounded-lg border p-4">
-                                  <h4 className="font-semibold mb-3 flex items-center gap-2">
-                                    <Network className="h-5 w-5 text-blue-600" />
-                                    Semantic Network for "{semanticFrameResult.target_word}"
-                                  </h4>
-                                  <div className="flex justify-center mb-4">
-                                    <img 
-                                      src={`data:image/png;base64,${semanticFrameResult.visualization.frame_plot}`}
-                                      alt={`Semantic network for ${semanticFrameResult.target_word}`}
-                                      className="max-w-full h-auto rounded border"
-                                      style={{ maxHeight: '500px' }}
+                              {semanticFrameResult.network_plot && (
+                                <div className="mb-6">
+                                  <h5 className="text-lg font-semibold text-gray-700 mb-3">
+                                    Rete Cognitiva EmoAtlas
+                                  </h5>
+                                  <div className="border rounded-lg overflow-hidden">
+                                    <img
+                                      src={`data:image/png;base64,${semanticFrameResult.network_plot}`}
+                                      alt={`Semantic network for ${semanticFrameResult.target_word || currentDisplayedWord}`}
+                                      className="w-full h-auto max-h-[500px] object-contain"
                                     />
-                                  </div>
-                                  
-                                  {/* Legend */}
-                                  <div className="bg-gray-50 rounded-lg p-3 mt-4">
-                                    <h5 className="text-sm font-medium text-gray-700 mb-2">📋 Color Legend</h5>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                                        <span><strong>Red:</strong> Words with negative valence</span>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                                        <span><strong>Green:</strong> Words with positive valence</span>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full bg-gray-500"></div>
-                                        <span><strong>Gray:</strong> Neutral words</span>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                                        <span><strong>Purple:</strong> Contrastive connections</span>
-                                      </div>
-                                    </div>
-                                    <div className="mt-2 text-xs text-gray-600">
-                                      <p><strong>Font size:</strong> Proportional to the centrality/importance of the word in the text</p>
-                                      <p><strong>Connections:</strong> Lines indicate syntactic relationships between words</p>
-                                    </div>
                                   </div>
                                 </div>
                               )}
 
-                              {/* Semantic Network Visualization */}
-
-                              {semanticFrameResult.network_plot && (
-                                <div className="bg-white rounded-lg border p-4 mb-4">
-                                  <h4 className="font-semibold mb-3 text-gray-700 flex items-center gap-2">
-                                    <Network className="w-5 h-5 text-green-600" />
-                                    🎯 Semantic Network Generated by EmoAtlas
-                                  </h4>
-                                  <div className="flex justify-center bg-gray-50 p-4 rounded-lg">
-                                    <img 
-                                      src={`data:image/png;base64,${semanticFrameResult.network_plot}`}
-                                      alt={`Semantic network for the word "${targetWord}"`}
-                                      className="max-w-full h-auto rounded-lg shadow-lg border-2 border-blue-200"
-                                      style={{ maxHeight: '600px', maxWidth: '100%' }}
-                                      onLoad={() => console.log('✅ Network plot image loaded successfully!')}
-                                      onError={(e) => {
-                                        console.error('❌ Errore nel caricamento immagine network plot:', e);
-                                        console.error('❌ Image src length:', e.currentTarget.src.length);
-                                        console.error('❌ Base64 data length:', semanticFrameResult.network_plot.length);
-                                      }}
-                                    />
+                              {/* Emotional Analysis */}
+                              {semanticFrameResult.emotional_analysis?.z_scores && (
+                                <div className="mb-6">
+                                  <h5 className="text-lg font-semibold text-gray-700 mb-3">
+                                    Profilo Emotivo
+                                  </h5>
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {Object.entries(semanticFrameResult.emotional_analysis.z_scores).map(([emotion, score]) => (
+                                      <div key={emotion} className="bg-gray-50 rounded-lg p-3 text-center">
+                                        <div className="text-sm font-medium text-gray-600 capitalize">
+                                          {emotion === 'joy' ? 'Gioia' :
+                                           emotion === 'trust' ? 'Fiducia' :
+                                           emotion === 'fear' ? 'Paura' :
+                                           emotion === 'surprise' ? 'Sorpresa' :
+                                           emotion === 'sadness' ? 'Tristezza' :
+                                           emotion === 'disgust' ? 'Disgusto' :
+                                           emotion === 'anger' ? 'Rabbia' :
+                                           emotion === 'anticipation' ? 'Attesa' : emotion}
+                                        </div>
+                                        <div className={`text-lg font-bold ${Number(score) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                          {Number(score).toFixed(2)}
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
+                                </div>
+                              )}
+
+                              {/* Connected Words */}
+                              {semanticFrameResult.semantic_frame?.connected_words && semanticFrameResult.semantic_frame.connected_words.length > 0 && (
+                                <div className="mb-6">
+                                  <h5 className="text-lg font-semibold text-gray-700 mb-3">
+                                    Parole Connesse ({semanticFrameResult.semantic_frame.connected_words.length})
+                                  </h5>
+                                  <div className="flex flex-wrap gap-2">
+                                    {semanticFrameResult.semantic_frame.connected_words.map((word: string, index: number) => (
+                                      <button
+                                        key={index}
+                                        onClick={() => {
+                                          console.log(`[Frontend] Clicked on connected word: "${word}"`)
+                                          setTargetWord(word)
+                                          // Piccolo delay per assicurarsi che targetWord sia aggiornato
+                                          setTimeout(() => {
+                                            performSemanticFrameAnalysis(word)
+                                          }, 100)
+                                        }}
+                                        disabled={semanticFrameLoading}
+                                        className={`px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer ${
+                                          analyzingWord === word
+                                            ? 'bg-yellow-100 text-yellow-800 border-2 border-yellow-300'
+                                            : 'bg-blue-100 text-blue-800 hover:bg-blue-200 hover:text-blue-900'
+                                        } ${semanticFrameLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title={
+                                          analyzingWord === word
+                                            ? `Analizzando "${word}"...`
+                                            : `Analizza semanticamente la parola "${word}"`
+                                        }
+                                      >
+                                        {analyzingWord === word ? (
+                                          <span className="flex items-center gap-1">
+                                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-yellow-600"></div>
+                                            {word}
+                                          </span>
+                                        ) : (
+                                          word
+                                        )}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-2">
+                                    Clicca su una parola per analizzarla semanticamente. L'analisi verrà salvata automaticamente.
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Error or No Data */}
+                              {semanticFrameResult.error && (
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+                                  <strong>Errore nell'analisi:</strong> {semanticFrameResult.error}
                                 </div>
                               )}
                             </div>
                           ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
-                              <span className="text-gray-400 text-center">
-                                <Network className="w-12 h-12 mx-auto mb-2" />
-                                <span className="block font-medium">Visualizzazione frame semantico</span>
-                                <span className="block text-sm mt-1">
-                                  {selectedSessions.size === 0 
-                                    ? "Select sessions and enter a word to start the analysis"
-                                    : "Enter a keyword and click 'Analyze Frame'"
-                                  }
-                                </span>
-                              </span>
+                            <div className="flex items-center justify-center h-full bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                              <div className="text-center text-gray-500">
+                                <Network className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                                <p className="text-lg font-medium">Nessuna analisi semantica</p>
+                                <p className="text-sm">Inserisci una parola e clicca "Analyze Frame" per iniziare</p>
+                              </div>
                             </div>
                           )}
                         </div>

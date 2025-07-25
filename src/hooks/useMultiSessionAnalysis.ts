@@ -16,7 +16,17 @@ interface CachedAnalysis {
   customTopics?: {
     searches: any[]
   }
-  semanticFrames?: Record<string, any>
+  semanticFrames?: {
+    [targetWord: string]: {
+      target_word: string
+      semantic_frame: any
+      visualization: {
+        frame_plot: string
+      }
+      timestamp?: string
+      session_id?: string
+    }
+  }
   analysisVersion?: string
   language?: string
   createdAt?: string
@@ -266,6 +276,92 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
     return `Sessione ${sessionId}`;
   }, [])
 
+  // Funzioni per semantic frame analysis
+  const getSemanticFrameData = useCallback(() => {
+    const results = [];
+    for (const sessionId of memoizedSessionIds) {
+      const analysis = analyses[sessionId];
+      if (analysis && analysis.semanticFrames) {
+        results.push({
+          session_id: sessionId,
+          session_title: getSessionTitle(analysis, sessionId),
+          semanticFrames: analysis.semanticFrames
+        });
+      }
+    }
+    return results;
+  }, [memoizedSessionIds, analyses, getSessionTitle])
+
+  const hasSemanticFrameAnalysis = useCallback((targetWord?: string) => {
+    for (const sessionId of memoizedSessionIds) {
+      const analysis = analyses[sessionId];
+      if (analysis?.semanticFrames) {
+        if (targetWord) {
+          return targetWord in analysis.semanticFrames;
+        }
+        return Object.keys(analysis.semanticFrames).length > 0;
+      }
+    }
+    return false;
+  }, [memoizedSessionIds, analyses])
+
+  const getAllSemanticFrameWords = useCallback(() => {
+    const words = new Set<string>();
+    for (const sessionId of memoizedSessionIds) {
+      const analysis = analyses[sessionId];
+      if (analysis?.semanticFrames) {
+        Object.keys(analysis.semanticFrames).forEach(word => words.add(word));
+      }
+    }
+    return Array.from(words);
+  }, [memoizedSessionIds, analyses])
+
+  // Funzione per eliminare semantic frame analysis
+  const deleteSemanticFrameAnalysis = useCallback(async (sessionId: string, targetWord: string) => {
+    try {
+      const response = await fetch(`/api/analyses?sessionId=${sessionId}&analysisType=semantic_frame&targetWord=${encodeURIComponent(targetWord)}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Aggiorna la cache locale rimuovendo l'analisi
+        setAnalyses(prev => {
+          const updated = { ...prev }
+          if (updated[sessionId]?.semanticFrames) {
+            const newSemanticFrames = { ...updated[sessionId].semanticFrames }
+            delete newSemanticFrames[targetWord]
+            
+            if (Object.keys(newSemanticFrames).length === 0) {
+              // Se non ci sono più semantic frames, rimuovi tutto il campo
+              const { semanticFrames, ...rest } = updated[sessionId]
+              updated[sessionId] = rest
+            } else {
+              updated[sessionId] = {
+                ...updated[sessionId],
+                semanticFrames: newSemanticFrames
+              }
+            }
+          }
+          return updated
+        })
+
+        console.log(`✅ Semantic frame analysis "${targetWord}" eliminata per sessione: ${sessionId}`)
+        return { success: true }
+      } else {
+        console.error(`❌ Errore nell'eliminazione semantic frame "${targetWord}":`, data.error)
+        return { success: false, error: data.error }
+      }
+    } catch (error) {
+      console.error(`❌ Errore nella richiesta di eliminazione semantic frame "${targetWord}":`, error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  }, [memoizedSessionIds])
+
   // Auto-load al mount se richiesto
   useEffect(() => {
     if (autoLoad && memoizedSessionIds.length > 0) {
@@ -291,6 +387,11 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
     // Multi-session sentiment helpers
     getMultiSessionSentimentData,
     saveMultiSessionSentimentData,
-    getSessionComboKey
+    getSessionComboKey,
+    // Semantic frame helpers
+    getSemanticFrameData,
+    hasSemanticFrameAnalysis,
+    getAllSemanticFrameWords,
+    deleteSemanticFrameAnalysis
   }
 }
