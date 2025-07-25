@@ -100,11 +100,8 @@ export async function GET(request: NextRequest) {
     const customTopicAnalysisResults = analysis.customTopicAnalysisResults ? JSON.parse(decryptIfEncrypted(analysis.customTopicAnalysisResults)) : null;
     const semanticFrameResults = analysis.semanticFrameResults ? JSON.parse(decryptIfEncrypted(analysis.semanticFrameResults)) : null;
 
-    // DEBUG: Log the decoded fields
-    console.log('[API/analyses] Decoded significant_emotions:', significant_emotions);
-    console.log('[API/analyses] Decoded dominant_emotions:', dominant_emotions);
-    console.log('[API/analyses] Decoded keyTopics:', keyTopics);
-    console.log('[API/analyses] Decoded topicAnalysisResult:', topicAnalysisResult);
+    // Decoded fields ready for response
+    console.log('[API/analyses] Decoded semanticFrameResults:', semanticFrameResults ? Object.keys(semanticFrameResults) : 'null')
 
     const responseData = {
       cached: true,
@@ -258,6 +255,8 @@ export async function POST(request: NextRequest) {
       case 'semantic_frame':
         const { target_word } = analysisData
         if (target_word) {
+          console.log(`[API/analyses] Saving semantic frame analysis for word: ${target_word}`)
+          
           // Recupera risultati esistenti
           const { data: existingAnalysis } = await supabaseAdmin
             .from('analyses')
@@ -269,11 +268,27 @@ export async function POST(request: NextRequest) {
             try {
               const decryptedData = decryptIfEncrypted(existingAnalysis.semanticFrameResults)
               existingFrames = JSON.parse(decryptedData || '{}')
+              console.log(`[API/analyses] Existing semantic frames: ${Object.keys(existingFrames).join(', ')}`)
             } catch (e) {
               console.error("Errore parsing semantic frames esistenti:", e)
             }
           }
-          existingFrames[target_word] = analysisData
+          
+          // Estrai i dati dalla struttura inviata dal frontend
+          const semanticFrameData = {
+            target_word: target_word,
+            semantic_frame: analysisData.semantic_frame,
+            emotional_analysis: analysisData.emotional_analysis,
+            context_analysis: analysisData.context_analysis,
+            statistics: analysisData.statistics,
+            network_plot: analysisData.network_plot,
+            timestamp: analysisData.timestamp,
+            session_id: analysisData.session_id
+          }
+          
+          existingFrames[target_word] = semanticFrameData
+          console.log(`[API/analyses] Updated semantic frames: ${Object.keys(existingFrames).join(', ')}`)
+          
           updateData = {
             ...updateData,
             semanticFrameResults: encryptIfSensitive(JSON.stringify(existingFrames))
@@ -332,45 +347,106 @@ export async function POST(request: NextRequest) {
 // DELETE /api/analyses?sessionId=xxx&analysisType=xxx - Cancella un tipo specifico di analisi
 export async function DELETE(request: NextRequest) {
   try {
-    // Verifica autenticazione
-    const authResult = await verifyApiAuth(request)
-    if (!authResult.success) {
-      return createErrorResponse(authResult.error || "Non autorizzato", 401)
-    }
-
-    // Validazione input
     const { searchParams } = new URL(request.url)
-    const sessionId = sanitizeInput(searchParams.get('sessionId') || '')
-    
-    if (!validateApiInput({ sessionId }, ['sessionId'])) {
-      return createErrorResponse("sessionId richiesto", 400)
+    const sessionId = searchParams.get('sessionId')
+    const analysisType = searchParams.get('analysisType')
+    const targetWord = searchParams.get('targetWord') // Per semantic frame analysis
+
+    if (!sessionId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Session ID is required'
+      }, { status: 400 })
     }
 
-    // Verifica che la sessione appartenga all'utente
-    const { data: sessionData, error: sessionError } = await supabaseAdmin
-      .from('sessions')
-      .select('id, userId')
-      .eq('id', sessionId)
-      .eq('userId', authResult.user!.id)
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    // Recupera l'analisi esistente
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from('analyses')
+      .select('*')
+      .eq('sessionId', sessionId)
       .single()
 
-    if (sessionError || !sessionData) {
-      return createErrorResponse("Sessione non trovata", 404)
+    if (fetchError) {
+      return NextResponse.json({
+        success: false,
+        error: 'Analysis not found'
+      }, { status: 404 })
     }
 
-    // Cancella l'analisi
-    const { error: deleteError } = await supabaseAdmin
+    if (!existing) {
+      return NextResponse.json({
+        success: false,
+        error: 'Analysis not found'
+      }, { status: 404 })
+    }
+
+    let updateData: any = {}
+
+    if (analysisType === 'semantic_frame' && targetWord) {
+      // Elimina specifica semantic frame analysis
+      const currentSemanticFrames = existing.semanticFrameResults 
+        ? JSON.parse(decryptIfEncrypted(existing.semanticFrameResults))
+        : {}
+      
+      if (targetWord in currentSemanticFrames) {
+        delete currentSemanticFrames[targetWord]
+        
+        if (Object.keys(currentSemanticFrames).length === 0) {
+          // Se non ci sono più semantic frames, elimina tutto il campo
+          updateData = {
+            semanticFrameResults: null
+          }
+        } else {
+          // Altrimenti aggiorna con le semantic frames rimanenti
+          updateData = {
+            semanticFrameResults: encryptIfSensitive(JSON.stringify(currentSemanticFrames))
+          }
+        }
+      } else {
+        return NextResponse.json({
+          success: false,
+          error: 'Target word not found in semantic frame analysis'
+        }, { status: 404 })
+      }
+    } else {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid analysis type or missing target word for semantic frame deletion'
+      }, { status: 400 })
+    }
+
+    // Aggiorna il record
+    const { data: updated, error: updateError } = await supabaseAdmin
       .from('analyses')
-      .delete()
+      .update(updateData)
       .eq('sessionId', sessionId)
+      .select('id')
+      .single()
 
-    if (deleteError) {
-      return createErrorResponse("Errore durante la cancellazione analisi", 500)
+    if (updateError) {
+      console.error('Error updating analysis:', updateError)
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to update analysis'
+      }, { status: 500 })
     }
 
-    return createSuccessResponse({ success: true, message: "Analisi cancellata con successo" })
+    return NextResponse.json({
+      success: true,
+      message: 'Analysis deleted successfully',
+      data: updated
+    })
+
   } catch (error) {
-    console.error("Errore nella cancellazione analisi:", error)
-    return createErrorResponse("Errore interno del server", 500)
+    console.error('DELETE /api/analyses error:', error)
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 }
