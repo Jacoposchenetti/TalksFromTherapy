@@ -3,6 +3,19 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 interface CachedAnalysis {
   sentiment?: any
   topics?: any
+  topicAnalysis?: {
+    topics: any[]
+    summary: string
+    analysis_timestamp: string
+    text_segments: any[]
+    patient_content_stats?: any
+    session_id?: string
+    language?: string
+    version?: string
+  }
+  customTopics?: {
+    searches: any[]
+  }
   semanticFrames?: Record<string, any>
   analysisVersion?: string
   language?: string
@@ -194,24 +207,64 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
           session_title: sessionTitle,
           analysis: analysis.sentiment,
           flower_plot: analysis.sentiment.flower_plot
+        })
+      }
+    }
+    return results
+  }, [memoizedSessionIds, analyses])
+
+  const getTopicData = useCallback(() => {
+    // Aggrega i dati di topic analysis per tutte le sessioni
+    const results = [];
+    for (const sessionId of memoizedSessionIds) {
+      const analysis = analyses[sessionId];
+      let sessionTitle = `Sessione ${sessionId}`;
+      if (analysis && typeof analysis === 'object') {
+        if ('sessionTitle' in analysis && typeof analysis.sessionTitle === 'string') sessionTitle = analysis.sessionTitle;
+        else if ('title' in analysis && typeof analysis.title === 'string') sessionTitle = analysis.title;
+      }
+      if (analysis && analysis.topicAnalysis) {
+        results.push({
+          session_id: sessionId,
+          session_title: sessionTitle,
+          topics: analysis.topicAnalysis.topics || [],
+          summary: analysis.topicAnalysis.summary || '',
+          analysis_timestamp: analysis.topicAnalysis.analysis_timestamp || '',
+          text_segments: analysis.topicAnalysis.text_segments || [],
+          patient_content_stats: analysis.topicAnalysis.patient_content_stats || null
+        })
+      }
+    }
+    return results
+  }, [memoizedSessionIds, analyses])
+
+  const getTopicAnalysisData = useCallback(() => {
+    // Restituisce i dati completi di topic analysis per tutte le sessioni
+    const results = [];
+    for (const sessionId of memoizedSessionIds) {
+      const analysis = analyses[sessionId];
+      if (analysis && analysis.topicAnalysis) {
+        results.push({
+          session_id: sessionId,
+          session_title: getSessionTitle(analysis, sessionId),
+          topics: analysis.topicAnalysis.topics || [],
+          topicAnalysis: analysis.topicAnalysis,
+          customTopics: analysis.customTopics,
+          text_segments: analysis.topicAnalysis.text_segments || []
         });
       }
     }
     return results;
-  }, [memoizedSessionIds, analyses]);
-  
-  // Special getter for topic data (returns single analysis result)
-  const getTopicData = useCallback(() => {
-    // Topic analysis is typically done on the first session (combined analysis)
-    if (memoizedSessionIds.length > 0) {
-      const firstSessionId = memoizedSessionIds[0]
-      const analysis = analyses[firstSessionId]
-      if (analysis?.topics) {
-        return analysis.topics
-      }
-    }
-    return null
   }, [memoizedSessionIds, analyses])
+
+  const getSessionTitle = useCallback((analysis: any, sessionId: string) => {
+    if (analysis && typeof analysis === 'object') {
+      if ('sessionTitle' in analysis && typeof analysis.sessionTitle === 'string') return analysis.sessionTitle;
+      if ('title' in analysis && typeof analysis.title === 'string') return analysis.title;
+      if ('session_title' in analysis && typeof analysis.session_title === 'string') return analysis.session_title;
+    }
+    return `Sessione ${sessionId}`;
+  }, [])
 
   // Auto-load al mount se richiesto
   useEffect(() => {

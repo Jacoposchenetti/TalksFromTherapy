@@ -149,10 +149,13 @@ export default function TopicAnalysisComponent({
   React.useEffect(() => {
     if (
       cachedData &&
+      cachedData.topics && // Verifica che cachedData abbia la struttura corretta
+      Array.isArray(cachedData.topics) &&
       !isCustomMode &&
       !isAnalyzing &&
       selectedSessions.length > 0
     ) {
+      console.log('📦 Loading cached topic analysis data:', cachedData)
       setAnalysisResult(cachedData)
     }
   }, [cachedData, isCustomMode, isAnalyzing, selectedSessions])
@@ -307,7 +310,9 @@ export default function TopicAnalysisComponent({
         session_id: `multi_session_${Date.now()}`,
         topics: allTopics,
         summary: allSummaries.join(' | '),
-        analysis_timestamp: new Date().toISOString()
+        analysis_timestamp: new Date().toISOString(),
+        language: 'italian',
+        version: '1.0.0'
       }
 
       setAnalysisResult(result)
@@ -318,7 +323,37 @@ export default function TopicAnalysisComponent({
         console.log('Starting text classification...')
         const segments = await classifyTextToTopicsSeparately(selectedSessions, result.topics)
         console.log('Classification completed, segments:', segments)
-        setAnalysisResult(prev => prev ? { ...prev, text_segments: segments } : null)
+        
+        // Aggiorna il risultato con i text_segments
+        const resultWithSegments = { ...result, text_segments: segments }
+        setAnalysisResult(resultWithSegments)
+        
+        // Salva il risultato completo per ogni sessione
+        for (const session of selectedSessions) {
+          try {
+            const response = await fetch('/api/analyses', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                sessionId: session.id,
+                analysisType: 'topics',
+                analysisData: resultWithSegments
+              })
+            })
+            
+            if (response.ok) {
+              console.log(`✅ Topic analysis saved for session: ${session.id}`)
+            } else {
+              console.error(`❌ Failed to save topic analysis for session: ${session.id}`)
+            }
+          } catch (error) {
+            console.error(`❌ Error saving topic analysis for session ${session.id}:`, error)
+          }
+        }
+        
+        onAnalysisComplete?.(resultWithSegments)
       }
 
     } catch (error) {
@@ -1150,35 +1185,43 @@ Rispondi SOLO con JSON:
               <CardContent>
                 {!showTextView ? (
                   <div className="max-h-96 overflow-y-auto space-y-4 pr-2">
-                    {analysisResult.topics.map((topic, index) => (
-                      <div key={topic.topic_id} className="p-4 border rounded-lg">
-                        <div className="flex items-start justify-between mb-3">
+                    {analysisResult.topics && Array.isArray(analysisResult.topics) ? (
+                      analysisResult.topics.map((topic, index) => (
+                        <div key={topic.topic_id} className="p-4 border rounded-lg">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <h4 className="font-medium text-lg">
+                                {topic.description}
+                              </h4>
+                            </div>
+                            <Badge className={getTopicColor(topic.topic_id)}>
+                              {topic.description.replace(/\s*\([^)]*\)$/, '')}
+                            </Badge>
+                          </div>
+                          
                           <div>
-                            <h4 className="font-medium text-lg">
-                              {topic.description}
-                            </h4>
-                          </div>
-                          <Badge className={getTopicColor(topic.topic_id)}>
-                            {topic.description.replace(/\s*\([^)]*\)$/, '')}
-                          </Badge>
-                        </div>
-                        
-                        <div>
-                          <p className="text-sm text-gray-600 mb-2">Keywords:</p>
-                          <div className="flex flex-wrap gap-2">
-                            {topic.keywords.map((keyword, keywordIndex) => (
-                              <Badge 
-                                key={keywordIndex} 
-                                variant="outline"
-                                className="text-xs"
-                              >
-                                {keyword}
-                              </Badge>
-                            ))}
+                            <p className="text-sm text-gray-600 mb-2">Keywords:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {topic.keywords && Array.isArray(topic.keywords) ? (
+                                topic.keywords.map((keyword, keywordIndex) => (
+                                  <Badge 
+                                    key={keywordIndex} 
+                                    variant="outline"
+                                    className="text-xs"
+                                  >
+                                    {keyword}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <p className="text-gray-500 italic">No keywords available</p>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    ) : (
+                      <p className="text-gray-500 italic">No topics available</p>
+                    )}
                   </div>
                 ) : (
                   <div className="max-h-96 overflow-y-auto pr-2">
@@ -1186,21 +1229,25 @@ Rispondi SOLO con JSON:
                     <div className="mb-4">
                       <h4 className="font-medium mb-2">Topic Legend:</h4>
                       <div className="flex flex-wrap gap-2 mb-2">
-                        {analysisResult.topics.map((topic, index) => (
-                          <Badge
-                            key={topic.topic_id}
-                            className={getTopicColor(topic.topic_id) + ' cursor-pointer transition-all'}
-                            onClick={() => scrollToTopic(topic.topic_id)}
-                            title="Vai al topic nel testo"
-                          >
-                            {topic.description.replace(/\s*\([^)]*\)$/, '')}
-                          </Badge>
-                        ))}
+                        {analysisResult.topics && Array.isArray(analysisResult.topics) ? (
+                          analysisResult.topics.map((topic, index) => (
+                            <Badge
+                              key={topic.topic_id}
+                              className={getTopicColor(topic.topic_id) + ' cursor-pointer transition-all'}
+                              onClick={() => scrollToTopic(topic.topic_id)}
+                              title="Vai al topic nel testo"
+                            >
+                              {topic.description.replace(/\s*\([^)]*\)$/, '')}
+                            </Badge>
+                          ))
+                        ) : (
+                          <p className="text-gray-500 italic">No topics available</p>
+                        )}
                       </div>
                     </div>
                     
                     <div className="space-y-2 text-sm leading-relaxed">
-                      {analysisResult.text_segments ? (
+                      {analysisResult.text_segments && Array.isArray(analysisResult.text_segments) ? (
                         analysisResult.text_segments.map((segment, index) => {
                           // Controlla se è un separatore di sessione
                           const isSessionSeparator = segment.text.includes('---') && segment.topic_id === null
@@ -1224,7 +1271,7 @@ Rispondi SOLO con JSON:
                                 firstTopicSegmentRenderedRef.current[segment.topic_id!] = true
                               } : undefined}
                               className={`inline-block p-1 rounded ${getTopicBackgroundColor(segment.topic_id)} ${segment.topic_id ? 'border-l-2 border-gray-400' : ''}`}
-                              title={segment.topic_id ? `${analysisResult.topics.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)` : 'Unclassified'}
+                              title={segment.topic_id ? `${analysisResult.topics?.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)` : 'Unclassified'}
                             >
                               {segment.text}
                             </span>
