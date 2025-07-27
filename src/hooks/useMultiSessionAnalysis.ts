@@ -204,22 +204,33 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
   const getSentimentData = useCallback(() => {
     // Aggrega sempre anche per una sola sessione
     const results = [];
+    console.log('[getSentimentData] Session IDs:', memoizedSessionIds);
+    console.log('[getSentimentData] Analyses:', analyses);
+    
     for (const sessionId of memoizedSessionIds) {
       const analysis = analyses[sessionId];
+      console.log(`[getSentimentData] Analysis for session ${sessionId}:`, analysis);
+      
       let sessionTitle = `Sessione ${sessionId}`;
       if (analysis && typeof analysis === 'object') {
         if ('sessionTitle' in analysis && typeof analysis.sessionTitle === 'string') sessionTitle = analysis.sessionTitle;
         else if ('title' in analysis && typeof analysis.title === 'string') sessionTitle = analysis.title;
       }
+      
       if (analysis && analysis.sentiment) {
+        console.log(`[getSentimentData] Found sentiment for session ${sessionId}:`, analysis.sentiment);
         results.push({
           session_id: sessionId,
           session_title: sessionTitle,
           analysis: analysis.sentiment,
           flower_plot: analysis.sentiment.flower_plot
         })
+      } else {
+        console.log(`[getSentimentData] No sentiment found for session ${sessionId}`);
       }
     }
+    
+    console.log('[getSentimentData] Final results:', results);
     return results
   }, [memoizedSessionIds, analyses])
 

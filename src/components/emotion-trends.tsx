@@ -131,8 +131,8 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
     .filter(session => session.analysis && session.analysis.z_scores)
     .map((session, index) => {
       const data = {
-        sessionTitle: session.session_title,
-        sessionDate: new Date(session.session_date).toLocaleDateString('it-IT'),
+        sessionTitle: session.session_title || `Session ${index + 1}`,
+        sessionDate: new Date(session.session_date || new Date()).toLocaleDateString('it-IT'),
         sessionIndex: index + 1,
         joy: session.analysis.z_scores.joy || 0,
         trust: session.analysis.z_scores.trust || 0,
@@ -142,9 +142,9 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
         disgust: session.analysis.z_scores.disgust || 0,
         anger: session.analysis.z_scores.anger || 0,
         anticipation: session.analysis.z_scores.anticipation || 0,
-        emotional_valence: session.analysis.emotional_valence,
-        positive_score: session.analysis.positive_score,
-        negative_score: session.analysis.negative_score
+        emotional_valence: session.analysis.emotional_valence || 0,
+        positive_score: session.analysis.positive_score || 0,
+        negative_score: session.analysis.negative_score || 0
       }
       return data
     })
@@ -156,20 +156,42 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
       return (
         <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
           <p className="font-semibold mb-2">{`Session ${label}: ${data.sessionTitle}`}</p>
-          {payload.map((entry: any, index: number) => (
-            <p key={index} style={{ color: entry.color }} className="text-sm">
-              {`${EMOTION_LABELS[entry.dataKey as keyof typeof EMOTION_LABELS]}: ${entry.value.toFixed(2)}`}
-              {entry.dataKey !== 'emotional_valence' && entry.dataKey !== 'positive_score' && entry.dataKey !== 'negative_score' && (
-                <span className="text-xs ml-1">
-                  {Math.abs(entry.value) > 1.96 ? ' (🔴 significant)' : ' (not signif.)'}
-                </span>
-              )}
-            </p>
-          ))}
+          {payload.map((entry: any, index: number) => {
+            const value = entry.value !== undefined && !isNaN(entry.value) ? entry.value : 0
+            return (
+              <p key={index} style={{ color: entry.color }} className="text-sm">
+                {`${EMOTION_LABELS[entry.dataKey as keyof typeof EMOTION_LABELS]}: ${value.toFixed(2)}`}
+                {entry.dataKey !== 'emotional_valence' && entry.dataKey !== 'positive_score' && entry.dataKey !== 'negative_score' && (
+                  <span className="text-xs ml-1">
+                    {Math.abs(value) > 1.96 ? ' (🔴 significant)' : ' (not signif.)'}
+                  </span>
+                )}
+              </p>
+            )
+          })}
         </div>
       )
     }
     return null
+  }
+
+  // Controllo aggiuntivo per trendData vuoto
+  if (trendData.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">
+            📈 Sentiment History - Emotion Trends Over Time
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-gray-500 py-8">
+            <p className="text-lg mb-2">No valid data available</p>
+            <p className="text-sm">The selected sessions don't have valid sentiment analysis data</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
   return (
     <Card className="w-full">
@@ -345,28 +367,36 @@ export function EmotionTrends({ analysisData }: EmotionTrendsProps) {
                 <div>
                   <strong>Emotional Valence:</strong><br />
                   <span className="text-gray-600">
-                    Start: {trendData[0]?.emotional_valence !== undefined ? trendData[0].emotional_valence.toFixed(2) : '-'} → 
-                    End: {trendData[trendData.length - 1]?.emotional_valence !== undefined ? trendData[trendData.length - 1].emotional_valence.toFixed(2) : '-'}
+                    Start: {trendData[0]?.emotional_valence !== undefined && !isNaN(trendData[0].emotional_valence) ? trendData[0].emotional_valence.toFixed(2) : '-'} → 
+                    End: {trendData[trendData.length - 1]?.emotional_valence !== undefined && !isNaN(trendData[trendData.length - 1].emotional_valence) ? trendData[trendData.length - 1].emotional_valence.toFixed(2) : '-'}
                     <span className={
-                      trendData[trendData.length - 1]?.emotional_valence > trendData[0]?.emotional_valence
+                      (trendData[trendData.length - 1]?.emotional_valence !== undefined && !isNaN(trendData[trendData.length - 1].emotional_valence)) && 
+                      (trendData[0]?.emotional_valence !== undefined && !isNaN(trendData[0].emotional_valence)) &&
+                      trendData[trendData.length - 1].emotional_valence > trendData[0].emotional_valence
                         ? 'text-green-600 ml-1'
                         : 'text-red-600 ml-1'
                     }>
-                      ({trendData[trendData.length - 1]?.emotional_valence > trendData[0]?.emotional_valence ? 'Improvement' : 'Worsening'})
+                      ({trendData[trendData.length - 1]?.emotional_valence !== undefined && !isNaN(trendData[trendData.length - 1].emotional_valence) && 
+                        trendData[0]?.emotional_valence !== undefined && !isNaN(trendData[0].emotional_valence) &&
+                        trendData[trendData.length - 1].emotional_valence > trendData[0].emotional_valence ? 'Improvement' : 'Worsening'})
                     </span>
                   </span>
                 </div>
                 <div>
                   <strong>Positive Emotions:</strong><br />
                   <span className="text-gray-600">
-                    Start: {trendData[0]?.positive_score !== undefined ? trendData[0].positive_score.toFixed(1) : '-'} → 
-                    End: {trendData[trendData.length - 1]?.positive_score !== undefined ? trendData[trendData.length - 1].positive_score.toFixed(1) : '-'}
+                    Start: {trendData[0]?.positive_score !== undefined && !isNaN(trendData[0].positive_score) ? trendData[0].positive_score.toFixed(1) : '-'} → 
+                    End: {trendData[trendData.length - 1]?.positive_score !== undefined && !isNaN(trendData[trendData.length - 1].positive_score) ? trendData[trendData.length - 1].positive_score.toFixed(1) : '-'}
                     <span className={
-                      trendData[trendData.length - 1]?.positive_score > trendData[0]?.positive_score
+                      (trendData[trendData.length - 1]?.positive_score !== undefined && !isNaN(trendData[trendData.length - 1].positive_score)) && 
+                      (trendData[0]?.positive_score !== undefined && !isNaN(trendData[0].positive_score)) &&
+                      trendData[trendData.length - 1].positive_score > trendData[0].positive_score
                         ? 'text-green-600 ml-1'
                         : 'text-red-600 ml-1'
                     }>
-                      ({trendData[trendData.length - 1]?.positive_score > trendData[0]?.positive_score ? '↑' : '↓'})
+                      ({trendData[trendData.length - 1]?.positive_score !== undefined && !isNaN(trendData[trendData.length - 1].positive_score) && 
+                        trendData[0]?.positive_score !== undefined && !isNaN(trendData[0].positive_score) &&
+                        trendData[trendData.length - 1].positive_score > trendData[0].positive_score ? '↑' : '↓'})
                     </span>
                   </span>
                 </div>
