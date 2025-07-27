@@ -259,6 +259,27 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
     return results
   }, [memoizedSessionIds, analyses])
 
+  const getCustomTopicData = useCallback(() => {
+    // Aggrega i dati di custom topic analysis per tutte le sessioni
+    const results = [];
+    for (const sessionId of memoizedSessionIds) {
+      const analysis = analyses[sessionId];
+      let sessionTitle = `Sessione ${sessionId}`;
+      if (analysis && typeof analysis === 'object') {
+        if ('sessionTitle' in analysis && typeof analysis.sessionTitle === 'string') sessionTitle = analysis.sessionTitle;
+        else if ('title' in analysis && typeof analysis.title === 'string') sessionTitle = analysis.title;
+      }
+      if (analysis && analysis.customTopics && analysis.customTopics.searches) {
+        results.push({
+          session_id: sessionId,
+          session_title: sessionTitle,
+          customTopics: analysis.customTopics
+        })
+      }
+    }
+    return results
+  }, [memoizedSessionIds, analyses])
+
   const getTopicAnalysisData = useCallback(() => {
     // Restituisce i dati completi di topic analysis per tutte le sessioni
     const results = [];
@@ -395,6 +416,7 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
     
     getSentimentData,
     getTopicData,
+    getCustomTopicData,
     // Multi-session sentiment helpers
     getMultiSessionSentimentData,
     saveMultiSessionSentimentData,

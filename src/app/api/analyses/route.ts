@@ -95,10 +95,17 @@ export async function GET(request: NextRequest) {
     const flower_plot = analysis.emotionFlowerPlot || null;
 
     // Decodifica i campi per topic analysis
+    console.log('[API/analyses] Raw keyTopics:', analysis.keyTopics ? 'present' : 'null');
+    console.log('[API/analyses] Raw customTopicAnalysisResults:', analysis.customTopicAnalysisResults ? 'present' : 'null');
+    
     const keyTopics = analysis.keyTopics ? JSON.parse(decryptIfEncrypted(analysis.keyTopics)) : null;
     const topicAnalysisResult = analysis.topicAnalysisResult ? JSON.parse(decryptIfEncrypted(analysis.topicAnalysisResult)) : null;
     const customTopicAnalysisResults = analysis.customTopicAnalysisResults ? JSON.parse(decryptIfEncrypted(analysis.customTopicAnalysisResults)) : null;
     const semanticFrameResults = analysis.semanticFrameResults ? JSON.parse(decryptIfEncrypted(analysis.semanticFrameResults)) : null;
+    
+    console.log('[API/analyses] Decoded keyTopics:', keyTopics ? 'success' : 'null');
+    console.log('[API/analyses] Decoded customTopicAnalysisResults:', customTopicAnalysisResults ? 'success' : 'null');
+    console.log('[API/analyses] Decoded customTopicAnalysisResults structure:', customTopicAnalysisResults ? Object.keys(customTopicAnalysisResults) : 'null');
 
     // Decoded fields ready for response
     console.log('[API/analyses] Decoded semanticFrameResults:', semanticFrameResults ? Object.keys(semanticFrameResults) : 'null')

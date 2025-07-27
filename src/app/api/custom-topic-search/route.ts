@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
     try {
       for (const session of validSessions) {
         // Prima recupera le ricerche esistenti
-        const { data: existingAnalysis } = await supabase
+        const { data: existingAnalysis } = await supabaseAdmin
           .from('analyses')
           .select('customTopicAnalysisResults')
           .eq('sessionId', session.id)
@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
         const limitedSearches = allSearches.slice(-50)
 
         // Salva direttamente nel database
-        const { error: saveError } = await supabase
+        const { error: saveError } = await supabaseAdmin
           .from('analyses')
           .upsert([{
             sessionId: session.id,
