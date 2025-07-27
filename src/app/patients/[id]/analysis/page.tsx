@@ -46,10 +46,8 @@ export default function PatientAnalysisPage() {
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [note, setNote] = useState("")
-  const [savingNote, setSavingNote] = useState(false)
-  const [editingNote, setEditingNote] = useState(false)
-  const [activeSessionForNote, setActiveSessionForNote] = useState<Session | null>(null)
+
+
   const [currentSlide, setCurrentSlide] = useState(0) // 0: Trascrizioni, 1: Topic Modelling, 2: Sentiment Analysis, 3: Semantic Frame
   
   // Semantic Frame Analysis state
@@ -75,6 +73,7 @@ export default function PatientAnalysisPage() {
     hasAllTopicAnalyses,
     getSentimentData,
     getTopicData,
+    getCustomTopicData,
     getSemanticFrameData,
     hasSemanticFrameAnalysis,
     getAllSemanticFrameWords,
@@ -251,12 +250,7 @@ export default function PatientAnalysisPage() {
     fetchAllNotes()
   }, [sessions])
 
-  // Imposta automaticamente la prima sessione come attiva per le note
-  useEffect(() => {
-    if (sessions.length > 0 && !activeSessionForNote) {
-      setActiveSessionForNote(sessions[0])
-    }
-  }, [sessions, activeSessionForNote])
+
 
   // Funzione helper per verificare se una sessione ha una nota non vuota
   const hasSessionNote = (sessionId: string) => {
@@ -264,12 +258,7 @@ export default function PatientAnalysisPage() {
     return note && note.trim().length > 0
   }
 
-  // Imposta automaticamente la prima sessione come sessione attiva per le note
-  useEffect(() => {
-    if (sessions.length > 0 && !activeSessionForNote) {
-      setActiveSessionForNote(sessions[0])
-    }
-  }, [sessions, activeSessionForNote])
+
 
   // Selezione automatica della sessione passata via query string
   useEffect(() => {
@@ -321,7 +310,6 @@ export default function PatientAnalysisPage() {
         
         // Auto-select first session if available
         if (transcribedSessions.length > 0) {
-          setActiveSessionForNote(transcribedSessions[0])
           // fetchSessionNote(transcribedSessions[0].id) // This is now handled by the new useEffect
         }
       } else {
@@ -335,55 +323,8 @@ export default function PatientAnalysisPage() {
     }
   }
 
-  const fetchSessionNote = async (sessionId: string) => {
-    try {
-      console.log('🔍 Frontend fetchSessionNote called with sessionId:', sessionId)
-      // Usa l'API semplificata temporaneamente
-      const response = await fetch(`/api/notes/${sessionId}`)
-      console.log('🔍 Fetch URL:', `/api/notes/${sessionId}`)
-      if (response.ok) {
-        const result = await response.json()
-        console.log('🔍 Fetch note result for sessionId', sessionId, ':', result)
-        // Gestisce sia il formato diretto che quello con success/data
-        const noteData = result.data || result
-        setNote(noteData.content || "")
-      } else {
-        console.error('Error fetching note, status:', response.status)
-        setNote("")
-      }
-    } catch (error) {
-      console.error("Error fetching note:", error)
-      setNote("")
-    }
-  }
-  const handleSaveNote = async () => {
-    if (!activeSessionForNote) return
-    
-    setSavingNote(true)
-    try {
-      // Usa l'API semplificata temporaneamente
-      const response = await fetch(`/api/notes/${activeSessionForNote.id}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content: note }),
-      })
 
-      if (response.ok) {
-        setEditingNote(false)
-        // Ricarica la nota per assicurarsi che sia aggiornata
-        await fetchSessionNote(activeSessionForNote.id)
-        // alert("Note saved successfully!") // RIMOSSO: non mostrare più l'avviso di successo
-      } else {
-        alert("Error saving note")
-      }    } catch (error) {
-      console.error("Error saving note:", error)
-      alert("Error saving note")
-    } finally {
-      setSavingNote(false)
-    }
-  }
+
 
   // Funzione per salvare la nota di una singola sessione
   const handleSaveSessionNote = async (sessionId: string) => {
@@ -467,6 +408,11 @@ export default function PatientAnalysisPage() {
       newSelected.add(sessionId)
     }
     setSelectedSessions(newSelected)
+    
+    // Aggiorna automaticamente le analisi se ci sono sessioni selezionate
+    if (newSelected.size > 0) {
+      loadAllAnalyses()
+    }
   }
 
   // Handle select all checkbox
@@ -474,15 +420,17 @@ export default function PatientAnalysisPage() {
     if (selectedSessions.size === sessions.length) {
       setSelectedSessions(new Set())
     } else {
-      setSelectedSessions(new Set(sessions.map(s => s.id)))
+      const newSelected = new Set(sessions.map(s => s.id))
+      setSelectedSessions(newSelected)
+      
+      // Aggiorna automaticamente le analisi se ci sono sessioni selezionate
+      if (newSelected.size > 0) {
+        loadAllAnalyses()
+      }
     }
   }
 
-  // Handle session selection for notes
-  const handleSessionSelectForNote = (session: Session) => {
-    setActiveSessionForNote(session)
-    // fetchSessionNote(session.id) // This is now handled by the new useEffect
-  }
+
 
   // Get selected sessions data
   const getSelectedSessionsData = () => {
@@ -658,23 +606,14 @@ export default function PatientAnalysisPage() {
 
   const goToSlide = (index: number) => {
     setCurrentSlide(prev => {
+      // Aggiorna automaticamente le analisi per tutte le tab se ci sono sessioni selezionate
       if (
-        index === 2 &&
-        prev !== 2 &&
+        prev !== index &&
         selectedSessions.size > 0 &&
-        lastLoadedSlide !== 2
+        lastLoadedSlide !== index
       ) {
         loadAllAnalyses();
-        setLastLoadedSlide(2);
-      }
-      if (
-        index === 3 &&
-        prev !== 3 &&
-        selectedSessions.size > 0 &&
-        lastLoadedSlide !== 3
-      ) {
-        loadAllAnalyses();
-        setLastLoadedSlide(3);
+        setLastLoadedSlide(index);
       }
       return index;
     });
@@ -883,22 +822,16 @@ export default function PatientAnalysisPage() {
                             onClick={() => {
                               // Toggle selezione per analisi (checkbox)
                               handleSessionToggle(session.id)
-                              // Seleziona anche per le note come prima
-                              setActiveSessionForNote(session)
                             }}
-                            className={`flex-1 text-left p-2 rounded transition-colors ${
-                              activeSessionForNote?.id === session.id 
-                                ? "bg-blue-50 border border-blue-200 shadow-sm" 
-                                : "hover:bg-gray-50"
-                            }`}
-                            title="Click to select this session for notes"
+                            className="flex-1 text-left p-2 rounded transition-colors hover:bg-gray-50"
+                            title="Click to select/deselect this session"
                           >
                             <div className="flex items-center gap-2">
                               <div className="font-medium text-sm">
                                 {session.title}
                               </div>
                               {hasSessionNote(session.id) && (
-                                <MessageSquare className="h-4 w-4 text-sky-500" title="Questa sessione ha una nota" />
+                                <MessageSquare className="h-4 w-4 text-sky-500" />
                               )}
                             </div>
                           </button>
@@ -1031,7 +964,7 @@ export default function PatientAnalysisPage() {
                             ))
                           ) : (
                             <div className="h-full flex items-center justify-center text-gray-500">
-                              Select one or more sessions to view the transcripts
+                              Seleziona una o più sessioni per visualizzare le trascrizioni
                             </div>
                           )}
                         </div>
@@ -1047,7 +980,7 @@ export default function PatientAnalysisPage() {
                             <div className="flex items-center gap-2">
                               <BarChart3 className="h-4 w-4 text-gray-500" />
                               <span className="text-sm text-gray-600">
-                                Click "Analyze Topics" to run new analyses
+                                Clicca "Avvia Analisi Topic" per eseguire nuove analisi
                               </span>
                             </div>
                           </div>
@@ -1069,19 +1002,45 @@ export default function PatientAnalysisPage() {
                           }}
                           cachedData={(() => {
                             const topicData = hasAllTopicAnalyses ? getTopicData() : undefined
-                            console.log('🎯 Topic cached data being passed:', topicData)
-                            console.log('🎯 hasAllTopicAnalyses:', hasAllTopicAnalyses)
+                            const customTopicData = getCustomTopicData()
+                            const selectedSessionIds = Array.from(selectedSessions)
                             
-                            // Se abbiamo dati topic, prendi il primo risultato (per compatibilità)
+                            console.log('🎯 Topic cached data being passed:', topicData)
+                            console.log('🎯 Custom topic cached data being passed:', customTopicData)
+                            console.log('🎯 hasAllTopicAnalyses:', hasAllTopicAnalyses)
+                            console.log('🎯 Selected session IDs:', selectedSessionIds)
+                            
+                            // Verifica che i topic siano correlati alle sessioni attualmente selezionate
                             if (topicData && Array.isArray(topicData) && topicData.length > 0) {
-                              const firstResult = topicData[0]
+                              // Trova il risultato che corrisponde alle sessioni selezionate
+                              const matchingResult = topicData.find(result => 
+                                selectedSessionIds.includes(result.session_id)
+                              )
+                              
+                              if (matchingResult) {
+                                console.log('🎯 Found matching topic analysis for selected sessions:', matchingResult.session_id)
+                                return {
+                                  session_id: matchingResult.session_id,
+                                  topics: matchingResult.topics || [],
+                                  summary: matchingResult.summary || '',
+                                  analysis_timestamp: matchingResult.analysis_timestamp || '',
+                                  text_segments: matchingResult.text_segments || [],
+                                  patient_content_stats: matchingResult.patient_content_stats || null,
+                                  customTopics: customTopicData.length > 0 ? customTopicData[0].customTopics : undefined
+                                }
+                              } else {
+                                console.log('⚠️ No matching topic analysis found for selected sessions')
+                                // Non restituire topic se non corrispondono alle sessioni selezionate
+                                return {
+                                  customTopics: customTopicData.length > 0 ? customTopicData[0].customTopics : undefined
+                                }
+                              }
+                            }
+                            
+                            // Se non abbiamo topic normali ma abbiamo custom topics, restituisci solo quelli
+                            if (customTopicData.length > 0) {
                               return {
-                                session_id: firstResult.session_id,
-                                topics: firstResult.topics || [],
-                                summary: firstResult.summary || '',
-                                analysis_timestamp: firstResult.analysis_timestamp || '',
-                                text_segments: firstResult.text_segments || [],
-                                patient_content_stats: firstResult.patient_content_stats || null
+                                customTopics: customTopicData[0].customTopics
                               }
                             }
                             
@@ -1123,11 +1082,11 @@ export default function PatientAnalysisPage() {
                         <div className="mb-2">
                           <h3 className="text-lg font-semibold flex items-center gap-2">
                             <Network className="h-5 w-5 text-blue-700" />
-                            Word Analysis
+                            Analisi Semantica
                           </h3>
                           <p className="text-gray-600 text-sm mt-1">
-                            Explore the cognitive and emotional context of a keyword in the selected sessions.<br/>
-                            Enter a word and view its semantic network and associated emotional profile.
+                            Esplora il contesto cognitivo ed emotivo di una parola chiave nelle sessioni selezionate.<br/>
+                            Inserisci una parola e visualizza la sua rete semantica e il profilo emotivo associato.
                           </p>
                         </div>
                         
@@ -1247,12 +1206,12 @@ export default function PatientAnalysisPage() {
                             {semanticFrameLoading ? (
                               <>
                                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                Analyzing...
+                                Analizzando...
                               </>
                             ) : (
                               <>
                                 <Network className="mr-2 h-4 w-4" />
-                                Analyze Frame
+                                Analizza Frame
                               </>
                             )}
                           </Button>
@@ -1262,7 +1221,7 @@ export default function PatientAnalysisPage() {
                         {/* Error Message */}
                         {semanticFrameError && (
                           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                            <strong>Error:</strong> {semanticFrameError}
+                            <strong>Errore:</strong> {semanticFrameError}
                           </div>
                         )}
 
@@ -1402,7 +1361,7 @@ export default function PatientAnalysisPage() {
                               <div className="text-center text-gray-500">
                                 <Network className="h-12 w-12 mx-auto mb-4 opacity-50" />
                                 <p className="text-lg font-medium">Nessuna analisi semantica</p>
-                                <p className="text-sm">Inserisci una parola e clicca "Analyze Frame" per iniziare</p>
+                                <p className="text-sm">Inserisci una parola e clicca "Analizza Frame" per iniziare</p>
                               </div>
                             </div>
                           )}

@@ -145,18 +145,53 @@ export default function TopicAnalysisComponent({
     }
   }
 
+  // Filtra le analisi precedenti per mostrare solo quelle delle sessioni selezionate
+  const relevantSearches = savedSearches.filter(search => {
+    const selectedSessionIds = selectedSessions.map(s => s.id)
+    return search.results.some(result => selectedSessionIds.includes(result.sessionId))
+  })
+
   // Carica automaticamente i dati cachati quando cambia la cache, la selezione o la modalità
   React.useEffect(() => {
-    if (
-      cachedData &&
-      cachedData.topics && // Verifica che cachedData abbia la struttura corretta
-      Array.isArray(cachedData.topics) &&
-      !isCustomMode &&
-      !isAnalyzing &&
-      selectedSessions.length > 0
-    ) {
-      console.log('📦 Loading cached topic analysis data:', cachedData)
-      setAnalysisResult(cachedData)
+    console.log('📦 Cached data received:', cachedData)
+    console.log('📦 Selected sessions:', selectedSessions.map(s => ({ id: s.id, title: s.title })))
+    
+    if (cachedData && selectedSessions.length > 0) {
+      // Carica topic analysis normale
+      if (
+        cachedData.topics && 
+        Array.isArray(cachedData.topics) &&
+        !isCustomMode &&
+        !isAnalyzing
+      ) {
+        // Verifica che i topic corrispondano alle sessioni selezionate
+        const selectedSessionIds = selectedSessions.map(s => s.id)
+        const cachedSessionId = cachedData.session_id
+        
+        if (selectedSessionIds.includes(cachedSessionId)) {
+          console.log('📦 Loading cached topic analysis data for matching session:', cachedData.session_id)
+          setAnalysisResult(cachedData)
+        } else {
+          console.log('⚠️ Cached topic analysis does not match selected sessions. Cached:', cachedSessionId, 'Selected:', selectedSessionIds)
+          // Non caricare topic che non corrispondono alle sessioni selezionate
+          setAnalysisResult(null)
+        }
+      }
+      
+      // Carica custom topics - solo se siamo in modalità custom
+      if (
+        cachedData.customTopics &&
+        cachedData.customTopics.searches &&
+        Array.isArray(cachedData.customTopics.searches) &&
+        cachedData.customTopics.searches.length > 0 &&
+        isCustomMode
+      ) {
+        console.log('📦 Loading cached custom topics data:', cachedData.customTopics)
+        // Prendi l'ultima ricerca custom
+        const lastSearch = cachedData.customTopics.searches[cachedData.customTopics.searches.length - 1]
+        setCustomSearchResult(lastSearch)
+        setSavedSearches(cachedData.customTopics.searches)
+      }
     }
   }, [cachedData, isCustomMode, isAnalyzing, selectedSessions])
 
@@ -165,7 +200,19 @@ export default function TopicAnalysisComponent({
     if (isCustomMode && savedSearches.length === 0) {
       loadSavedSearches()
     }
-  }, [isCustomMode])
+  }, [isCustomMode, savedSearches.length])
+
+  // Pulisci i risultati quando cambiano le sessioni selezionate
+  React.useEffect(() => {
+    console.log('🔄 Selected sessions changed, clearing old results')
+    // Pulisci solo i risultati della modalità corrente
+    if (isCustomMode) {
+      setCustomSearchResult(null)
+    } else {
+      setAnalysisResult(null)
+    }
+    setError(null)
+  }, [selectedSessions.map(s => s.id).join(','), isCustomMode]) // Dipendenza basata sugli ID delle sessioni e modalità
 
   const runCustomTopicSearch = async () => {
     const validTopics = customTopics.filter(topic => topic.trim().length > 0)
@@ -798,11 +845,11 @@ Rispondi SOLO con JSON:
           {isAnalyzing ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Analyzing...
+              Analizzando...
             </>
           ) : (
             <>
-              Start Topic Analysis
+              Avvia Analisi Topic
             </>
           )}
         </Button>
@@ -814,10 +861,10 @@ Rispondi SOLO con JSON:
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Search className="h-5 w-5" />
-              Search Custom Topics
+              Ricerca Topic Personalizzati
             </CardTitle>
             <CardDescription>
-              Enter specific topics you want to search for in the selected sessions.
+              Inserisci topic specifici che vuoi cercare nelle sessioni selezionate.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -825,43 +872,77 @@ Rispondi SOLO con JSON:
             {isLoadingSearches ? (
               <div className="flex items-center gap-2 text-gray-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">Loading previous searches...</span>
+                <span className="text-sm">Caricamento ricerche precedenti...</span>
               </div>
-            ) : savedSearches.length > 0 ? (
+            ) : relevantSearches.length > 0 ? (
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <History className="h-4 w-4" />
-                  Load Previous Search
+                  Analisi precedenti ({relevantSearches.length})
                 </Label>
-                <Select value={selectedSavedSearch} onValueChange={loadSavedSearch}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a previous search..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-gray-300 shadow-lg">
-                    {savedSearches.map((search) => (
-                      <SelectItem key={search.id} value={search.id}>
+                
+                {/* Griglia delle analisi precedenti */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {relevantSearches.map((search, index) => (
+                    <div key={search.id} className={`flex items-center justify-between rounded-lg px-3 py-2 hover:shadow-sm transition-all ${
+                      selectedSavedSearch === search.id 
+                        ? 'bg-gradient-to-r from-blue-100 to-indigo-100 border-2 border-blue-300 shadow-sm' 
+                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200'
+                    }`}>
+                      <button
+                        onClick={() => loadSavedSearch(search.id)}
+                        className="text-sm text-blue-800 font-medium hover:text-blue-600 hover:underline cursor-pointer flex-1 text-left"
+                        title={`Carica analisi: ${search.query}`}
+                      >
                         <div className="flex flex-col">
-                          <span className="font-medium">{search.query}</span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(search.timestamp).toLocaleDateString()} - {search.results.length} topics
+                          <div className="flex items-center gap-2">
+                            <Search className="h-3 w-3" />
+                            <span className="truncate">{search.query}</span>
+                          </div>
+                          <span className="text-xs text-gray-500 mt-1">
+                            {new Date(search.timestamp).toLocaleDateString()} - {search.results.reduce((total, sessionResult) => total + sessionResult.topics.length, 0)} topic
                           </span>
                         </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      </button>
+                      <div className="flex items-center gap-1">
+                        <span className={`text-xs px-1.5 py-0.5 rounded border ${
+                          selectedSavedSearch === search.id 
+                            ? 'bg-blue-100 text-blue-800 border-blue-300' 
+                            : 'bg-white text-gray-500'
+                        }`}>
+                          {selectedSavedSearch === search.id ? '✓' : `#${index + 1}`}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
+                  <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+                  Clicca su un'analisi per caricarla, o crea una nuova ricerca sotto.
+                </p>
                 
                 <div className="h-px bg-gray-200 my-4" />
               </div>
-            ) : null}
+            ) : (
+              <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-2 text-gray-600">
+                  <History className="h-4 w-4" />
+                  <span className="text-sm font-medium">Nessuna analisi precedente per le sessioni selezionate</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Crea una nuova ricerca sotto per iniziare. Le analisi verranno salvate automaticamente e appariranno qui.
+                </p>
+              </div>
+            )}
             
             {/* Input per nuova ricerca */}
             <div className="space-y-3">
-              <Label className="text-sm font-medium">New Search</Label>
+              <Label className="text-sm font-medium">Nuova Ricerca</Label>
               {customTopics.map((topic, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <Input
-                    placeholder={`Topic ${index + 1} (e.g., "anxiety", "relationships", "work stress")`}
+                    placeholder={`Topic ${index + 1} (es. "ansia", "relazioni", "stress lavoro")`}
                     value={topic}
                     onChange={(e) => updateCustomTopic(index, e.target.value)}
                     className="flex-1"
@@ -880,33 +961,33 @@ Rispondi SOLO con JSON:
             </div>
             
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={addCustomTopic}
-                disabled={customTopics.length >= 5}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add Topic
-              </Button>
+                              <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addCustomTopic}
+                  disabled={customTopics.length >= 5}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Aggiungi Topic
+                </Button>
               
-              <Button
-                onClick={runCustomTopicSearch}
-                disabled={isSearching || !combinedTranscript || customTopics.every(t => t.trim().length === 0)}
-                className="flex items-center gap-2"
-              >
-                {isSearching ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Searching...
-                  </>
-                ) : (
-                  <>
-                    <Search className="h-4 w-4" />
-                    Search Topics
-                  </>
-                )}
-              </Button>
+                              <Button
+                  onClick={runCustomTopicSearch}
+                  disabled={isSearching || !combinedTranscript || customTopics.every(t => t.trim().length === 0)}
+                  className="flex items-center gap-2"
+                >
+                  {isSearching ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Ricerca in corso...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4" />
+                      Cerca Topics
+                    </>
+                  )}
+                </Button>
             </div>
             
             {/* Progress indicator */}
@@ -937,24 +1018,24 @@ Rispondi SOLO con JSON:
           <CardContent className="flex flex-col items-center justify-center py-12">
             <MessageCircle className="h-12 w-12 text-gray-400 mb-4" />
             <h4 className="text-lg font-medium text-gray-900 mb-2">
-              No transcript selected
+              Nessuna trascrizione selezionata
             </h4>
             <p className="text-gray-600 text-center">
-              Select one or more sessions to start topic analysis.
+              Seleziona una o più sessioni per iniziare l'analisi dei topic.
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-6">
-          {/* Risultati della ricerca personalizzata */}
-          {customSearchResult && (
+          {/* Risultati della ricerca personalizzata - solo in modalità custom */}
+          {customSearchResult && isCustomMode && (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Search className="h-5 w-5" />
-                      Custom Topic Search Results
+                      Risultati Ricerca Topic Personalizzati
                     </CardTitle>
                     <CardDescription>
                       {customSearchResult.summary}
@@ -1001,7 +1082,7 @@ Rispondi SOLO con JSON:
                                 </div>
                               ))
                             ) : (
-                              <div className="text-gray-500 italic text-sm">No relevant segments found for this topic.</div>
+                              <div className="text-gray-500 italic text-sm">Nessun segmento rilevante trovato per questo topic.</div>
                             )}
                           </div>
                         ))}
@@ -1012,7 +1093,7 @@ Rispondi SOLO con JSON:
                   <div className="max-h-96 overflow-y-auto pr-2">
                     {/* Legenda topic (modalità testo) */}
                     <div className="mb-4">
-                      <h4 className="font-medium mb-2">Topic Legend:</h4>
+                      <h4 className="font-medium mb-2">Legenda Topic:</h4>
                       <div className="flex flex-wrap gap-2">
                         {Array.from(new Set(customSearchResult.results.flatMap(sessionResult => sessionResult.topics.map(t => t.topic)))).map((topic, index) => (
                           <Badge key={index} className={getTopicColor(index + 1)}>
@@ -1051,7 +1132,7 @@ Rispondi SOLO con JSON:
                         if (sortedSegments.length === 0) {
                           return (
                             <div className="text-gray-600 italic">
-                              No topic segments found in the transcript.
+                              Nessun segmento topic trovato nella trascrizione.
                             </div>
                           );
                         }
@@ -1141,8 +1222,8 @@ Rispondi SOLO con JSON:
             </Card>
           )}
 
-          {/* Risultati dell'analisi automatica */}
-          {analysisResult && (
+          {/* Risultati dell'analisi automatica - solo in modalità normale */}
+          {analysisResult && !isCustomMode && (
             <Card className="relative">
               {/* Overlay del titolo in alto a sinistra */}
               <div className="absolute top-4 left-4 z-10">
@@ -1213,21 +1294,21 @@ Rispondi SOLO con JSON:
                                   </Badge>
                                 ))
                               ) : (
-                                <p className="text-gray-500 italic">No keywords available</p>
+                                <p className="text-gray-500 italic">Nessuna parola chiave disponibile</p>
                               )}
                             </div>
                           </div>
                         </div>
                       ))
                     ) : (
-                      <p className="text-gray-500 italic">No topics available</p>
+                      <p className="text-gray-500 italic">Nessun topic disponibile</p>
                     )}
                   </div>
                 ) : (
                   <div className="max-h-96 overflow-y-auto pr-2">
                     {/* Legenda topic (modalità testo) */}
                     <div className="mb-4">
-                      <h4 className="font-medium mb-2">Topic Legend:</h4>
+                      <h4 className="font-medium mb-2">Legenda Topic:</h4>
                       <div className="flex flex-wrap gap-2 mb-2">
                         {analysisResult.topics && Array.isArray(analysisResult.topics) ? (
                           analysisResult.topics.map((topic, index) => (
@@ -1241,7 +1322,7 @@ Rispondi SOLO con JSON:
                             </Badge>
                           ))
                         ) : (
-                          <p className="text-gray-500 italic">No topics available</p>
+                          <p className="text-gray-500 italic">Nessun topic disponibile</p>
                         )}
                       </div>
                     </div>
@@ -1279,7 +1360,7 @@ Rispondi SOLO con JSON:
                         })
                       ) : (
                         <p className="text-gray-500 italic">
-                          Text classification in progress...
+                          Classificazione del testo in corso...
                         </p>
                       )}
                     </div>

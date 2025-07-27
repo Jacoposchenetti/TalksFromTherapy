@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
-import { supabase } from "@/lib/supabase"
+import { createClient } from '@supabase/supabase-js'
+
+// Client supabase con service role per operazioni RLS
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export const runtime = 'nodejs'
 
@@ -72,7 +78,7 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("Troppi sessioni selezionate (max 50)", 400)
     }
     // SECURITY: Fetch solo le sessioni dell'utente autenticato
-    const { data: sessions, error: sessionsError } = await supabase
+    const { data: sessions, error: sessionsError } = await supabaseAdmin
       .from('sessions')
       .select('id, title, transcript, status, createdAt')
       .eq('userId', authResult.user!.id)
@@ -123,7 +129,7 @@ export async function POST(request: NextRequest) {
     // Save analysis results to Supabase (optional)
     try {
       for (const session of validSessions) {
-        const { data: insertData, error: insertError } = await supabase
+        const { data: insertData, error: insertError } = await supabaseAdmin
           .from('analyses')
           .insert([{
             sessionId: session.id,
