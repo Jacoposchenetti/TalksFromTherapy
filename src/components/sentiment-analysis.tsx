@@ -65,9 +65,14 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
 
   // Carica dati cached se disponibili
   useEffect(() => {
+    console.log('[SentimentAnalysis] cachedData:', cachedData);
+    console.log('[SentimentAnalysis] selectedSessions:', selectedSessions);
+    
     if (cachedData && selectedSessions.length > 0) {
       const transformedSessions = selectedSessions.map((session) => {
         const cached = (cachedData || []).find((item: any) => (item.session_id || item.id) === session.id);
+        console.log(`[SentimentAnalysis] Looking for session ${session.id}, found cached:`, cached);
+        
         if (cached && cached.analysis && typeof cached.analysis.z_scores === 'object') {
           const z = cached.analysis.z_scores || {};
           const z_scores = {
@@ -81,6 +86,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
             anticipation: z.anticipation ?? 0,
           };
           const analysis = { ...cached.analysis, z_scores };
+          console.log(`[SentimentAnalysis] Valid analysis found for session ${session.id}:`, analysis);
           return {
             session_id: session.id,
             session_title: session.title,
@@ -88,6 +94,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
             flower_plot: cached.flower_plot
           }
         } else {
+          console.log(`[SentimentAnalysis] No valid analysis for session ${session.id}`);
           return {
             session_id: session.id,
             session_title: session.title,
@@ -104,6 +111,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
         total_sessions: transformedSessions.length,
         processed_sessions: transformedSessions.length
       }
+      console.log('[SentimentAnalysis] Final transformed result:', transformedResult);
       setAnalysisResult(transformedResult)
       setError(null)
     }
@@ -114,6 +122,11 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
     if (!analysisResult?.individual_sessions) return []
     return analysisResult.individual_sessions.filter(hasValidAnalysis)
   }, [analysisResult])
+
+  // Ottieni le sessioni selezionate con trascrizioni disponibili
+  const sessionsWithTranscripts = useMemo(() => {
+    return selectedSessions.filter(session => session.transcript && session.transcript.trim().length > 0)
+  }, [selectedSessions])
 
   // Reset currentSessionIndex quando cambiano le sessioni valide
   useEffect(() => {
@@ -154,23 +167,22 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
   }
 
   const allSessionsAnalyzed = analysisResult && analysisResult.individual_sessions &&
-    validSessions.length > 0 &&
-    validSessions.every(sel => {
-      const found = analysisResult.individual_sessions.find(s => s.session_id === sel.session_id);
+    sessionsWithTranscripts.length > 0 &&
+    sessionsWithTranscripts.every(sel => {
+      const found = analysisResult.individual_sessions.find(s => s.session_id === sel.id);
       return hasValidAnalysis(found);
     });
 
   const runEmotionAnalysis = async () => {
-    if (validSessions.length === 0) {
+    if (sessionsWithTranscripts.length === 0) {
       setError('Seleziona almeno una sessione con trascrizione per avviare l’analisi.')
       return
     }
     if (isAnalyzing) return
-    if (allSessionsAnalyzed) return
     setIsAnalyzing(true)
     setError(null)
     try {
-      const sessionIds = validSessions.map(s => s.session_id)
+      const sessionIds = sessionsWithTranscripts.map(s => s.id)
       const response = await fetch('/api/sentiment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -179,6 +191,17 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
       if (!response.ok) throw new Error(`Analisi emotiva fallita: ${response.status}`)
       const result = await response.json()
       if (result.success) {
+        // Verifica se i risultati sono validi (non tutti 0)
+        const hasValidResults = result.individual_sessions?.some(session => {
+          const z_scores = session.analysis?.z_scores || {}
+          return Object.values(z_scores).some(score => score !== 0 && score !== null && score !== undefined)
+        })
+        
+        if (!hasValidResults) {
+          setError('L\'analisi è stata completata ma tutti i risultati sono 0. Questo potrebbe indicare un problema con il servizio di analisi emotiva.')
+          return
+        }
+        
         setAnalysisResult(result)
         onAnalysisComplete?.(result)
       } else {
@@ -203,6 +226,21 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
   const hasResults = analysisResult && analysisResult.individual_sessions && analysisResult.individual_sessions.some(hasValidAnalysis)
   const showTrends = hasResults && analysisResult.individual_sessions.length > 1
   const currentSession = validSessions[currentSessionIndex]
+  
+  console.log('[SentimentAnalysis] Render state:', {
+    hasResults,
+    validSessionsLength: validSessions.length,
+    analysisResult: analysisResult ? {
+      success: analysisResult.success,
+      individualSessionsCount: analysisResult.individual_sessions?.length,
+      hasValidSessions: analysisResult.individual_sessions?.some(hasValidAnalysis)
+    } : null,
+    currentSession: currentSession ? {
+      session_id: currentSession.session_id,
+      session_title: currentSession.session_title,
+      hasAnalysis: !!currentSession.analysis
+    } : null
+  });
 
   // Controllo di sicurezza per currentSession
   if (hasResults && validSessions.length > 0 && !currentSession) {
@@ -294,7 +332,7 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
         <div className="flex flex-row gap-4 w-full justify-center mt-2">
           <Button
             onClick={runEmotionAnalysis}
-            disabled={isAnalyzing || allSessionsAnalyzed || validSessions.length === 0}
+            disabled={isAnalyzing || sessionsWithTranscripts.length === 0}
             className="px-6 py-2 text-base"
             size="lg"
           >
@@ -303,6 +341,8 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                 Analisi in corso...
               </>
+            ) : allSessionsAnalyzed ? (
+              <>Rifai analisi</>
             ) : (
               <>Avvia nuova analisi</>
             )}

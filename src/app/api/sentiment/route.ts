@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 import { emoatlasService } from "@/lib/emoatlas"
 import { createClient } from '@supabase/supabase-js'
+import { decryptIfEncrypted } from "@/lib/encryption"
 
 // Initialize Supabase Admin client for server-side operations
 const supabaseAdmin = createClient(
@@ -65,12 +66,44 @@ export async function POST(request: NextRequest) {
     console.log(`📝 Found ${sessions.length} sessions with transcripts`)
 
     // STEP 4: Transform sessions to EmoAtlas format
-    const sessionData = sessions.map(session => ({
-      id: session.id,
-      title: session.title || `Session ${new Date(session.createdAt).toLocaleDateString()}`,
-      transcript: session.transcript,
-      sessionDate: session.createdAt
-    }))
+    const sessionData = sessions.map(session => {
+      let finalTranscript = session.transcript
+      
+      // Prova a decodificare la trascrizione se sembra criptata
+      try {
+        const decryptedTranscript = decryptIfEncrypted(session.transcript)
+        
+        // Verifica se la decodifica ha funzionato (il testo dovrebbe essere in italiano)
+        if (decryptedTranscript && decryptedTranscript !== session.transcript) {
+          // Controlla se il testo decodificato sembra italiano
+          const italianWords = ['ciao', 'sono', 'mi', 'mi', 'sento', 'oggi', 'ieri', 'bene', 'male', 'paziente', 'terapeuta']
+          const hasItalianWords = italianWords.some(word => 
+            decryptedTranscript.toLowerCase().includes(word)
+          )
+          
+          if (hasItalianWords) {
+            finalTranscript = decryptedTranscript
+            console.log(`🔓 Session ${session.id} - Transcript decodificato con successo`)
+          } else {
+            console.log(`⚠️ Session ${session.id} - Decodifica fallita, testo non sembra italiano`)
+          }
+        } else {
+          console.log(`ℹ️ Session ${session.id} - Transcript non criptato o già decodificato`)
+        }
+      } catch (error) {
+        console.log(`⚠️ Session ${session.id} - Errore durante decodifica:`, error)
+        // Usa il transcript originale
+      }
+      
+      console.log(`📝 Session ${session.id} final transcript preview:`, finalTranscript?.substring(0, 200) + '...')
+      
+      return {
+        id: session.id,
+        title: session.title || `Session ${new Date(session.createdAt).toLocaleDateString()}`,
+        transcript: finalTranscript,
+        sessionDate: session.createdAt
+      }
+    })
 
     // STEP 5: Analyze emotions using EmoAtlas service
     console.log(`🔍 About to call EmoAtlas service with ${sessionData.length} sessions`)

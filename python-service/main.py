@@ -200,6 +200,26 @@ analysis_service = DocumentAnalysisService()
 class EmoAtlasAnalysisService:
     def __init__(self):
         self.available = EMOATLAS_AVAILABLE
+        print(f"🔧 EmoAtlasAnalysisService initialized - EmoAtlas available: {self.available}")
+        
+        # Test EmoAtlas if available
+        if self.available:
+            try:
+                print("🧪 Testing EmoAtlas with sample text...")
+                test_emo = EmoScores(language='italian')
+                test_result = test_emo.zscores("Ciao, sono felice di essere qui oggi.")
+                print(f"🧪 Test result: {test_result}")
+                
+                # Check if test result has non-zero values
+                test_scores = [float(test_result.get(emotion, 0)) for emotion in ['joy', 'trust', 'fear', 'surprise', 'sadness', 'disgust', 'anger', 'anticipation']]
+                if all(score == 0 for score in test_scores):
+                    print("⚠️ WARNING: EmoAtlas test returned all zeros! This might indicate an issue")
+                else:
+                    print("✅ EmoAtlas test successful - non-zero scores detected")
+                    
+            except Exception as e:
+                print(f"❌ EmoAtlas test failed: {e}")
+                self.available = False
         if self.available:
             print("🌸 EmoAtlas Analysis Service initialized")
         else:
@@ -207,15 +227,22 @@ class EmoAtlasAnalysisService:
     
     def analyze_session(self, text: str, language: str = 'italian') -> Dict:
         """Analyze a single session using EmoAtlas"""
+        print(f"🔍 Starting analysis for text length: {len(text)} characters")
+        print(f"🔍 Text preview: {text[:200]}...")
+        
         if not self.available:
+            print("⚠️ EmoAtlas not available, using fallback")
             return self._generate_fallback_analysis(text)
         
         try:
             # Initialize EmoScores for the language
+            print(f"🌍 Initializing EmoScores for language: {language}")
             emo = EmoScores(language=language)
             
             # Get z-scores for the text
+            print("📊 Calling EmoScores.zscores()...")
             z_scores_data = emo.zscores(text)
+            print(f"📊 Raw z_scores_data: {z_scores_data}")
             
             # Get emotion scores (z-scores)
             z_scores = {
@@ -229,6 +256,16 @@ class EmoAtlasAnalysisService:
                 'anticipation': float(z_scores_data.get('anticipation', 0))
             }
             
+            print(f"📊 Processed z_scores: {z_scores}")
+            
+            # Check if all scores are 0
+            all_zero = all(score == 0 for score in z_scores.values())
+            if all_zero:
+                print("⚠️ WARNING: All emotion scores are 0! This might indicate an issue with EmoAtlas processing")
+                print(f"⚠️ Text length: {len(text)}")
+                print(f"⚠️ Text words: {len(text.split())}")
+                print(f"⚠️ Text sample: {text[:500]}...")
+            
             # Calculate derived metrics
             positive_score = z_scores['joy'] + z_scores['trust'] + z_scores['anticipation']
             negative_score = z_scores['fear'] + z_scores['sadness'] + z_scores['anger'] + z_scores['disgust']
@@ -240,7 +277,7 @@ class EmoAtlasAnalysisService:
                 if abs(score) >= 1.96
             }
             
-            return {
+            result = {
                 'z_scores': z_scores,
                 'emotional_valence': emotional_valence,
                 'positive_score': positive_score,
@@ -251,8 +288,17 @@ class EmoAtlasAnalysisService:
                 'original_text': text  # Store original text for combined analysis
             }
             
+            print(f"✅ Analysis completed successfully")
+            print(f"📊 Final result: emotional_valence={emotional_valence}, positive_score={positive_score}, negative_score={negative_score}")
+            print(f"📊 Significant emotions: {significant_emotions}")
+            
+            return result
+            
         except Exception as e:
             print(f"❌ EmoAtlas analysis error: {e}")
+            print(f"❌ Error type: {type(e)}")
+            import traceback
+            print(f"❌ Traceback: {traceback.format_exc()}")
             return self._generate_fallback_analysis(text)
     
     def _generate_fallback_analysis(self, text: str) -> Dict:
@@ -364,19 +410,53 @@ async def analyze_emotion_trends(request: EmotionAnalysisRequest):
         individual_sessions = []
         
         for session in request.sessions:
+            print(f"🔍 Processing session {session.id}: {session.title}")
+            print(f"🔍 Session transcript length: {len(session.transcript) if session.transcript else 0}")
+            print(f"🔍 Session transcript preview: {session.transcript[:200] if session.transcript else 'None'}...")
+            
             if not session.transcript or len(session.transcript.strip()) < 20:
                 print(f"⚠️ Skipping session {session.id}: transcript too short")
                 continue
             
+            # Skip if transcript looks like encrypted data
+            import re
+            base64_pattern = re.compile(r'^[A-Za-z0-9+/]*={0,2}$')
+            if base64_pattern.match(session.transcript) and len(session.transcript) > 100:
+                print(f"⚠️ Skipping session {session.id}: transcript appears to be encrypted/encoded")
+                print(f"⚠️ This needs to be decrypted before analysis")
+                continue
+            
+            # Check if transcript contains Italian words
+            italian_words = ['ciao', 'sono', 'mi', 'sento', 'oggi', 'ieri', 'bene', 'male', 'paziente', 'terapeuta', 'grazie', 'però', 'anche', 'quando', 'come', 'cosa', 'perché']
+            transcript_lower = session.transcript.lower()
+            italian_word_count = sum(1 for word in italian_words if word in transcript_lower)
+            
+            if italian_word_count < 2:
+                print(f"⚠️ WARNING: Session {session.id} transcript doesn't seem to contain Italian words")
+                print(f"⚠️ Italian word count: {italian_word_count}")
+                print(f"⚠️ This might cause EmoAtlas to return all zeros")
+                print(f"⚠️ Transcript sample: {session.transcript[:200]}...")
+            else:
+                print(f"✅ Session {session.id} transcript appears to be valid Italian text")
+                print(f"✅ Italian word count: {italian_word_count}")
+            
             session_start_time = time.time()
             
             # Analyze single session
+            print(f"🔍 Starting analysis for session {session.id}")
             analysis = emoatlas_service.analyze_session(
                 session.transcript, 
                 language=request.language
             )
             
             processing_time = time.time() - session_start_time
+            
+            # Log analysis results
+            print(f"📊 Session {session.id} analysis results:")
+            print(f"📊 - emotional_valence: {analysis.get('emotional_valence', 'N/A')}")
+            print(f"📊 - positive_score: {analysis.get('positive_score', 'N/A')}")
+            print(f"📊 - negative_score: {analysis.get('negative_score', 'N/A')}")
+            print(f"📊 - z_scores: {analysis.get('z_scores', 'N/A')}")
             
             session_analysis = SessionAnalysis(
                 session_id=session.id,

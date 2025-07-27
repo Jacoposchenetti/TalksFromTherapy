@@ -84,7 +84,7 @@ export default function PatientAnalysisPage() {
     autoLoad: false
   })
 
-  // Stato per le note di tutte le sessioni selezionate
+  // Stato per le note di tutte le sessioni
   const [sessionNotes, setSessionNotes] = useState<Record<string, string>>({})
   const [editingNotes, setEditingNotes] = useState<Record<string, boolean>>({})
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
@@ -220,9 +220,9 @@ export default function PatientAnalysisPage() {
   }
 
   // Carica le note di tutte le sessioni selezionate ogni volta che cambia la selezione
+  // Carica le note di tutte le sessioni quando vengono caricate le sessioni
   useEffect(() => {
-    const selected = Array.from(selectedSessions)
-    if (selected.length === 0) {
+    if (sessions.length === 0) {
       setSessionNotes({})
       setEditingNotes({})
       setSavingNotes({})
@@ -230,18 +230,18 @@ export default function PatientAnalysisPage() {
     }
     const fetchAllNotes = async () => {
       const notesObj: Record<string, string> = {}
-      await Promise.all(selected.map(async (sessionId) => {
+      await Promise.all(sessions.map(async (session) => {
         try {
-          const response = await fetch(`/api/notes/${sessionId}`)
+          const response = await fetch(`/api/notes/${session.id}`)
           if (response.ok) {
             const result = await response.json()
             const noteData = result.data || result
-            notesObj[sessionId] = noteData.content || ""
+            notesObj[session.id] = noteData.content || ""
           } else {
-            notesObj[sessionId] = ""
+            notesObj[session.id] = ""
           }
         } catch {
-          notesObj[sessionId] = ""
+          notesObj[session.id] = ""
         }
       }))
       setSessionNotes(notesObj)
@@ -249,7 +249,7 @@ export default function PatientAnalysisPage() {
       setSavingNotes({})
     }
     fetchAllNotes()
-  }, [selectedSessions])
+  }, [sessions])
 
   // Imposta automaticamente la prima sessione come attiva per le note
   useEffect(() => {
@@ -257,6 +257,12 @@ export default function PatientAnalysisPage() {
       setActiveSessionForNote(sessions[0])
     }
   }, [sessions, activeSessionForNote])
+
+  // Funzione helper per verificare se una sessione ha una nota non vuota
+  const hasSessionNote = (sessionId: string) => {
+    const note = sessionNotes[sessionId]
+    return note && note.trim().length > 0
+  }
 
   // Imposta automaticamente la prima sessione come sessione attiva per le note
   useEffect(() => {
@@ -393,12 +399,15 @@ export default function PatientAnalysisPage() {
         // Ricarica la nota aggiornata
         const result = await response.json()
         const noteData = result.data || result
-        setSessionNotes(prev => ({ ...prev, [sessionId]: noteData.content || "" }))
+        const updatedContent = noteData.content || ""
+        setSessionNotes(prev => ({ ...prev, [sessionId]: updatedContent }))
       } else {
         // Gestione errore
+        console.error('Errore nel salvataggio della nota')
       }
-    } catch {
+    } catch (error) {
       // Gestione errore
+      console.error('Errore nel salvataggio della nota:', error)
     } finally {
       setSavingNotes(prev => ({ ...prev, [sessionId]: false }))
     }
@@ -714,6 +723,51 @@ export default function PatientAnalysisPage() {
     }
   }
 
+  // Funzione per salvare i risultati dell'analisi sentiment
+  const handleSentimentAnalysisComplete = async (result: any) => {
+    try {
+      console.log('[handleSentimentAnalysisComplete] Salvataggio risultati sentiment:', result)
+      
+      if (result && result.individual_sessions) {
+        const selectedSessionsData = getSelectedSessionsData()
+        
+        for (const sessionResult of result.individual_sessions) {
+          const session = selectedSessionsData.find(s => s.id === sessionResult.session_id)
+          if (session && sessionResult.analysis) {
+            console.log(`[handleSentimentAnalysisComplete] Salvando per sessione ${session.id}:`, sessionResult.analysis)
+            
+            // Verifica se i risultati sono validi (non tutti 0)
+            const z_scores = sessionResult.analysis.z_scores || {}
+            const allZero = Object.values(z_scores).every(score => score === 0 || score === null || score === undefined)
+            
+            if (allZero) {
+              console.warn(`[handleSentimentAnalysisComplete] ⚠️ Session ${session.id} has all zero scores - skipping save`)
+              continue
+            }
+            
+            // Salva nel database usando la funzione esistente
+            await saveSessionAnalysis(session.id, 'sentiment', {
+              z_scores: sessionResult.analysis.z_scores || {},
+              significant_emotions: sessionResult.analysis.significant_emotions || {},
+              dominant_emotions: sessionResult.analysis.dominant_emotions || [],
+              emotional_valence: sessionResult.analysis.emotional_valence || 0,
+              positive_score: sessionResult.analysis.positive_score || 0,
+              negative_score: sessionResult.analysis.negative_score || 0,
+              text_length: sessionResult.analysis.text_length || 0,
+              flower_plot: sessionResult.flower_plot || null
+            })
+          }
+        }
+        
+        // Ricarica le analisi per aggiornare la cache
+        await loadAllAnalyses()
+        console.log('[handleSentimentAnalysisComplete] Salvataggio completato')
+      }
+    } catch (error) {
+      console.error('[handleSentimentAnalysisComplete] Errore durante il salvataggio:', error)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -843,8 +897,8 @@ export default function PatientAnalysisPage() {
                               <div className="font-medium text-sm">
                                 {session.title}
                               </div>
-                              {activeSessionForNote?.id === session.id && (
-                                <MessageSquare className="h-4 w-4 text-blue-600" />
+                              {hasSessionNote(session.id) && (
+                                <MessageSquare className="h-4 w-4 text-sky-500" title="Questa sessione ha una nota" />
                               )}
                             </div>
                           </button>
@@ -1058,6 +1112,7 @@ export default function PatientAnalysisPage() {
                           }))}
                           cachedData={getSentimentData()}
                           onRefreshResults={loadAllAnalyses}
+                          onAnalysisComplete={handleSentimentAnalysisComplete}
                         />
                       </div>
                     )}
@@ -1079,127 +1134,70 @@ export default function PatientAnalysisPage() {
                         {/* Menu Analisi Passate */}
                         {getAllSemanticFrameWords().length > 0 && (
                           <div className="mb-4">
-                            <h4 className="text-md font-medium mb-3 flex items-center gap-2">
-                              <History className="h-4 w-4" />
-                              Analisi Precedenti
-                            </h4>
                             
-                            {/* Controlli di navigazione */}
-                            {getAllSemanticFrameWords().length > 1 && (
-                              <div className="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-lg">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={goToPreviousSemanticFrame}
-                                  className="flex items-center gap-2"
-                                >
-                                  <ChevronLeft className="w-4 h-4" />
-                                  Precedente
-                                </Button>
-                                <div className="text-center">
-                                  <span className="font-semibold text-gray-700">
-                                    Analisi {currentSemanticFrameIndex + 1} di {getAllSemanticFrameWords().length}
-                                  </span>
-                                  <p className="text-sm text-gray-500 mt-1">
-                                    Parola: "{currentDisplayedWord}"
-                                  </p>
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={goToNextSemanticFrame}
-                                  className="flex items-center gap-2"
-                                >
-                                  Successiva
-                                  <ChevronRight className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            )}
-                            
-                            {/* Selezione manuale */}
-                            <div className="flex gap-3 items-center">
-                              <select
-                                value={currentDisplayedWord}
-                                onChange={(e) => {
-                                  const selectedWord = e.target.value
-                                  setCurrentDisplayedWord(selectedWord)
-                                  if (selectedWord) {
-                                    const wordIndex = getAllSemanticFrameWords().indexOf(selectedWord)
-                                    if (wordIndex !== -1) {
-                                      setCurrentSemanticFrameIndex(wordIndex)
-                                      
-                                      // Carica l'analisi dalla cache
-                                      const semanticFrameData = getSemanticFrameData()
-                                      for (const sessionData of semanticFrameData) {
-                                        if (sessionData.semanticFrames && sessionData.semanticFrames[selectedWord]) {
-                                          console.log(`[Frontend] Loading analysis for "${selectedWord}" via dropdown`)
-                                          setSemanticFrameResult(sessionData.semanticFrames[selectedWord])
-                                          break
-                                        }
-                                      }
-                                    }
-                                  } else {
-                                    setSemanticFrameResult(null)
-                                    setCurrentSemanticFrameIndex(0)
-                                  }
-                                }}
-                                className="border rounded px-3 py-2 bg-white min-w-[200px] focus:ring-2 focus:ring-blue-400"
-                              >
-                                <option value="">Seleziona analisi precedente</option>
-                                {getAllSemanticFrameWords().map((word, index) => (
-                                  <option key={word} value={word}>
-                                    {word} (Analisi {index + 1})
-                                  </option>
-                                ))}
-                              </select>
-                              {currentDisplayedWord && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    console.log(`[Frontend] Clearing semantic frame analysis`)
-                                    setCurrentDisplayedWord("")
-                                    setSemanticFrameResult(null)
-                                    setCurrentSemanticFrameIndex(0)
-                                  }}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
+
                             
                             {/* Lista delle analisi con pulsanti di eliminazione */}
                             {getAllSemanticFrameWords().length > 0 && (
-                              <div className="mt-3">
-                                <h5 className="text-sm font-medium text-gray-700 mb-2">Analisi disponibili:</h5>
-                                <div className="flex flex-wrap gap-2">
+                              <div className="mt-4">
+                                <h5 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                                  <Database className="h-4 w-4" />
+                                  Analisi disponibili ({getAllSemanticFrameWords().length})
+                                </h5>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                   {getAllSemanticFrameWords().map((word, index) => (
-                                    <div key={word} className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1">
+                                    <div key={word} className={`flex items-center justify-between rounded-lg px-3 py-2 hover:shadow-sm transition-all ${
+                                      currentDisplayedWord === word 
+                                        ? 'bg-gradient-to-r from-blue-100 to-indigo-100 border-2 border-blue-300 shadow-sm' 
+                                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200'
+                                    }`}>
                                       <button
                                         onClick={() => {
-                                          setTargetWord(word)
+                                          setCurrentDisplayedWord(word)
                                           const wordIndex = getAllSemanticFrameWords().indexOf(word)
                                           if (wordIndex !== -1) {
                                             setCurrentSemanticFrameIndex(wordIndex)
+                                            // Carica l'analisi dalla cache
+                                            const semanticFrameData = getSemanticFrameData()
+                                            for (const sessionData of semanticFrameData) {
+                                              if (sessionData.semanticFrames && sessionData.semanticFrames[word]) {
+                                                setSemanticFrameResult(sessionData.semanticFrames[word])
+                                                break
+                                              }
+                                            }
                                           }
                                         }}
-                                        className="text-sm text-blue-800 font-medium hover:text-blue-600 hover:underline cursor-pointer"
+                                        className="text-sm text-blue-800 font-medium hover:text-blue-600 hover:underline cursor-pointer flex-1 text-left"
+                                        title={`Visualizza analisi per "${word}"`}
                                       >
-                                        {word}
+                                        <div className="flex items-center gap-2">
+                                          <Network className="h-3 w-3" />
+                                          {word}
+                                        </div>
                                       </button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleDeleteSemanticFrameAnalysis(word)}
-                                        className="h-5 w-5 p-0 hover:bg-red-100 hover:text-red-600"
-                                        title={`Elimina analisi per "${word}"`}
-                                      >
-                                        <X className="h-3 w-3" />
-                                      </Button>
+                                                                              <div className="flex items-center gap-1">
+                                          <span className={`text-xs px-1.5 py-0.5 rounded border ${
+                                            currentDisplayedWord === word 
+                                              ? 'bg-blue-100 text-blue-800 border-blue-300' 
+                                              : 'bg-white text-gray-500'
+                                          }`}>
+                                            {currentDisplayedWord === word ? '✓' : `#${index + 1}`}
+                                          </span>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleDeleteSemanticFrameAnalysis(word)}
+                                          className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
+                                          title={`Elimina analisi per "${word}"`}
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </Button>
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
-                                <p className="text-xs text-gray-500 mt-2">
+                                <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
+                                  <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
                                   Clicca su una parola per visualizzarla, o usa la X per eliminarla. Inserisci una nuova parola sotto per fare una nuova analisi.
                                 </p>
                               </div>
@@ -1207,21 +1205,39 @@ export default function PatientAnalysisPage() {
                           </div>
                         )}
                         
+                        {/* Messaggio quando non ci sono analisi precedenti */}
+                        {getAllSemanticFrameWords().length === 0 && (
+                          <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <History className="h-4 w-4" />
+                              <span className="text-sm font-medium">Nessuna analisi precedente</span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Inserisci una parola sotto per iniziare la tua prima analisi semantica. Le analisi verranno salvate automaticamente e appariranno qui.
+                            </p>
+                          </div>
+                        )}
+                        
                         {/* Input Controls */}
-                        <div className="flex flex-col md:flex-row gap-4 items-start">
-                          <input
-                            type="text"
-                            value={targetWord}
-                            onChange={(e) => setTargetWord(e.target.value)}
-                            className="border rounded px-3 py-2 w-full md:w-64 focus:ring-2 focus:ring-blue-400"
-                            placeholder="E.g.: mother, work, love..."
-                            disabled={semanticFrameLoading}
-                            onKeyPress={(e) => {
-                              if (e.key === 'Enter' && !semanticFrameLoading) {
-                                performSemanticFrameAnalysis()
-                              }
-                            }}
-                          />
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center gap-2">
+                            <Network className="h-4 w-4 text-blue-600" />
+                            <span className="text-sm font-medium text-gray-700">Nuova Analisi Semantica</span>
+                          </div>
+                          <div className="flex flex-col md:flex-row gap-4 items-start">
+                            <input
+                              type="text"
+                              value={targetWord}
+                              onChange={(e) => setTargetWord(e.target.value)}
+                              className="border rounded px-3 py-2 w-full md:w-64 focus:ring-2 focus:ring-blue-400"
+                              placeholder="E.g.: madre, lavoro, amore..."
+                              disabled={semanticFrameLoading}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter' && !semanticFrameLoading) {
+                                  performSemanticFrameAnalysis()
+                                }
+                              }}
+                            />
                           <Button 
                             onClick={() => performSemanticFrameAnalysis()}
                             disabled={semanticFrameLoading || !targetWord.trim() || selectedSessions.size === 0}
@@ -1241,6 +1257,7 @@ export default function PatientAnalysisPage() {
                             )}
                           </Button>
                         </div>
+                      </div>
 
                         {/* Error Message */}
                         {semanticFrameError && (
