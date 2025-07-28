@@ -12,7 +12,7 @@ export function ConditionalNavigation() {
   const isHomePage = pathname === '/'
   const isTermsPage = pathname === '/terms'
   const isPrivacyPage = pathname === '/privacy'
-  const isResetPasswordPage = pathname.startsWith('/auth/reset-password')
+  const isResetPasswordPage = pathname.startsWith('/reset-password')
   const isAuthPage = isLoginPage || isRegisterPage || isHomePage || isTermsPage || isPrivacyPage || isResetPasswordPage
   
   if (isAuthPage) {

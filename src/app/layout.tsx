@@ -6,6 +6,7 @@ import { Navigation } from "@/components/navigation";
 import { ConditionalNavigation } from "@/components/conditional-navigation";
 import { AudioPlayerProvider } from "@/hooks/useAudioPlayer";
 import { AudioPlayer } from "@/components/AudioPlayer";
+import CookieBanner from "@/components/cookie-banner";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,9 +27,14 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           <AudioPlayerProvider>
-            <ConditionalNavigation />
-            {children}
-            <AudioPlayer />
+            <div className="min-h-screen flex flex-col">
+              <ConditionalNavigation />
+              <main className="flex-1">
+                {children}
+              </main>
+              <AudioPlayer />
+              <CookieBanner />
+            </div>
           </AudioPlayerProvider>
         </AuthProvider>
       </body>

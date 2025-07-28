@@ -30,7 +30,8 @@ export async function GET(request: NextRequest) {
       .from('sessions')
       .select('*, patient:patients(*)')
       .eq('userId', authResult.user!.id) // Usa l'ID dall'auth unificato
-      .eq('isActive', true)      .order('sessionDate', { ascending: false })
+      .eq('isActive', true)
+      .order('sessionDate', { ascending: false })
     
     // STEP 4: Applica filtri opzionali
     if (patientId) {

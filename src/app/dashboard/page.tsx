@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, FileAudio, FileText, Plus, BarChart3 } from "lucide-react"
+import { Users, FileAudio, FileText, Plus, BarChart3, HelpCircle, Zap, Mail } from "lucide-react"
+import GuidedTour from "@/components/guided-tour"
+import { useTour, dashboardTourSteps } from "@/hooks/useTour"
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const { isTourOpen, hasCompletedTour, startTour, closeTour, completeTour } = useTour()
   const [stats, setStats] = useState({
     patientsCount: 0,
     sessionsCount: 0,
@@ -36,45 +39,64 @@ export default function DashboardPage() {
     fetchStats()
   }, [session, status, router])
 
+  // Separate useEffect for tour to avoid infinite loops
+  useEffect(() => {
+    // Check if this is user's first time and show tour
+    if (session && !hasCompletedTour && status !== "loading") {
+      const timer = setTimeout(() => {
+        startTour()
+      }, 1000) // Delay to let the page load
+      
+      return () => clearTimeout(timer)
+    }
+  }, [session, hasCompletedTour, status, startTour])
+
   const fetchStats = async () => {
     try {
       setIsLoading(true)
       setError(null)
-      console.log("Dashboard: Fetching stats...")
       
-      const [patientsRes, sessionsRes] = await Promise.all([
-        fetch("/api/patients"),
-        fetch("/api/sessions"),
-      ])
+      console.log("🔄 Dashboard: Fetching patients from API...")
+      const patientsRes = await fetch("/api/patients")
+      console.log("📡 Dashboard: Patients API Response status:", patientsRes.status, patientsRes.statusText)
       
-      console.log("Dashboard: Response status - patients:", patientsRes.status, "sessions:", sessionsRes.status)
-        if (!patientsRes.ok || !sessionsRes.ok) {
+      console.log("🔄 Dashboard: Fetching sessions from API...")
+      const sessionsRes = await fetch("/api/sessions")
+      console.log("📡 Dashboard: Sessions API Response status:", sessionsRes.status, sessionsRes.statusText)
+      
+      if (patientsRes.ok && sessionsRes.ok) {
+        const patientsData = await patientsRes.json()
+        const sessionsData = await sessionsRes.json()
+        
+        console.log("📦 Dashboard: Raw patients API data:", patientsData)
+        console.log("📦 Dashboard: Raw sessions API data:", sessionsData)
+        
+        // Patients: { success: true, data: { patients: [...] } }
+        const patients = patientsData.data?.patients || patientsData.patients || []
+        
+        // Sessions: { success: true, data: [...sessions...] }
+        const sessions = sessionsData.data || sessionsData || []
+        
+        console.log("👥 Dashboard: Patients array:", patients)
+        console.log("📊 Dashboard: Patients count:", patients?.length)
+        console.log("📋 Dashboard: Sessions array:", sessions)
+        console.log("📊 Dashboard: Sessions count:", sessions?.length)
+        
+        const patientsCount = Array.isArray(patients) ? patients.length : 0
+        const sessionsCount = Array.isArray(sessions) ? sessions.length : 0
+        const transcriptionsCount = Array.isArray(sessions) ? sessions.filter((s: any) => s.transcript && s.transcript.trim().length > 0).length : 0
+        
+        const newStats = {
+          patientsCount: patientsCount,
+          sessionsCount: sessionsCount,
+          transcriptionsCount: transcriptionsCount,
+        }
+        
+        console.log("Dashboard: New stats:", newStats)
+        setStats(newStats)
+      } else {
         throw new Error(`HTTP error - patients: ${patientsRes.status}, sessions: ${sessionsRes.status}`)
       }
-      
-      const [patientsData, sessions] = await Promise.all([
-        patientsRes.json(),
-        sessionsRes.json(),
-      ])
-      
-      // L'API pazienti restituisce { success: true, data: { patients: [...] } }
-      const patients = patientsData.data?.patients || patientsData.patients || []
-      
-      console.log("Dashboard: Data received - patients:", patients, "sessions:", sessions)
-      console.log("Dashboard: Patients length:", patients?.length, "Sessions length:", sessions?.length)
-      
-      const patientsCount = Array.isArray(patients) ? patients.length : 0
-      const sessionsCount = Array.isArray(sessions) ? sessions.length : 0
-      const transcriptionsCount = Array.isArray(sessions) ? sessions.filter((s: any) => s.transcript).length : 0
-      
-      const newStats = {
-        patientsCount: patientsCount,
-        sessionsCount: sessionsCount,
-        transcriptionsCount: transcriptionsCount,
-      }
-      
-      console.log("Dashboard: New stats:", newStats)
-      setStats(newStats)
     } catch (error) {
       console.error("Error fetching stats:", error)
       setError(error instanceof Error ? error.message : "Errore nel caricamento delle statistiche")
@@ -114,15 +136,26 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <div className="flex items-center justify-between">            <div>
+          <div data-tour="dashboard-header" className="flex items-center justify-between">
+            <div>
               <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
               <p className="text-gray-600">Welcome, {session.user?.name}</p>
             </div>
+            
+            {/* Tour button */}
+            <Button
+              onClick={startTour}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <Zap className="h-4 w-4" />
+              Tour guidato
+            </Button>
           </div>
-        </div>        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        </div>        <div data-tour="stats-cards" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push("/patients")}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Patients</CardTitle>
@@ -163,7 +196,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="mt-8 grid gap-6 md:grid-cols-2">
-          <Card>
+          <Card data-tour="quick-actions">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Plus className="h-5 w-5" />
@@ -175,6 +208,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <Button 
+                data-tour="patients-button"
                 onClick={() => router.push("/patients")} 
                 className="w-full justify-start"
                 variant="outline"
@@ -183,6 +217,7 @@ export default function DashboardPage() {
                 Manage Patients
               </Button>
               <Button 
+                data-tour="sessions-button"
                 onClick={() => router.push("/sessions")} 
                 className="w-full justify-start"
                 variant="outline"
@@ -191,17 +226,26 @@ export default function DashboardPage() {
                 View Sessions
               </Button>
               <Button 
+                data-tour="help-button"
+                onClick={() => router.push("/help")} 
                 className="w-full justify-start"
                 variant="outline"
-                disabled
               >
-                <BarChart3 className="mr-2 h-4 w-4" />
-                Reports & Analysis (Coming Soon)
+                <HelpCircle className="mr-2 h-4 w-4" />
+                Help & Tutorials
+              </Button>
+              <Button 
+                onClick={() => router.push("/contact")} 
+                className="w-full justify-start"
+                variant="outline"
+              >
+                <Mail className="mr-2 h-4 w-4" />
+                Contact Support
               </Button>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card data-tour="account-info">
             <CardHeader>
               <CardTitle>Account Information</CardTitle>
               <CardDescription>
@@ -219,6 +263,14 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Guided Tour Component */}
+        <GuidedTour
+          isOpen={isTourOpen}
+          onClose={closeTour}
+          onComplete={completeTour}
+          steps={dashboardTourSteps}
+        />
       </div>
     </div>
   )

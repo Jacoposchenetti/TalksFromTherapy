@@ -185,7 +185,7 @@ export default function LoginPage() {
 
           <div className="mt-4 text-center text-sm">
             <Link 
-              href="/auth/reset-password" 
+              href="/reset-password" 
               className="text-gray-600 hover:text-gray-800"
             >
               Password dimenticata?
