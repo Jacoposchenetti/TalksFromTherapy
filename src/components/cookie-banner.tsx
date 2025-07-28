@@ -8,6 +8,16 @@ import { Cookie, Settings, X, Shield, BarChart3, Target, Palette } from 'lucide-
 import { useCookieConsent, type CookieConsent } from '@/hooks/use-cookie-consent'
 import Link from 'next/link'
 
+// Definisci il tipo CookieType esplicitamente
+type CookieType = {
+  key: 'necessary' | 'analytics' | 'marketing' | 'functional';
+  title: string;
+  description: string;
+  icon: any;
+  required: boolean;
+  examples: string[];
+};
+
 export default function CookieBanner() {
   const { consent, updateConsent, hasConsent, isLoading } = useCookieConsent()
   const [showSettings, setShowSettings] = useState(false)
@@ -46,34 +56,38 @@ export default function CookieBanner() {
     setShowSettings(false)
   }
 
-  const cookieTypes = [
+  const cookieTypes: CookieType[] = [
     {
       key: 'necessary' as keyof typeof preferences,
       title: 'Cookie Necessari',
       description: 'Essenziali per il funzionamento del sito (autenticazione, sicurezza, sessioni).',
       icon: Shield,
-      required: true
+      required: true,
+      examples: []
     },
     {
       key: 'analytics' as keyof typeof preferences,
       title: 'Cookie Analitici',
       description: 'Ci aiutano a capire come utilizzi il sito per migliorare l\'esperienza utente.',
       icon: BarChart3,
-      required: false
+      required: false,
+      examples: []
     },
     {
       key: 'functional' as keyof typeof preferences,
       title: 'Cookie Funzionali',
       description: 'Ricordano le tue preferenze (tema, impostazioni audio, lingua).',
       icon: Palette,
-      required: false
+      required: false,
+      examples: []
     },
     {
       key: 'marketing' as keyof typeof preferences,
       title: 'Cookie Marketing',
       description: 'Utilizzati per mostrare contenuti e pubblicità personalizzata.',
       icon: Target,
-      required: false
+      required: false,
+      examples: []
     }
   ]
 
@@ -174,18 +188,14 @@ export default function CookieBanner() {
                           <p className="text-sm text-gray-600 mb-3 ml-11">
                             {cookieType.description}
                           </p>
-                          <div className="ml-11">
-                            <details className="text-xs text-gray-500">
-                              <summary className="cursor-pointer hover:text-gray-700 font-medium">
-                                Esempi di cookie utilizzati
-                              </summary>
-                              <ul className="mt-2 space-y-1 ml-4">
-                                {cookieType.examples.map((example, index) => (
-                                  <li key={index} className="list-disc">{example}</li>
-                                ))}
-                              </ul>
-                            </details>
-                          </div>
+                          {/* Mostra la lista solo se cookieType.examples esiste ed è un array */}
+                          {Array.isArray(cookieType.examples) && cookieType.examples.length > 0 && (
+                            <ul className="mt-2 space-y-1 ml-4">
+                              {cookieType.examples.map((example, index) => (
+                                <li key={index} className="list-disc">{example}</li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
                         <div className="ml-4 flex items-center">
                           <input 

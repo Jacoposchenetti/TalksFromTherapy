@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import Link from "next/link"
 
-export default function ResetPasswordConfirmPage() {
+function ResetPasswordConfirmPageInner() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
@@ -326,4 +326,12 @@ export default function ResetPasswordConfirmPage() {
       </Card>
     </div>
   )
+}
+
+export default function ResetPasswordConfirmPage() {
+  return (
+    <Suspense>
+      <ResetPasswordConfirmPageInner />
+    </Suspense>
+  );
 }

@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CheckCircle, Mail } from "lucide-react"
 import Link from "next/link"
 
-function LoginPageContent() {
+function LoginNewPageInner() {
   const [formData, setFormData] = useState({
     email: "",
     password: ""
@@ -192,10 +192,10 @@ function LoginPageContent() {
   )
 }
 
-export default function LoginPage() {
+export default function LoginNewPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <LoginPageContent />
+    <Suspense>
+      <LoginNewPageInner />
     </Suspense>
-  )
+  );
 }

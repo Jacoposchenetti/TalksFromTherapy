@@ -210,19 +210,13 @@ export default function ProfilePage() {
                   </Badge>
                 </div>
                 
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Registrato</span>
-                  <span className="text-sm font-medium">
-                    {session.user?.created_at ? formatDate(session.user.created_at) : 'N/A'}
-                  </span>
-                </div>
-                
-                <div className="flex items-center justify-between">
+                {/* Commenta i riferimenti a proprietà non standard di session.user */}
+                {/* <div>
                   <span className="text-sm text-gray-600">Ultimo accesso</span>
                   <span className="text-sm font-medium">
                     {session.user?.last_sign_in_at ? formatDate(session.user.last_sign_in_at) : 'N/A'}
                   </span>
-                </div>
+                </div> */}
               </div>
             </CardContent>
           </Card>
@@ -264,21 +258,21 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Telefono */}
-                <div>
+                {/* <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-sm font-medium text-gray-700">Telefono</span>
                   </div>
                   <p className="text-gray-900">{session?.user?.phone || "Non specificato"}</p>
-                </div>
+                </div> */}
 
                 {/* Numero licenza */}
-                <div>
+                {/* <div>
                   <div className="flex items-center gap-2 mb-2">
                     <Shield className="h-4 w-4 text-gray-500" />
                     <span className="text-sm font-medium text-gray-700">Numero di licenza professionale</span>
                   </div>
                   <p className="text-gray-900">{session?.user?.license_number || "Non specificato"}</p>
-                </div>
+                </div> */}
               </div>
             </CardContent>
           </Card>
