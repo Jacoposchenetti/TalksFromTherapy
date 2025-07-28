@@ -1,3 +1,5 @@
+import Footer from "@/components/footer"
+
 export default function Home() {
   // Modalità manutenzione
   if (process.env.MAINTENANCE_MODE === 'true') {
@@ -147,6 +149,9 @@ export default function Home() {
           </div>
         </div>
       </div>
+      
+      {/* Footer */}
+      <Footer />
     </div>
   )
 }

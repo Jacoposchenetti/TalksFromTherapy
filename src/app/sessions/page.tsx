@@ -495,10 +495,6 @@ function SessionsPageContent() {
   }
 
   const handleDeleteSession = async (sessionId: string, sessionTitle: string) => {
-    const confirmed = confirm(`Sei sicuro di voler eliminare la sessione "${sessionTitle}"? Questa azione non può essere annullata.`)
-    
-    if (!confirmed) return
-
     try {
       const response = await fetch(`/api/sessions/${sessionId}`, {
         method: "DELETE",
