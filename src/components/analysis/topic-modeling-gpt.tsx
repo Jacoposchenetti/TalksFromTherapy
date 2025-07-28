@@ -93,7 +93,10 @@ export default function TopicAnalysisComponent({
   // Stati per le ricerche salvate
   const [savedSearches, setSavedSearches] = useState<any[]>([])
   const [isLoadingSearches, setIsLoadingSearches] = useState(false)
-  const [selectedSavedSearch, setSelectedSavedSearch] = useState<string>('')
+  const [selectedCustomSearchId, setSelectedCustomSearchId] = useState<string>("");
+  // AGGIUNTA: stato per tracciare l'ultima ricerca custom creata
+  type LastCreatedCustomSearch = { id: string } | null;
+  const [lastCreatedCustomSearch, setLastCreatedCustomSearch] = React.useState<LastCreatedCustomSearch>(null);
 
   // Funzioni per gestire i topic personalizzati
   const addCustomTopic = () => {
@@ -141,7 +144,7 @@ export default function TopicAnalysisComponent({
         results: search.results,
         summary: search.summary
       })
-      setSelectedSavedSearch(searchId)
+      setSelectedCustomSearchId(searchId)
     }
   }
 
@@ -150,6 +153,18 @@ export default function TopicAnalysisComponent({
     const selectedSessionIds = selectedSessions.map(s => s.id)
     return search.results.some(result => selectedSessionIds.includes(result.sessionId))
   })
+
+  // Filtro di unicità sugli id (o timestamp/query) prima del rendering
+  const uniqueSearches = [];
+  const seenKeys = new Set();
+  for (let i = 0; i < relevantSearches.length; i++) {
+    const s = relevantSearches[i];
+    const key = s.id || s.timestamp || s.query || String(i);
+    if (!seenKeys.has(key)) {
+      uniqueSearches.push(s);
+      seenKeys.add(key);
+    }
+  }
 
   // Carica automaticamente i dati cachati quando cambia la cache, la selezione o la modalità
   React.useEffect(() => {
@@ -202,17 +217,25 @@ export default function TopicAnalysisComponent({
     }
   }, [isCustomMode, savedSearches.length])
 
-  // Pulisci i risultati quando cambiano le sessioni selezionate
+  // Aggiorna sempre la lista delle analisi custom quando cambia la selezione delle sessioni o si entra in custom mode
   React.useEffect(() => {
-    console.log('🔄 Selected sessions changed, clearing old results')
-    // Pulisci solo i risultati della modalità corrente
     if (isCustomMode) {
-      setCustomSearchResult(null)
-    } else {
-      setAnalysisResult(null)
+      loadSavedSearches();
     }
-    setError(null)
-  }, [selectedSessions.map(s => s.id).join(','), isCustomMode]) // Dipendenza basata sugli ID delle sessioni e modalità
+  }, [selectedSessions.map(s => s.id).join(','), isCustomMode]);
+
+  // useEffect per selezionare la nuova ricerca appena creata
+  React.useEffect(() => {
+    if (lastCreatedCustomSearch && relevantSearches.some(s => s.id === lastCreatedCustomSearch.id)) {
+      setSelectedCustomSearchId(lastCreatedCustomSearch.id)
+      setLastCreatedCustomSearch(null)
+    }
+  }, [lastCreatedCustomSearch, relevantSearches])
+
+  // Mantieni solo questo effetto per azzerare la selezione quando cambi tab custom/auto
+  React.useEffect(() => {
+    setSelectedCustomSearchId("");
+  }, [isCustomMode]);
 
   const runCustomTopicSearch = async () => {
     const validTopics = customTopics.filter(topic => topic.trim().length > 0)
@@ -251,6 +274,12 @@ export default function TopicAnalysisComponent({
         setCustomSearchResult(result.data)
         onAnalysisComplete?.(result.data)
         setSearchProgress('')
+        // AGGIUNTA: aggiorna la tab ricaricando le ricerche salvate
+        await loadSavedSearches()
+        // AGGIUNTA: seleziona la nuova ricerca appena creata
+        if (result.data && result.data.timestamp) {
+          setLastCreatedCustomSearch({ id: result.data.timestamp })
+        }
       } else {
         throw new Error(result.error || 'Errore sconosciuto')
       }
@@ -811,11 +840,15 @@ Rispondi SOLO con JSON:
         <Button
           variant="outline"
           onClick={() => {
-            setIsCustomMode(!isCustomMode)
-            // Reset dei risultati quando si cambia modalità
-            setAnalysisResult(null)
-            setCustomSearchResult(null)
-            setError(null)
+            setIsCustomMode(!isCustomMode);
+            // Se stai entrando in custom mode, aggiorna subito la lista e azzera il risultato
+            if (!isCustomMode) {
+              loadSavedSearches();
+              setCustomSearchResult(null);
+              setSelectedCustomSearchId("");
+            }
+            setAnalysisResult(null);
+            setError(null);
           }}
           className="flex items-center gap-2"
         >
@@ -874,47 +907,57 @@ Rispondi SOLO con JSON:
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span className="text-sm">Caricamento ricerche precedenti...</span>
               </div>
-            ) : relevantSearches.length > 0 ? (
+            ) : uniqueSearches.length > 0 ? (
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <History className="h-4 w-4" />
-                  Analisi precedenti ({relevantSearches.length})
+                  Analisi precedenti ({uniqueSearches.length})
                 </Label>
                 
                 {/* Griglia delle analisi precedenti */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {relevantSearches.map((search, index) => (
-                    <div key={search.id} className={`flex items-center justify-between rounded-lg px-3 py-2 hover:shadow-sm transition-all ${
-                      selectedSavedSearch === search.id 
-                        ? 'bg-gradient-to-r from-blue-100 to-indigo-100 border-2 border-blue-300 shadow-sm' 
-                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200'
-                    }`}>
-                      <button
-                        onClick={() => loadSavedSearch(search.id)}
-                        className="text-sm text-blue-800 font-medium hover:text-blue-600 hover:underline cursor-pointer flex-1 text-left"
-                        title={`Carica analisi: ${search.query}`}
-                      >
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <Search className="h-3 w-3" />
-                            <span className="truncate">{search.query}</span>
+                  {uniqueSearches.map((search, index) => {
+                    const key = search.id || search.timestamp || search.query || String(index);
+                    return (
+                      <div key={key} className={`flex items-center justify-between rounded-lg px-3 py-2 hover:shadow-sm transition-all ${
+                        selectedCustomSearchId === key
+                          ? 'bg-gradient-to-r from-blue-100 to-indigo-100 border-2 border-blue-300 shadow-sm'
+                          : 'bg-white border border-gray-200'
+                      }`}>
+                        <button
+                          onClick={() => {
+                            setSelectedCustomSearchId(key);
+                            // Aggiorna il risultato visualizzato
+                            const selected = uniqueSearches.find(s => (s.id || s.timestamp || s.query || String(index)) === key);
+                            if (selected) {
+                              setCustomSearchResult(selected);
+                            }
+                          }}
+                          className="text-sm text-blue-800 font-medium hover:text-blue-600 hover:underline cursor-pointer flex-1 text-left"
+                          title={`Carica analisi: ${search.query}`}
+                        >
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <Search className="h-3 w-3" />
+                              <span className="truncate">{search.query}</span>
+                            </div>
+                            <span className="text-xs text-gray-500 mt-1">
+                              {new Date(search.timestamp).toLocaleDateString()} - {search.results.reduce((total, sessionResult) => total + sessionResult.topics.length, 0)} topic
+                            </span>
                           </div>
-                          <span className="text-xs text-gray-500 mt-1">
-                            {new Date(search.timestamp).toLocaleDateString()} - {search.results.reduce((total, sessionResult) => total + sessionResult.topics.length, 0)} topic
+                        </button>
+                        <div className="flex items-center gap-1">
+                          <span className={`text-xs px-1.5 py-0.5 rounded border ${
+                            selectedCustomSearchId === key
+                              ? 'bg-blue-100 text-blue-800 border-blue-300'
+                              : 'bg-white text-gray-500 border-gray-300'
+                          }`}>
+                            {selectedCustomSearchId === key ? '✓' : `#${index + 1}`}
                           </span>
                         </div>
-                      </button>
-                      <div className="flex items-center gap-1">
-                        <span className={`text-xs px-1.5 py-0.5 rounded border ${
-                          selectedSavedSearch === search.id 
-                            ? 'bg-blue-100 text-blue-800 border-blue-300' 
-                            : 'bg-white text-gray-500'
-                        }`}>
-                          {selectedSavedSearch === search.id ? '✓' : `#${index + 1}`}
-                        </span>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 
                 <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
@@ -1028,7 +1071,7 @@ Rispondi SOLO con JSON:
       ) : (
         <div className="grid gap-6">
           {/* Risultati della ricerca personalizzata - solo in modalità custom */}
-          {customSearchResult && isCustomMode && (
+          {customSearchResult && isCustomMode && selectedCustomSearchId && (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">

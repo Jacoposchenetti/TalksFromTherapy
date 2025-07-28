@@ -53,6 +53,8 @@ export default function PatientAnalysisPage() {
   // Semantic Frame Analysis state
   const [targetWord, setTargetWord] = useState("")
   const [currentDisplayedWord, setCurrentDisplayedWord] = useState("")
+  // AGGIUNTA: stato per tracciare l'ultima parola analizzata
+  const [lastCreatedSemanticWord, setLastCreatedSemanticWord] = useState<string | null>(null)
   const [semanticFrameLoading, setSemanticFrameLoading] = useState(false)
   const [semanticFrameResult, setSemanticFrameResult] = useState<any>(null)
   const [semanticFrameError, setSemanticFrameError] = useState<string | null>(null)
@@ -152,14 +154,24 @@ export default function PatientAnalysisPage() {
     if (selectedSessions.size > 0) {
       const semanticFrameData = getSemanticFrameData()
       if (semanticFrameData.length > 0 && getAllSemanticFrameWords().length > 0) {
-        // Se non c'è un'analisi corrente, mostra la prima disponibile
-        if (!semanticFrameResult) {
+        // Se c'è una nuova analisi creata, seleziona quella
+        if (lastCreatedSemanticWord && getAllSemanticFrameWords().includes(lastCreatedSemanticWord)) {
+          for (const sessionData of semanticFrameData) {
+            if (sessionData.semanticFrames && sessionData.semanticFrames[lastCreatedSemanticWord]) {
+              setSemanticFrameResult(sessionData.semanticFrames[lastCreatedSemanticWord])
+              setCurrentDisplayedWord(lastCreatedSemanticWord)
+              setCurrentSemanticFrameIndex(getAllSemanticFrameWords().indexOf(lastCreatedSemanticWord))
+              setLastCreatedSemanticWord(null) // Reset dopo selezione
+              break
+            }
+          }
+        } else if (!semanticFrameResult) {
+          // Se non c'è un'analisi corrente, mostra la prima disponibile
           const allWords = getAllSemanticFrameWords()
           if (allWords.length > 0 && currentSemanticFrameIndex < allWords.length) {
             const currentWord = allWords[currentSemanticFrameIndex]
             for (const sessionData of semanticFrameData) {
               if (sessionData.semanticFrames && sessionData.semanticFrames[currentWord]) {
-                console.log(`[Frontend] Auto-loading analysis for "${currentWord}" from cache`)
                 setSemanticFrameResult(sessionData.semanticFrames[currentWord])
                 setCurrentDisplayedWord(currentWord)
                 break
@@ -173,7 +185,7 @@ export default function PatientAnalysisPage() {
         setCurrentDisplayedWord("")
       }
     }
-  }, [analyses, selectedSessions, currentSemanticFrameIndex, getSemanticFrameData, getAllSemanticFrameWords, semanticFrameResult])
+  }, [analyses, selectedSessions, currentSemanticFrameIndex, getSemanticFrameData, getAllSemanticFrameWords, semanticFrameResult, lastCreatedSemanticWord])
 
   // Funzioni di navigazione per semantic frame analysis
   const goToPreviousSemanticFrame = () => {
@@ -513,6 +525,7 @@ export default function PatientAnalysisPage() {
         setSemanticFrameResult(data)
         setTargetWord(wordToAnalyze)
         setCurrentDisplayedWord(wordToAnalyze)
+        setLastCreatedSemanticWord(wordToAnalyze) // AGGIUNTA: traccia la nuova analisi
         console.log('Semantic Frame Analysis successful:', data)
         
         // Salva il risultato nella cache per ogni sessione selezionata
@@ -1108,7 +1121,7 @@ export default function PatientAnalysisPage() {
                                     <div key={word} className={`flex items-center justify-between rounded-lg px-3 py-2 hover:shadow-sm transition-all ${
                                       currentDisplayedWord === word 
                                         ? 'bg-gradient-to-r from-blue-100 to-indigo-100 border-2 border-blue-300 shadow-sm' 
-                                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200'
+                                        : 'bg-white border border-gray-200'
                                     }`}>
                                       <button
                                         onClick={() => {
@@ -1134,14 +1147,14 @@ export default function PatientAnalysisPage() {
                                           {word}
                                         </div>
                                       </button>
-                                                                              <div className="flex items-center gap-1">
-                                          <span className={`text-xs px-1.5 py-0.5 rounded border ${
-                                            currentDisplayedWord === word 
-                                              ? 'bg-blue-100 text-blue-800 border-blue-300' 
-                                              : 'bg-white text-gray-500'
-                                          }`}>
-                                            {currentDisplayedWord === word ? '✓' : `#${index + 1}`}
-                                          </span>
+                                      <div className="flex items-center gap-1">
+                                        <span className={`text-xs px-1.5 py-0.5 rounded border ${
+                                          currentDisplayedWord === word 
+                                            ? 'bg-blue-100 text-blue-800 border-blue-300' 
+                                            : 'bg-white text-gray-500 border-gray-300'
+                                        }`}>
+                                          {currentDisplayedWord === word ? '✓' : `#${index + 1}`}
+                                        </span>
                                         <Button
                                           variant="ghost"
                                           size="sm"
