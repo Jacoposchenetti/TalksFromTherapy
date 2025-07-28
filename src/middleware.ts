@@ -19,6 +19,8 @@ export function middleware(request: NextRequest) {
       pathname.startsWith('/reset-password') ||
       pathname.startsWith('/login') ||
       pathname.startsWith('/register') ||
+      pathname.startsWith('/api/calendar') ||
+      pathname.startsWith('/calendar') ||
       pathname.includes('_next') ||
       pathname.includes('favicon')) {
     return NextResponse.next()
