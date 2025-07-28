@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -35,7 +35,7 @@ interface Note {
   updatedAt?: string
 }
 
-export default function PatientAnalysisPage() {
+function AnalysisPageInner() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const params = useParams()
@@ -1444,4 +1444,12 @@ export default function PatientAnalysisPage() {
       {/* RIMOSSO: Sentiment History qui, ora solo sotto la tab Sentiment Analysis */}
     </div>
   )
+}
+
+export default function AnalysisPage() {
+  return (
+    <Suspense>
+      <AnalysisPageInner />
+    </Suspense>
+  );
 }

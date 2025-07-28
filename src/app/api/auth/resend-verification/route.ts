@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from "next/server"
 import { sanitizeInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 
-export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 // Rate limiting semplice in memoria (per produzione usare Redis)
 const rateLimitMap = new Map<string, { count: number; lastReset: number }>()

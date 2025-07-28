@@ -3,6 +3,8 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from "next/server"
 import type { CookieOptions } from '@supabase/ssr'
 
+export const dynamic = 'force-dynamic'
+
 export const runtime = 'nodejs'
 
 export async function DELETE(request: NextRequest) {
@@ -43,8 +45,10 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Prima trova l'ID utente tramite email
-    const { data: usersData } = await supabase.auth.admin.listUsers()
-    const userToDelete = usersData?.users.find(user => user.email === email)
+    // Definisci il tipo utente Supabase
+    type SupabaseUser = { id: string; email: string; [key: string]: any };
+    const { data: usersData } = await supabase.auth.admin.listUsers();
+    const userToDelete = (usersData?.users as SupabaseUser[]).find(user => user.email === email);
     
     if (!userToDelete) {
       return NextResponse.json({ 

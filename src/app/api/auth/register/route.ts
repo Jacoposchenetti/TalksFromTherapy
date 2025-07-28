@@ -3,6 +3,8 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from "next/server"
 import { sanitizeInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 
+export const dynamic = 'force-dynamic'
+
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {

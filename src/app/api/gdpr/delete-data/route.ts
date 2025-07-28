@@ -46,26 +46,25 @@ export async function POST(request: NextRequest) {
             .remove([filePath])
         }
 
-        // 2. Delete related chat messages
-        await supabaseAdmin
-          .from('chat_messages')
-          .delete()
-          .in('chat_id', 
-            supabaseAdmin
-              .from('analysis_chats')
-              .select('id')
-              .eq('user_id', authResult.user!.id)
-              .contains('session_ids', [session.id])
-          )
+        // Prima ottieni gli id delle chat da cancellare
+        const { data: chatsToDelete, error: chatsError } = await supabaseAdmin
+          .from('analysis_chats')
+          .select('id')
+          .eq('user_id', authResult.user!.id);
 
-        // 3. Delete analysis chats
+        if (chatsError) {
+          // gestisci errore (puoi lanciare o loggare)
+        }
+
+        const chatIds = (chatsToDelete || []).map((c: { id: any }) => c.id);
+
+        // Poi usali nella delete
         await supabaseAdmin
           .from('analysis_chats')
           .delete()
-          .eq('user_id', authResult.user!.id)
-          .contains('session_ids', [session.id])
+          .in('chat_id', chatIds);
 
-        // 4. Delete session notes
+        // 3. Delete session notes
         await supabaseAdmin
           .from('session_notes')
           .delete()
