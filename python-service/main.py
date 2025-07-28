@@ -1137,4 +1137,5 @@ def generate_combined_analysis(sessions: List[SessionAnalysis], language: str = 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    port = int(os.environ.get("PORT", 8001))  # Usa PORT di Railway, default 8001 per locale
+    uvicorn.run(app, host="0.0.0.0", port=port)
