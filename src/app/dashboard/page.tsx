@@ -217,15 +217,6 @@ export default function DashboardPage() {
                 Manage Patients
               </Button>
               <Button 
-                data-tour="sessions-button"
-                onClick={() => router.push("/sessions")} 
-                className="w-full justify-start"
-                variant="outline"
-              >
-                <FileAudio className="mr-2 h-4 w-4" />
-                View Sessions
-              </Button>
-              <Button 
                 data-tour="help-button"
                 onClick={() => router.push("/help")} 
                 className="w-full justify-start"

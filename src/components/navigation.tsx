@@ -55,7 +55,6 @@ export function Navigation() {
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Patients", href: "/patients", icon: Users },
-    { name: "Sessions", href: "/sessions", icon: FileAudio },
     { name: "Calendar", href: "/calendar", icon: Calendar },
     { name: "Tutorial", href: "/help", icon: HelpCircle },
     { name: "Contact", href: "/contact", icon: Mail },

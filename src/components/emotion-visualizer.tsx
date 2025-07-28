@@ -79,7 +79,7 @@ export function EmotionVisualizer({ data, title, showDetails = false }: EmotionV
         <XAxis dataKey="emotion" tick={{ fontSize: 13, fontWeight: 500 }} />
         <YAxis domain={[-4, 4]} tick={{ fontSize: 12 }} />
         <Tooltip formatter={(v: number) => v.toFixed(2)} />
-        <Bar dataKey="value" isAnimationActive fill="#8884d8">
+        <Bar dataKey="value" isAnimationActive={false} fill="#8884d8">
           {barData.map((entry, idx) => (
             <Cell key={`cell-${idx}`} fill={entry.color} />
           ))}

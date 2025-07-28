@@ -129,14 +129,6 @@ export function PatientList({ patients, onEdit, onDelete, onViewSessions, onView
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => onViewSessions(patient.id)}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      Sessioni
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
                       onClick={() => onViewAnalysis(patient.id)}
                     >
                       <BarChart3 className="h-4 w-4 mr-1" />
