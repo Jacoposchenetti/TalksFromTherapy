@@ -970,29 +970,90 @@ async def semantic_frame_analysis(request: Dict):
         }
 
 def generate_semantic_network_plot(fmnt_word, target_word: str, connected_words: list, frame_z_scores: dict) -> str:
-    """Generate a network plot using optimized approach for Railway deployment"""
+    """Generate a network plot using EmoAtlas native draw_formamentis function on the extracted subnetwork"""
     try:
-        import matplotlib
-        matplotlib.use('Agg')  # Use non-interactive backend
-        import matplotlib.pyplot as plt
-        import io
-        import base64
+        print(f"🎨 Generating EmoAtlas network plot for '{target_word}' with {len(connected_words)} connections...")
         
-        print(f"🎨 Generating optimized network plot for '{target_word}' with {len(connected_words)} connections...")
+        # If we have too many connections, try EmoAtlas draw_formamentis first
+        # But limit connections to prevent memory issues
+        max_connections = 25 if len(connected_words) > 25 else len(connected_words)
+        if max_connections < len(connected_words):
+            print(f"⚠️ Limiting visualization to {max_connections} connections for performance")
         
-        # Use smaller figure and lower DPI for Railway performance
-        plt.figure(figsize=(10, 8), dpi=80)  # Reduced from 12x10 @ 120 DPI
-        
-        # Use fallback NetworkX plot directly - more reliable than EmoAtlas draw_formamentis
-        return generate_fallback_network_plot(target_word, connected_words, frame_z_scores)
+        # Try EmoAtlas native method first
+        try:
+            import matplotlib
+            matplotlib.use('Agg')  # Use non-interactive backend
+            import matplotlib.pyplot as plt
+            import io
+            import base64
+            
+            # Create a moderate-sized figure
+            plt.figure(figsize=(10, 8), dpi=100)
+            
+            # Use EmoAtlas native draw_formamentis function
+            print(f"� Drawing forma mentis subnetwork using EmoAtlas...")
+            
+            # Initialize EmoScores to access draw_formamentis
+            emo = EmoScores(language='italian')
+            
+            # Check if we have a valid subnetwork
+            if fmnt_word is not None:
+                print(f"🔍 Drawing extracted subnetwork for '{target_word}'...")
+                
+                # Draw the SUBNETWORK with reduced complexity
+                emo.draw_formamentis(
+                    fmn=fmnt_word,            # USE THE EXTRACTED SUBNETWORK
+                    highlight=target_word,    # HIGHLIGHT THE TARGET WORD
+                    alpha_syntactic=0.6,      # Syntactic connections opacity
+                    alpha_hypernyms=0,        # Hypernym connections (disabled)
+                    alpha_synonyms=0,         # Synonym connections (disabled)  
+                    thickness=1.5             # Thinner lines for performance
+                )
+                
+                print(f"✅ Successfully drew EmoAtlas subnetwork with '{target_word}' highlighted")
+            else:
+                print(f"⚠️ No subnetwork available, using fallback")
+                return generate_fallback_network_plot(target_word, connected_words[:15], frame_z_scores)
+            
+            # Add title with emotional information
+            emotion_info = f"Valenza: {frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0):.2f}"
+            plt.title(f'Rete Cognitiva EmoAtlas - "{target_word}"\n{emotion_info} | Connessioni: {max_connections}', 
+                     fontsize=14, fontweight='bold', pad=15)
+            
+            # Improve layout
+            plt.tight_layout()
+            
+            # Convert to base64 with optimization
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100, 
+                       facecolor='white', edgecolor='none', optimize=True)
+            buffer.seek(0)
+            
+            # Encode to base64
+            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            # Close figure to free memory
+            plt.close()
+            
+            print(f"✅ EmoAtlas network plot generated successfully (size: {len(image_base64)} chars)")
+            return image_base64
+            
+        except Exception as emo_error:
+            print(f"❌ EmoAtlas draw_formamentis failed: {emo_error}")
+            print(f"🔄 Falling back to NetworkX visualization...")
+            plt.close('all')  # Clean up any matplotlib figures
+            return generate_fallback_network_plot(target_word, connected_words[:15], frame_z_scores)
         
     except Exception as e:
-        print(f"❌ Error in optimized plot generation: {e}")
-        return generate_fallback_network_plot(target_word, connected_words, frame_z_scores)
+        print(f"❌ Error in network plot generation: {e}")
+        return generate_fallback_network_plot(target_word, connected_words[:10], frame_z_scores)
 
 def generate_fallback_network_plot(target_word: str, connected_words: list, frame_z_scores: dict) -> str:
     """Optimized fallback network plot using NetworkX for Railway deployment"""
     try:
+        print(f"🔧 Starting fallback NetworkX plot for '{target_word}' with {len(connected_words)} words")
+        
         import networkx as nx
         import matplotlib
         matplotlib.use('Agg')
@@ -1000,24 +1061,111 @@ def generate_fallback_network_plot(target_word: str, connected_words: list, fram
         import matplotlib.colors as mcolors
         import numpy as np
         
+        print(f"📦 All imports successful for fallback plot")
+        
         # Create optimized figure - smaller size, lower DPI
-        plt.figure(figsize=(8, 6), dpi=72)  # Much smaller than before
+        plt.figure(figsize=(8, 6), dpi=72)
+        print(f"🖼️ Figure created successfully")
         
         # Create network graph with limited connections for performance
         G = nx.Graph()
         
         # Add the target word as central node
         G.add_node(target_word, node_type='target')
+        print(f"🎯 Added target node: {target_word}")
         
         # Limit to maximum 15 words for Railway performance
         limited_words = connected_words[:15] if len(connected_words) > 15 else connected_words
-        print(f"🎯 Rendering {len(limited_words)} connections for '{target_word}'")
+        print(f"🔗 Processing {len(limited_words)} limited connections")
         
         # Add connected words as nodes
+        edge_count = 0
         for word in limited_words:
-            if word != target_word:  # Avoid self-loops
+            if word != target_word and word.strip():  # Avoid self-loops and empty words
                 G.add_node(word, node_type='connected')
                 G.add_edge(target_word, word)
+                edge_count += 1
+        
+        print(f"📊 Graph created with {len(G.nodes())} nodes and {edge_count} edges")
+        
+        # If no connected words, create a single node graph
+        if len(limited_words) == 0 or edge_count == 0:
+            print(f"⚠️ No valid connections. Creating single-node graph.")
+            pos = {target_word: (0, 0)}
+            node_colors = ['red']
+            node_sizes = [1000]
+        else:
+            print(f"🗺️ Creating layout...")
+            # Create simple circular layout for performance
+            pos = nx.circular_layout(G)
+            # Move target word to center
+            if target_word in pos:
+                pos[target_word] = (0, 0)
+            
+            print(f"🎨 Calculating node colors and sizes...")
+            # Color nodes based on emotional valence
+            valence = frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0)
+            
+            node_colors = []
+            node_sizes = []
+            for node in G.nodes():
+                if node == target_word:
+                    node_colors.append('red')
+                    node_sizes.append(800)
+                else:
+                    # Color based on valence
+                    if valence > 0:
+                        node_colors.append('lightgreen')
+                    elif valence < 0:
+                        node_colors.append('lightcoral')
+                    else:
+                        node_colors.append('lightblue')
+                    node_sizes.append(400)
+        
+        print(f"🖌️ Drawing network...")
+        # Draw the network with minimal styling for performance
+        nx.draw(G, pos,
+                node_color=node_colors,
+                node_size=node_sizes,
+                font_size=8,
+                font_weight='bold',
+                with_labels=True,
+                edge_color='gray',
+                width=1,
+                alpha=0.8)
+        
+        print(f"📝 Adding title...")
+        # Simple title
+        valence_text = f"Valenza: {frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0):.1f}"
+        plt.title(f'"{target_word}" - {valence_text}', fontsize=12, pad=10)
+        
+        print(f"💾 Converting to base64...")
+        # Convert to base64 with compression
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=72, 
+                   facecolor='white', edgecolor='none')
+        buffer.seek(0)
+        
+        # Encode to base64
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        # Close figure to free memory
+        plt.close()
+        
+        print(f"✅ Fallback network plot generated successfully (size: {len(image_base64)} chars)")
+        return image_base64
+        
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR in fallback plot generation: {e}")
+        print(f"📋 Error details: {type(e).__name__}: {str(e)}")
+        try:
+            plt.close('all')  # Clean up any figures
+        except:
+            pass
+        # Return empty base64 for a 1x1 transparent PNG as absolute fallback
+        import base64
+        minimal_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        return minimal_png
         
         # If no connected words, create a single node graph
         if len(limited_words) == 0:
