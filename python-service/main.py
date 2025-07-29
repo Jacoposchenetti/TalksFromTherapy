@@ -14,15 +14,42 @@ import io
 # Load environment variables
 load_dotenv()
 
-# EmoAtlas imports
+# EmoAtlas imports and initialization
+def initialize_emoatlas():
+    """Initialize EmoAtlas with automatic data download if needed"""
+    try:
+        print("🔧 Initializing EmoAtlas...")
+        from emoatlas import EmoScores
+        
+        # Test EmoAtlas initialization - this will trigger data download if needed
+        print("📥 Testing EmoAtlas data availability...")
+        test_emo = EmoScores(language='italian')
+        test_result = test_emo.zscores("Test di inizializzazione EmoAtlas.")
+        print(f"✅ EmoAtlas initialization successful: {test_result}")
+        
+        return True, EmoScores
+    except Exception as e:
+        print(f"❌ EmoAtlas initialization failed: {e}")
+        print(f"   This might be due to missing data files or network issues")
+        return False, None
+
+# Initialize EmoAtlas
+EMOATLAS_AVAILABLE = False
+EmoScores = None
+
 try:
-    from emoatlas import EmoScores
     import matplotlib
     matplotlib.use('Agg')  # Use non-interactive backend
     import matplotlib.pyplot as plt
     import spacy
-    EMOATLAS_AVAILABLE = True
-    print("✅ EmoAtlas successfully imported")
+    
+    # Initialize EmoAtlas with data download
+    EMOATLAS_AVAILABLE, EmoScores = initialize_emoatlas()
+    
+    if EMOATLAS_AVAILABLE:
+        print("✅ EmoAtlas successfully initialized")
+    else:
+        print("⚠️ EmoAtlas initialization failed, will use fallback")
     
     # Load Italian spacy model for lemmatization
     try:
@@ -33,7 +60,7 @@ try:
         print("⚠️ Italian Spacy model not available for lemmatization")
         
 except ImportError as e:
-    print(f"❌ EmoAtlas not available: {e}")
+    print(f"❌ Required packages not available: {e}")
     EMOATLAS_AVAILABLE = False
     nlp_it = None
 
@@ -349,6 +376,16 @@ async def health_check():
         
         if emoatlas_service.available:
             health_info["emoatlas_version"] = "integrated"
+            # Test EmoAtlas with a simple analysis
+            try:
+                test_result = emoatlas_service.analyze_session("Test di prova EmoAtlas.")
+                health_info["emoatlas_test"] = "success"
+                health_info["emoatlas_test_result"] = test_result.get('emotional_valence', 'N/A')
+            except Exception as e:
+                health_info["emoatlas_test"] = "failed"
+                health_info["emoatlas_test_error"] = str(e)
+        else:
+            health_info["emoatlas_error"] = "EmoAtlas initialization failed"
         
         return health_info
     except Exception as e:
@@ -357,6 +394,57 @@ async def health_check():
             "error": str(e),
             "python_service_status": "error",
             "emoatlas_available": False
+        }
+
+@app.get("/debug/emoatlas")
+async def debug_emoatlas():
+    """Debug endpoint to test EmoAtlas functionality"""
+    try:
+        if not EMOATLAS_AVAILABLE:
+            return {
+                "status": "emoatlas_not_available",
+                "error": "EmoAtlas is not initialized",
+                "suggestion": "Check if EmoAtlas data files are available"
+            }
+        
+        # Test basic EmoAtlas functionality
+        print("🧪 Testing EmoAtlas basic functionality...")
+        emo = EmoScores(language='italian')
+        
+        # Test text analysis
+        test_text = "Sono felice di essere qui oggi con voi."
+        test_result = emo.zscores(test_text)
+        
+        # Test semantic frame analysis
+        test_word = "felice"
+        try:
+            fmnt = emo.formamentis_network(test_text)
+            fmnt_word = emo.extract_word_from_formamentis(fmnt, test_word)
+            connected_words = list(fmnt_word.vertices) if hasattr(fmnt_word, 'vertices') else []
+        except Exception as e:
+            connected_words = []
+            fmnt_error = str(e)
+        
+        return {
+            "status": "success",
+            "emoatlas_available": True,
+            "test_text": test_text,
+            "emotion_scores": test_result,
+            "semantic_test": {
+                "target_word": test_word,
+                "connected_words": connected_words[:10],  # First 10
+                "connections_count": len(connected_words),
+                "network_error": fmnt_error if 'fmnt_error' in locals() else None
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "emoatlas_available": EMOATLAS_AVAILABLE,
+            "timestamp": datetime.now().isoformat()
         }
 
 @app.post("/single-document-analysis")
