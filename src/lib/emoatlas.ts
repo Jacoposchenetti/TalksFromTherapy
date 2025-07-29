@@ -138,21 +138,37 @@ export interface SessionData {
         
         const request = {
           text,
-          target_word: targetWord,
+          target_word: targetWord,  // Python si aspetta target_word, non targetWord
           session_id: sessionId || 'unknown',
           language
         }
+
+        console.log('🌐 Sending request to Railway:', {
+          url: `${this.baseUrl}/semantic-frame-analysis`,
+          method: 'POST',
+          bodySize: JSON.stringify(request).length,
+          targetWord,
+          textLength: text.length
+        })
   
         const response = await fetch(`${this.baseUrl}/semantic-frame-analysis`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(request)
+          body: JSON.stringify(request),
+          signal: AbortSignal.timeout(120000) // 2 minuti timeout
+        })
+
+        console.log('📡 Railway response:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok
         })
   
         if (!response.ok) {
           const errorText = await response.text()
+          console.error('❌ Railway error response:', errorText)
           throw new Error(`HTTP ${response.status}: ${errorText}`)
         }
   
