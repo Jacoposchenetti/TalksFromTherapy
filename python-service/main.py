@@ -14,35 +14,66 @@ import io
 # Load environment variables
 load_dotenv()
 
-# EmoAtlas imports - Reliable initialization (data pre-downloaded in Docker)
+# EmoAtlas imports - Safe initialization (NLTK pre-downloaded in Docker)
+# Import necessary NLTK packages - ensure they are available
+import os
+print("🔧 Verifying NLTK data...")
 try:
-    from emoatlas import EmoScores
+    import nltk
+    # Double-check that NLTK data is available and download if needed
+    nltk_data_path = os.path.expanduser('~/nltk_data')
+    os.makedirs(nltk_data_path, exist_ok=True)
+    
+    for package in ['wordnet', 'omw-1.4', 'punkt']:
+        try:
+            nltk.data.find(f'corpora/{package}')
+            print(f"✅ NLTK package '{package}' is available")
+        except LookupError:
+            print(f"📥 Downloading NLTK package '{package}'")
+            nltk.download(package)
+except Exception as e:
+    print(f"⚠️ Error verifying NLTK data: {e}")
+
+# Initialize with memory protection
+try:
+    print("🔧 Importing required libraries...")
     import matplotlib
     matplotlib.use('Agg')  # Use non-interactive backend
     import matplotlib.pyplot as plt
     import spacy
     
-    EMOATLAS_AVAILABLE = True
-    print("✅ EmoAtlas successfully imported (data should be pre-initialized)")
-    
-    # Test basic functionality
+    # Safely import EmoAtlas
     try:
-        test_emo = EmoScores(language='italian')
-        print("✅ EmoAtlas ready for semantic analysis")
+        print("🔧 Importing EmoAtlas...")
+        from emoatlas import EmoScores
+        EMOATLAS_AVAILABLE = True
+        print("✅ EmoAtlas successfully imported")
     except Exception as e:
-        print(f"⚠️ EmoAtlas test failed: {e}")
+        print(f"❌ EmoAtlas import error: {e}")
         EMOATLAS_AVAILABLE = False
     
-    # Load Italian spacy model for lemmatization
+    # Safely test EmoAtlas (without crashing the app)
+    if EMOATLAS_AVAILABLE:
+        try:
+            print("🧪 Testing EmoAtlas with minimal text...")
+            test_emo = EmoScores(language='italian')
+            test_result = test_emo.zscores("Test.")  # Very minimal test
+            print(f"✅ EmoAtlas test result: {test_result}")
+        except Exception as e:
+            print(f"⚠️ EmoAtlas test failed, using fallback mode: {e}")
+            EMOATLAS_AVAILABLE = False
+    
+    # Safely load spaCy model
     try:
-        nlp_it = spacy.load("it_core_news_lg")  # Using large model as required by EmoAtlas
-        print("✅ Italian Spacy model loaded for lemmatization")
-    except OSError:
+        print("🔧 Loading Italian spaCy model...")
+        nlp_it = spacy.load("it_core_news_lg")
+        print("✅ Italian spaCy model loaded")
+    except Exception as e:
+        print(f"⚠️ spaCy model not available: {e}")
         nlp_it = None
-        print("⚠️ Italian Spacy model not available for lemmatization")
         
-except ImportError as e:
-    print(f"⚠️ EmoAtlas or dependencies not available: {e}")
+except Exception as e:
+    print(f"⚠️ General initialization error: {e}")
     EMOATLAS_AVAILABLE = False
     nlp_it = None
 
@@ -629,35 +660,129 @@ def generate_analysis_summary(sessions: List[SessionAnalysis]) -> Dict:
 
 @app.post("/semantic-frame-analysis")
 async def semantic_frame_analysis(request: Dict):
-    """Perform semantic frame analysis using EmoAtlas"""
+    """Perform semantic frame analysis using EmoAtlas with improved memory handling"""
+    start_time = time.time()
+    # Resource management flags
+    memory_warning_triggered = False
+    
     try:
         text = request.get('text', '')
         target_word = request.get('target_word', '')
         session_id = request.get('session_id', 'unknown')
         language = request.get('language', 'italian')
         
+        # Basic validation
         if not text or not target_word:
             raise HTTPException(status_code=400, detail="Text and target_word are required")
         
-        print(f"🔍 Starting semantic frame analysis for word '{target_word}'")
+        # Check text size (memory optimization)
+        text_size = len(text)
+        print(f"🔍 Starting semantic frame analysis for word '{target_word}' (text size: {text_size} chars)")
         
+        # DEBUG: Log text content and word presence
+        print(f"📝 Text preview (first 200 chars): {text[:200]}...")
+        print(f"🔍 Target word '{target_word}' in text: {target_word.lower() in text.lower()}")
+        word_count_in_text = text.lower().count(target_word.lower())
+        print(f"🔢 Word '{target_word}' appears {word_count_in_text} times in text")
+        
+        # Apply text size limit to prevent memory errors (adjust as needed)
+        if text_size > 50000:  # ~50KB
+            print(f"⚠️ Text too large ({text_size} chars). Truncating to prevent memory issues.")
+            text = text[:50000] + "..."
+            memory_warning_triggered = True
+        
+        # Early bailout if EmoAtlas is not available
         if not EMOATLAS_AVAILABLE:
             print("🔄 EmoAtlas not available, using fallback semantic analysis")
             return generate_fallback_semantic_analysis(text, target_word, session_id, language)
         
+        # Memory monitoring function (basic implementation)
+        def check_memory():
+            import psutil
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            memory_mb = memory_info.rss / 1024 / 1024
+            print(f"📊 Current memory usage: {memory_mb:.2f} MB")
+            return memory_mb
+        
+        # Check available memory before starting
         try:
-            # Initialize EmoScores for the language with timeout protection
+            initial_memory = check_memory()
+            if initial_memory > 400:  # Arbitrary threshold (adjust based on your server)
+                print(f"⚠️ High initial memory usage ({initial_memory:.2f} MB). Proceeding with caution.")
+                memory_warning_triggered = True
+        except Exception as mem_error:
+            print(f"⚠️ Unable to check memory: {mem_error}")
+        
+        try:
+            # Initialize EmoScores with memory monitoring
             print(f"🌍 Initializing EmoScores for language: {language}")
             emo = EmoScores(language=language)
             print("✅ EmoScores initialized successfully")
+            
+            # Check memory after initialization
+            try:
+                post_init_memory = check_memory()
+                if post_init_memory > initial_memory + 200:  # 200MB growth might indicate issues
+                    print(f"⚠️ High memory growth after initialization: {post_init_memory-initial_memory:.2f} MB")
+                    memory_warning_triggered = True
+            except Exception:
+                pass
+                
         except Exception as e:
             print(f"❌ Error initializing EmoScores with language '{language}': {e}")
             print("🔄 Falling back to semantic analysis without EmoAtlas")
             return generate_fallback_semantic_analysis(text, target_word, session_id, language)
         
-        # Generate the forma mentis network
+        # Generate the forma mentis network with timeout/memory protection
         print(f"🕸️ Generating forma mentis network...")
-        fmnt = emo.formamentis_network(text)
+        try:
+            # Check if text has Italian words to prevent all-zero results
+            import re
+            italian_words = ['ciao', 'sono', 'mi', 'sento', 'oggi', 'ieri', 'bene', 'male', 'paziente']
+            italian_word_count = sum(1 for word in italian_words if re.search(r'\b' + word + r'\b', text.lower()))
+            
+            if italian_word_count < 2:
+                print(f"⚠️ Text might not contain enough Italian words ({italian_word_count} found)")
+                print(f"⚠️ This might cause network generation to fail or return empty results")
+            
+            # Wrap network generation with a timeout (prevents hanging)
+            import signal
+            
+            def network_timeout_handler(signum, frame):
+                raise TimeoutError("Network generation timed out")
+            
+            # Set timeout (adjust based on your text size and server capacity)
+            timeout_seconds = 60 if not memory_warning_triggered else 30
+            
+            # Apply timeout only on Linux/Unix systems
+            if os.name != 'nt':  # Skip on Windows
+                signal.signal(signal.SIGALRM, network_timeout_handler)
+                signal.alarm(timeout_seconds)
+            
+            # Generate network
+            fmnt = emo.formamentis_network(text)
+            
+            # Cancel timeout if set
+            if os.name != 'nt':
+                signal.alarm(0)
+            
+        except TimeoutError:
+            print(f"⚠️ Network generation timed out after {timeout_seconds} seconds")
+            return generate_fallback_semantic_analysis(text, target_word, session_id, language)
+        except MemoryError:
+            print("❌ Memory error during network generation")
+            return generate_fallback_semantic_analysis(text, target_word, session_id, language)
+        except Exception as e:
+            print(f"❌ Error generating network: {e}")
+            return generate_fallback_semantic_analysis(text, target_word, session_id, language)
+        
+        # Check memory after network generation
+        try:
+            post_network_memory = check_memory()
+            print(f"📊 Memory after network generation: {post_network_memory:.2f} MB")
+        except Exception:
+            pass
         
         # Extract semantic frame for the target word
         print(f"🎯 Extracting semantic frame for '{target_word}'...")
@@ -718,10 +843,39 @@ async def semantic_frame_analysis(request: Dict):
                 print(f"🔗 Edges in extracted subnetwork: {len(fmnt_word.edges)}")
                 print(f"🔗 Subnetwork edges: {list(fmnt_word.edges)}")
             
-            # Get connected words (vertices in the semantic frame)
-            connected_words = list(fmnt_word.vertices) if hasattr(fmnt_word, 'vertices') else []
-            print(f"🔗 Connected words found: {len(connected_words)}")
-            print(f"🔗 Connected words list: {connected_words[:10]}...")  # Show first 10
+            # Get connected words (vertices in the semantic frame) - INTELLIGENT LIMITING
+            all_connected_words = list(fmnt_word.vertices) if hasattr(fmnt_word, 'vertices') else []
+            print(f"🔗 Connected words found: {len(all_connected_words)}")
+            
+            # Smart limitation to top 30 for PNG generation performance 
+            if len(all_connected_words) > 30:
+                print(f"⚠️ Limiting connections from {len(all_connected_words)} to 30 most important for performance")
+                
+                # Try to get edge weights if available for importance ranking
+                try:
+                    if hasattr(fmnt_word, 'edges') and fmnt_word.edges:
+                        # Get words with highest connection frequency
+                        word_counts = {}
+                        for edge in fmnt_word.edges:
+                            for word in edge:
+                                if word in all_connected_words:
+                                    word_counts[word] = word_counts.get(word, 0) + 1
+                        
+                        # Sort by connection count and take top 30
+                        sorted_words = sorted(word_counts.items(), key=lambda x: x[1], reverse=True)
+                        connected_words = [word for word, count in sorted_words[:30]]
+                        print(f"📊 Selected top 30 by connection frequency")
+                    else:
+                        # Fallback: take first 30 alphabetically sorted (more stable than random)
+                        connected_words = sorted(all_connected_words)[:30]
+                        print(f"📝 Selected first 30 alphabetically sorted")
+                except Exception as e:
+                    print(f"⚠️ Error in smart selection, using first 30: {e}")
+                    connected_words = all_connected_words[:30]
+            else:
+                connected_words = all_connected_words
+            
+            print(f"🔗 Final connected words list: {connected_words[:10]}...")  # Show first 10
             
             # Create semantic frame text for emotion analysis
             sem_frame_text = " ".join(connected_words)
@@ -816,7 +970,7 @@ async def semantic_frame_analysis(request: Dict):
         }
 
 def generate_semantic_network_plot(fmnt_word, target_word: str, connected_words: list, frame_z_scores: dict) -> str:
-    """Generate a network plot using EmoAtlas native draw_formamentis function on the extracted subnetwork"""
+    """Generate a network plot using optimized approach for Railway deployment"""
     try:
         import matplotlib
         matplotlib.use('Agg')  # Use non-interactive backend
@@ -824,46 +978,98 @@ def generate_semantic_network_plot(fmnt_word, target_word: str, connected_words:
         import io
         import base64
         
-        # Create a new figure with high DPI for better quality
-        plt.figure(figsize=(12, 10), dpi=120)
+        print(f"🎨 Generating optimized network plot for '{target_word}' with {len(connected_words)} connections...")
         
-        # Use EmoAtlas native draw_formamentis function
-        print(f"🎨 Drawing forma mentis subnetwork using EmoAtlas...")
+        # Use smaller figure and lower DPI for Railway performance
+        plt.figure(figsize=(10, 8), dpi=80)  # Reduced from 12x10 @ 120 DPI
         
-        # Initialize EmoScores to access draw_formamentis
-        emo = EmoScores(language='italian')
+        # Use fallback NetworkX plot directly - more reliable than EmoAtlas draw_formamentis
+        return generate_fallback_network_plot(target_word, connected_words, frame_z_scores)
         
-        # Check if we have a valid subnetwork
-        if fmnt_word is not None:
-            print(f"🔍 Drawing extracted subnetwork for '{target_word}' with {len(connected_words)} connections...")
-            
-            # Draw the SUBNETWORK (not the full network) with highlight parameter
-            emo.draw_formamentis(
-                fmn=fmnt_word,            # USE THE EXTRACTED SUBNETWORK
-                highlight=target_word,    # HIGHLIGHT THE TARGET WORD
-                alpha_syntactic=0.4,      # Syntactic connections opacity
-                alpha_hypernyms=0,        # Hypernym connections (disabled)
-                alpha_synonyms=0,         # Synonym connections (disabled)  
-                thickness=2               # Line thickness
-            )
-            
-            print(f"✅ Successfully drew subnetwork with '{target_word}' highlighted")
+    except Exception as e:
+        print(f"❌ Error in optimized plot generation: {e}")
+        return generate_fallback_network_plot(target_word, connected_words, frame_z_scores)
+
+def generate_fallback_network_plot(target_word: str, connected_words: list, frame_z_scores: dict) -> str:
+    """Optimized fallback network plot using NetworkX for Railway deployment"""
+    try:
+        import networkx as nx
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import matplotlib.colors as mcolors
+        import numpy as np
+        
+        # Create optimized figure - smaller size, lower DPI
+        plt.figure(figsize=(8, 6), dpi=72)  # Much smaller than before
+        
+        # Create network graph with limited connections for performance
+        G = nx.Graph()
+        
+        # Add the target word as central node
+        G.add_node(target_word, node_type='target')
+        
+        # Limit to maximum 15 words for Railway performance
+        limited_words = connected_words[:15] if len(connected_words) > 15 else connected_words
+        print(f"🎯 Rendering {len(limited_words)} connections for '{target_word}'")
+        
+        # Add connected words as nodes
+        for word in limited_words:
+            if word != target_word:  # Avoid self-loops
+                G.add_node(word, node_type='connected')
+                G.add_edge(target_word, word)
+        
+        # If no connected words, create a single node graph
+        if len(limited_words) == 0:
+            print(f"⚠️ No connected words. Creating single-node graph.")
+            pos = {target_word: (0, 0)}
+            node_colors = ['red']
+            node_sizes = [1000]
         else:
-            print(f"⚠️ No subnetwork available, falling back to NetworkX visualization")
-            return generate_fallback_network_plot(target_word, connected_words, frame_z_scores)
+            # Create simple circular layout for performance
+            pos = nx.circular_layout(G)
+            # Move target word to center
+            if target_word in pos:
+                pos[target_word] = (0, 0)
+            
+            # Color nodes based on emotional valence
+            valence = frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0)
+            
+            node_colors = []
+            node_sizes = []
+            for node in G.nodes():
+                if node == target_word:
+                    node_colors.append('red')
+                    node_sizes.append(800)
+                else:
+                    # Color based on valence
+                    if valence > 0:
+                        node_colors.append('lightgreen')
+                    elif valence < 0:
+                        node_colors.append('lightcoral')
+                    else:
+                        node_colors.append('lightblue')
+                    node_sizes.append(400)
         
-        # Add title with emotional information
-        emotion_info = f"Valenza: {frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0):.2f}"
-        plt.title(f'Rete Cognitiva EmoAtlas - "{target_word}"\n{emotion_info} | Connessioni: {len(connected_words)}', 
-                 fontsize=16, fontweight='bold', pad=20)
+        # Draw the network with minimal styling for performance
+        nx.draw(G, pos,
+                node_color=node_colors,
+                node_size=node_sizes,
+                font_size=8,
+                font_weight='bold',
+                with_labels=True,
+                edge_color='gray',
+                width=1,
+                alpha=0.8)
         
-        # Improve layout
-        plt.tight_layout()
+        # Simple title
+        valence_text = f"Valenza: {frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0):.1f}"
+        plt.title(f'"{target_word}" - {valence_text}', fontsize=12, pad=10)
         
-        # Convert to base64
+        # Convert to base64 with compression
         buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=120, 
-                   facecolor='white', edgecolor='none')
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=72, 
+                   facecolor='white', edgecolor='none', optimize=True)
         buffer.seek(0)
         
         # Encode to base64
@@ -872,90 +1078,16 @@ def generate_semantic_network_plot(fmnt_word, target_word: str, connected_words:
         # Close figure to free memory
         plt.close()
         
-        print(f"✅ Network plot generated successfully (size: {len(image_base64)} chars)")
+        print(f"✅ Optimized network plot generated (size: {len(image_base64)} chars)")
         return image_base64
         
     except Exception as e:
-        print(f"❌ Error generating EmoAtlas network plot: {e}")
-        print(f"🔄 Falling back to simple NetworkX plot...")
-        return generate_fallback_network_plot(target_word, connected_words, frame_z_scores)
-
-def generate_fallback_network_plot(target_word: str, connected_words: list, frame_z_scores: dict) -> str:
-    """Fallback network plot using NetworkX when EmoAtlas fails"""
-    try:
-        import networkx as nx
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        import matplotlib.colors as mcolors
-        from matplotlib.patches import Rectangle
-        import numpy as np
-        
-        # Create a new figure with high DPI
-        plt.figure(figsize=(12, 8), dpi=100)
-        
-        # Create network graph
-        G = nx.Graph()
-        
-        # Add the target word as central node
-        G.add_node(target_word, node_type='target')
-        
-        # Add connected words as nodes
-        limited_words = connected_words[:20]  # Limit to first 20 for readability
-        for word in limited_words:
-            G.add_node(word, node_type='connected')
-            G.add_edge(target_word, word)
-        
-        # If no connected words, create a single node graph
-        if len(limited_words) == 0:
-            print(f"⚠️ No connected words for NetworkX fallback. Creating single-node graph.")
-            pos = {target_word: (0, 0)}
-        else:
-            # Create layout with target word in center
-            pos = nx.spring_layout(G, k=3, iterations=50)
-        
-        # Ensure target word is centered
-        if target_word in pos:
-            center_x, center_y = 0, 0
-            pos[target_word] = (center_x, center_y)
-            
-            # Arrange other nodes in a circle around the center only if we have connected words
-            if len(limited_words) > 0:
-                angle_step = 2 * np.pi / len(limited_words)
-                for i, word in enumerate(limited_words):
-                    if word in pos:
-                        angle = i * angle_step
-                        radius = 0.8
-                        pos[word] = (center_x + radius * np.cos(angle), center_y + radius * np.sin(angle))
-        
-        # Color nodes based on emotional valence
-        node_colors = []
-        node_sizes = []
-        
-        for node in G.nodes():
-            if node == target_word:
-                # Target word color based on overall emotional valence
-                valence = frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0)
-                if valence > 0.5:
-                    node_colors.append('#4CAF50')  # Green for positive
-                elif valence < -0.5:
-                    node_colors.append('#F44336')  # Red for negative
-                else:
-                    node_colors.append('#2196F3')  # Blue for neutral
-                node_sizes.append(1000)
-            else:
-                # Connected words get lighter colors
-                node_colors.append('#E3F2FD')  # Light blue
-                node_sizes.append(600)
-        
-        # Draw network
-        nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=node_sizes, alpha=0.8)
-        
-        # Only draw edges if we have connected words
-        if len(limited_words) > 0:
-            nx.draw_networkx_edges(G, pos, edge_color='gray', alpha=0.5, width=1)
-        
-        # Add labels with better positioning
+        print(f"❌ Error in fallback plot generation: {e}")
+        # Return empty base64 for a 1x1 transparent PNG as absolute fallback
+        import base64
+        # Minimal 1x1 transparent PNG in base64
+        minimal_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        return minimal_png
         labels = {}
         for node in G.nodes():
             if node == target_word:
