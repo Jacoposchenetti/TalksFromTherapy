@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict
 import numpy as np
 from datetime import datetime
+import time
 import openai
 import os
 import json
