@@ -26,7 +26,6 @@ export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
-    email: "",
     subject: "",
     category: "",
     message: "",
@@ -44,23 +43,38 @@ export default function ContactPage() {
     e.preventDefault()
     setIsSubmitting(true)
 
-    // Simulate form submission
-    setTimeout(() => {
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      if (response.ok) {
+        setSubmitted(true)
+        // Reset form after 3 seconds
+        setTimeout(() => {
+          setSubmitted(false)
+          setFormData({
+            name: "",
+            subject: "",
+            category: "",
+            message: "",
+            priority: "medium"
+          })
+        }, 3000)
+      } else {
+        const errorData = await response.json()
+        alert(`Errore: ${errorData.error || 'Errore durante l\'invio'}`)
+      }
+    } catch (error) {
+      console.error('Error submitting form:', error)
+      alert('Errore di connessione. Riprova più tardi.')
+    } finally {
       setIsSubmitting(false)
-      setSubmitted(true)
-      // Reset form after 3 seconds
-      setTimeout(() => {
-        setSubmitted(false)
-        setFormData({
-          name: "",
-          email: "",
-          subject: "",
-          category: "",
-          message: "",
-          priority: "medium"
-        })
-      }, 3000)
-    }, 2000)
+    }
   }
 
   if (status === "loading") {
@@ -193,7 +207,7 @@ export default function ContactPage() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Full Name *
@@ -205,17 +219,21 @@ export default function ContactPage() {
                         required
                       />
                     </div>
+                    
+                    {/* Email automatico dall'account */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Email Address *
+                        Email Address
                       </label>
                       <Input
                         type="email"
-                        value={formData.email}
-                        onChange={(e) => handleInputChange("email", e.target.value)}
-                        placeholder="your.email@example.com"
-                        required
+                        value={session?.user?.email || ""}
+                        disabled
+                        className="bg-gray-50 text-gray-600"
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Il messaggio verrà inviato da questo indirizzo email
+                      </p>
                     </div>
                   </div>
 
@@ -298,7 +316,7 @@ export default function ContactPage() {
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={isSubmitting || !formData.name || !formData.email || !formData.subject || !formData.message || !formData.category}
+                    disabled={isSubmitting || !formData.name || !formData.subject || !formData.message || !formData.category}
                   >
                     {isSubmitting ? (
                       <>
