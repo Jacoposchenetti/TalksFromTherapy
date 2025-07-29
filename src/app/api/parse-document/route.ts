@@ -52,12 +52,13 @@ async function parseTxt(file: File) {
   console.log(`📝 Parsing TXT file: ${file.name}, size: ${file.size}, type: ${file.type}`)
   const text = await file.text()
   console.log(`📝 TXT parsing result: ${text.length} characters, first 100 chars: "${text.substring(0, 100)}"`)
-  
+  const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')
   return {
     text,
     metadata: {
       wordCount: text.split(/\s+/).filter(word => word.length > 0).length,
-      format: 'txt'
+      format: 'txt',
+      fileName: sanitizedFileName
     }
   }
 }
@@ -119,11 +120,13 @@ async function parseWord(file: File) {
     
     console.log(`Word document parsed successfully: ${result.value.length} characters`)
     
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')
     return {
       text: result.value,
       metadata: {
         wordCount: result.value.split(/\s+/).filter(word => word.length > 0).length,
-        format: extension
+        format: extension,
+        fileName: sanitizedFileName
       }
     }
   } catch (error) {
@@ -175,12 +178,14 @@ async function parsePdf(file: File) {
     
     console.log(`PDF parsed successfully: ${data.text.length} characters, ${data.numpages} pages`)
     
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')
     return {
       text: data.text,
       metadata: {
         pages: data.numpages,
         wordCount: data.text.split(/\s+/).filter(word => word.length > 0).length,
-        format: 'pdf'
+        format: 'pdf',
+        fileName: sanitizedFileName
       }
     }
   } catch (error) {
@@ -209,11 +214,13 @@ async function parseRtf(file: File) {
       .replace(/\s+/g, ' ') // Normalize whitespace
       .trim()
     
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')
     return {
       text: cleanText,
       metadata: {
         wordCount: cleanText.split(/\s+/).filter(word => word.length > 0).length,
-        format: 'rtf'
+        format: 'rtf',
+        fileName: sanitizedFileName
       }
     }
   } catch (error) {

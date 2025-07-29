@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, sanitizeInput, createErrorResponse, createSuccessResponse, hasResourceAccess } from "@/lib/auth-utils"
 import { createClient } from "@supabase/supabase-js"
 import { encryptIfSensitive, decryptIfEncrypted } from "@/lib/encryption"
+import { diarizeTranscript } from "@/lib/openai"
 
 // Client supabase con service role per operazioni RLS
 const supabaseAdmin = createClient(
@@ -106,24 +107,53 @@ export async function POST(request: NextRequest) {
       }
 
       // STEP 6: Crea sessione con transcript testuale
+      // Ricava nome file senza estensione (salva in variabile per uso dopo la diarizzazione)
+      let fileBaseName = null;
+      if (metadata && metadata.fileName) {
+        fileBaseName = metadata.fileName.replace(/\.[^/.]+$/, "");
+      }
+      // Recupera nome paziente
+      let patientName = "Paziente";
+      if (sanitizedPatientId) {
+        const { data: patientData } = await supabaseAdmin
+          .from('patients')
+          .select('name')
+          .eq('id', sanitizedPatientId)
+          .single();
+        if (patientData && patientData.name) patientName = patientData.name;
+      }
+      // Titolo iniziale (può essere qualsiasi cosa, verrà sovrascritto dopo)
+      let sessionTitle = sanitizedTitle || `Session - ${patientName} - ${new Date().toISOString().split('T')[0]} ${metadata?.fileType || ''}`;
+      let finalTranscript = transcript;
+      try {
+        finalTranscript = await diarizeTranscript(transcript, sessionTitle);
+      } catch (err) {
+        console.warn("Diarizzazione fallita, salvo transcript base", err);
+      }
       const { data: newSession, error: sessionError } = await supabaseAdmin
         .from('sessions')
         .insert([{
           userId: authResult.user!.id, // Usa l'ID dall'auth unificato
           patientId: sanitizedPatientId,
-          title: sanitizedTitle,
-          transcript: encryptIfSensitive(transcript),
+          title: sessionTitle,
+          transcript: encryptIfSensitive(finalTranscript),
           sessionDate: new Date(),
           status: status || "TRANSCRIBED",
           documentMetadata: metadata ? JSON.stringify(metadata) : null,
         }])
         .select()
-        .single()
-
+        .single();
       if (sessionError) {
-        console.error('[supabaseAdmin] Session creation error:', sessionError)
-        return createErrorResponse("Errore nella creazione sessione", 500)
+        console.error('[supabaseAdmin] Session creation error:', sessionError);
+        return createErrorResponse("Errore nella creazione sessione", 500);
       }
+      // DOPO la diarizzazione, aggiorna SEMPRE il titolo nel formato richiesto
+      let forcedTitle = `Sessione - ${patientName} - ${fileBaseName || 'Documento'}`;
+      await supabaseAdmin
+        .from('sessions')
+        .update({ title: forcedTitle })
+        .eq('id', newSession.id);
+      newSession.title = forcedTitle;
 
       // Decripta il transcript per la risposta
       const decryptedSession = {
