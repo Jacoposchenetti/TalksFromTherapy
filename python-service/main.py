@@ -35,7 +35,7 @@ try:
     
     # Load Italian spacy model for lemmatization
     try:
-        nlp_it = spacy.load("it_core_news_sm")  # Using small model from Docker
+        nlp_it = spacy.load("it_core_news_lg")  # Using large model as required by EmoAtlas
         print("✅ Italian Spacy model loaded for lemmatization")
     except OSError:
         nlp_it = None
