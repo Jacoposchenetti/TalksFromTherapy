@@ -9,6 +9,7 @@ import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, Chevr
 import { SentimentAnalysis } from "@/components/sentiment-analysis"
 import TopicAnalysisComponent from "@/components/analysis/topic-modeling-gpt"
 import { useMultiSessionAnalysis } from "@/hooks/useMultiSessionAnalysis"
+import { useRef } from "react"
 
 interface Session {
   id: string
@@ -82,7 +83,7 @@ function AnalysisPageInner() {
     deleteSemanticFrameAnalysis
   } = useMultiSessionAnalysis({ 
     sessionIds: Array.from(selectedSessions),
-    autoLoad: false
+    autoLoad: true // Cambiato da false a true
   })
 
   // Stato per le note di tutte le sessioni
@@ -106,6 +107,7 @@ function AnalysisPageInner() {
 
   const [fullscreenFlower, setFullscreenFlower] = useState<{ src: string, title: string } | null>(null)
   const [lastLoadedSlide, setLastLoadedSlide] = useState<number | null>(null);
+  const autoSelectedRef = useRef(false)
 
   // Gestione ESC per chiudere il fullscreen
   useEffect(() => {
@@ -272,16 +274,18 @@ function AnalysisPageInner() {
 
 
 
-  // Selezione automatica della sessione passata via query string
+  // Selezione automatica della sessione passata via query string SOLO al primo caricamento
   useEffect(() => {
     if (
       sessions.length > 0 &&
       searchParams &&
-      selectedSessions.size === 0 // solo se non c'è già una selezione
+      selectedSessions.size === 0 &&
+      !autoSelectedRef.current
     ) {
       const sessionIdFromQuery = searchParams.get('sessionId')
       if (sessionIdFromQuery && sessions.some(s => s.id === sessionIdFromQuery)) {
         setSelectedSessions(new Set([sessionIdFromQuery]))
+        autoSelectedRef.current = true
       }
     }
   }, [sessions, searchParams, selectedSessions])
@@ -420,11 +424,11 @@ function AnalysisPageInner() {
       newSelected.add(sessionId)
     }
     setSelectedSessions(newSelected)
-    
-    // Aggiorna automaticamente le analisi se ci sono sessioni selezionate
+    // Aggiorna automaticamente le analisi solo se ci sono sessioni selezionate
     if (newSelected.size > 0) {
       loadAllAnalyses()
     }
+    // NON selezionare mai automaticamente se newSelected.size === 0
   }
 
   // Handle select all checkbox
@@ -757,6 +761,16 @@ function AnalysisPageInner() {
     )
   }
 
+  const selectedSessionsData = getSelectedSessionsData();
+  const topicData = hasAllTopicAnalyses ? getTopicData() : undefined;
+  const topicDataWithTitles = topicData?.map(result => {
+    const session = selectedSessionsData.find(s => s.id === result.session_id);
+    return {
+      ...result,
+      session_title: session?.title || result.session_title || result.title || `Sessione ${result.session_id}`,
+    };
+  });
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -1002,7 +1016,7 @@ function AnalysisPageInner() {
                         {/* Banner removed - topic analysis cache notification */}
 
                         <TopicAnalysisComponent 
-                          selectedSessions={getSelectedSessionsData().map(session => ({
+                          selectedSessions={selectedSessionsData.map(session => ({
                             id: session.id,
                             title: session.title,
                             transcript: session.transcript || ""
@@ -1013,52 +1027,7 @@ function AnalysisPageInner() {
                             // Il salvataggio ora viene gestito direttamente nel componente
                             // Non serve più salvare qui
                           }}
-                          cachedData={(() => {
-                            const topicData = hasAllTopicAnalyses ? getTopicData() : undefined
-                            const customTopicData = getCustomTopicData()
-                            const selectedSessionIds = Array.from(selectedSessions)
-                            
-                            console.log('🎯 Topic cached data being passed:', topicData)
-                            console.log('🎯 Custom topic cached data being passed:', customTopicData)
-                            console.log('🎯 hasAllTopicAnalyses:', hasAllTopicAnalyses)
-                            console.log('🎯 Selected session IDs:', selectedSessionIds)
-                            
-                            // Verifica che i topic siano correlati alle sessioni attualmente selezionate
-                            if (topicData && Array.isArray(topicData) && topicData.length > 0) {
-                              // Trova il risultato che corrisponde alle sessioni selezionate
-                              const matchingResult = topicData.find(result => 
-                                selectedSessionIds.includes(result.session_id)
-                              )
-                              
-                              if (matchingResult) {
-                                console.log('🎯 Found matching topic analysis for selected sessions:', matchingResult.session_id)
-                                return {
-                                  session_id: matchingResult.session_id,
-                                  topics: matchingResult.topics || [],
-                                  summary: matchingResult.summary || '',
-                                  analysis_timestamp: matchingResult.analysis_timestamp || '',
-                                  text_segments: matchingResult.text_segments || [],
-                                  patient_content_stats: matchingResult.patient_content_stats || null,
-                                  customTopics: customTopicData.length > 0 ? customTopicData[0].customTopics : undefined
-                                }
-                              } else {
-                                console.log('⚠️ No matching topic analysis found for selected sessions')
-                                // Non restituire topic se non corrispondono alle sessioni selezionate
-                                return {
-                                  customTopics: customTopicData.length > 0 ? customTopicData[0].customTopics : undefined
-                                }
-                              }
-                            }
-                            
-                            // Se non abbiamo topic normali ma abbiamo custom topics, restituisci solo quelli
-                            if (customTopicData.length > 0) {
-                              return {
-                                customTopics: customTopicData[0].customTopics
-                              }
-                            }
-                            
-                            return undefined
-                          })()}
+                          cachedData={topicDataWithTitles && topicDataWithTitles.length > 0 ? topicDataWithTitles : undefined}
                         />
                       </div>
                     )}                      {/* Slide 2: Sentiment Analysis */}
