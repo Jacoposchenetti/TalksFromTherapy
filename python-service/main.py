@@ -14,49 +14,35 @@ import io
 # Load environment variables
 load_dotenv()
 
-# EmoAtlas imports - Safe initialization
-def initialize_emoatlas_safe():
-    """Safely initialize EmoAtlas without blocking startup"""
-    try:
-        print("🔧 Attempting EmoAtlas initialization...")
-        from emoatlas import EmoScores
-        
-        # Quick test without heavy operations
-        print("📥 EmoAtlas imported successfully")
-        return True, EmoScores
-    except Exception as e:
-        print(f"⚠️ EmoAtlas initialization skipped: {e}")
-        print("   Service will use fallback analysis")
-        return False, None
-
-# Initialize EmoAtlas safely
-EMOATLAS_AVAILABLE = False
-EmoScores = None
-
+# EmoAtlas imports - Reliable initialization (data pre-downloaded in Docker)
 try:
+    from emoatlas import EmoScores
     import matplotlib
     matplotlib.use('Agg')  # Use non-interactive backend
     import matplotlib.pyplot as plt
     import spacy
     
-    # Safe EmoAtlas initialization - don't block startup
-    EMOATLAS_AVAILABLE, EmoScores = initialize_emoatlas_safe()
+    EMOATLAS_AVAILABLE = True
+    print("✅ EmoAtlas successfully imported (data should be pre-initialized)")
     
-    if EMOATLAS_AVAILABLE:
-        print("✅ EmoAtlas available for semantic analysis")
-    else:
-        print("⚠️ EmoAtlas not available, using fallback analysis")
+    # Test basic functionality
+    try:
+        test_emo = EmoScores(language='italian')
+        print("✅ EmoAtlas ready for semantic analysis")
+    except Exception as e:
+        print(f"⚠️ EmoAtlas test failed: {e}")
+        EMOATLAS_AVAILABLE = False
     
     # Load Italian spacy model for lemmatization
     try:
-        nlp_it = spacy.load("it_core_news_lg")
+        nlp_it = spacy.load("it_core_news_sm")  # Using small model from Docker
         print("✅ Italian Spacy model loaded for lemmatization")
     except OSError:
         nlp_it = None
         print("⚠️ Italian Spacy model not available for lemmatization")
         
 except ImportError as e:
-    print(f"⚠️ Some packages not available: {e}")
+    print(f"⚠️ EmoAtlas or dependencies not available: {e}")
     EMOATLAS_AVAILABLE = False
     nlp_it = None
 
@@ -655,21 +641,8 @@ async def semantic_frame_analysis(request: Dict):
         
         print(f"🔍 Starting semantic frame analysis for word '{target_word}'")
         
-        # Lazy initialization of EmoAtlas - try to initialize it now if not available
-        global EMOATLAS_AVAILABLE, EmoScores
         if not EMOATLAS_AVAILABLE:
-            print("🔄 Attempting lazy EmoAtlas initialization...")
-            try:
-                EMOATLAS_AVAILABLE, EmoScores = initialize_emoatlas_safe()
-                if EMOATLAS_AVAILABLE:
-                    print("✅ EmoAtlas lazy initialization successful!")
-                else:
-                    print("⚠️ EmoAtlas lazy initialization failed, using fallback")
-            except Exception as e:
-                print(f"❌ EmoAtlas lazy initialization error: {e}")
-        
-        if not EMOATLAS_AVAILABLE:
-            print("🔄 Using fallback semantic analysis")
+            print("🔄 EmoAtlas not available, using fallback semantic analysis")
             return generate_fallback_semantic_analysis(text, target_word, session_id, language)
         
         try:
