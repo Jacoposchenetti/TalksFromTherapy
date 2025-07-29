@@ -122,6 +122,7 @@ function SessionsPageContent() {
   const [savingTranscript, setSavingTranscript] = useState(false)
   // Audio player state
   const { playSession, currentSession, isPlaying } = useAudioPlayer()
+  const [originalTitles, setOriginalTitles] = useState<{ [id: string]: string }>({})
 
   useEffect(() => {
     if (status === "loading") return
@@ -601,16 +602,42 @@ function SessionsPageContent() {
 
   const handleTitleClick = (sessionId: string, currentTitle: string) => {
     setEditingSessionId(sessionId)
-    setEditingTitle(currentTitle)
+    setEditingTitle(currentTitle ?? "")
+    setOriginalTitles(prev => ({ ...prev, [sessionId]: currentTitle ?? "" }))
+  }
+
+  const pollSessionTitle = async (sessionId: string, expectedTitle: string, maxAttempts = 20, interval = 500) => {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const response = await fetch(`/api/sessions/${sessionId}`)
+        if (response.ok) {
+          const data = await response.json()
+          const session = data.data || data
+          if (session.title === expectedTitle) {
+            return session
+          }
+        }
+      } catch (e) {}
+      await new Promise(res => setTimeout(res, interval))
+    }
+    throw new Error('Timeout: il titolo non è stato aggiornato su Supabase in tempo utile.')
   }
 
   const handleTitleSubmit = async (sessionId: string) => {
     if (!editingTitle.trim()) {
       NotificationManager.showWarning("Il titolo non può essere vuoto")
-      handleTitleCancel()
       return
     }
-
+    // Ottimistic update: aggiorna subito il titolo localmente
+    setSessions(prevSessions =>
+      prevSessions.map(session =>
+        session.id === sessionId
+          ? { ...session, title: editingTitle.trim() }
+          : session
+      )
+    )
+    setEditingSessionId(null)
+    setEditingTitle("")
     try {
       const response = await fetch(`/api/sessions/${sessionId}`, {
         method: "PATCH",
@@ -621,28 +648,24 @@ function SessionsPageContent() {
           title: editingTitle.trim()
         }),
       })
-
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Errore durante l'aggiornamento")
       }
-
-      const updatedSession = await response.json()
-
-      // Aggiorna la sessione nella lista
+      // Polling: attendi che il titolo sia effettivamente aggiornato su Supabase
+      await pollSessionTitle(sessionId, editingTitle.trim())
+      // Aggiorna la sessione nella lista con il valore definitivo dal backend
+      await fetchSessions()
+      NotificationManager.showSuccess("Titolo aggiornato con successo")
+    } catch (error) {
+      // Se fallisce, ripristina il titolo originale
       setSessions(prevSessions =>
         prevSessions.map(session =>
           session.id === sessionId
-            ? { ...session, title: updatedSession.title }
+            ? { ...session, title: originalTitles[sessionId] || session.title }
             : session
         )
       )
-
-      setEditingSessionId(null)
-      setEditingTitle("")
-      NotificationManager.showSuccess("Titolo aggiornato con successo")
-    } catch (error) {
-      console.error("Errore aggiornamento titolo:", error)
       if (error instanceof Error) {
         NotificationManager.showError("Errore durante l'aggiornamento del titolo: " + error.message)
       } else {
@@ -651,7 +674,24 @@ function SessionsPageContent() {
     }
   }
 
-  const handleTitleCancel = () => {
+  const handleTitleCancel = async () => {
+    if (editingSessionId) {
+      // Ricarica il titolo originale dal backend per sicurezza
+      try {
+        const response = await fetch(`/api/sessions/${editingSessionId}`)
+        if (response.ok) {
+          const data = await response.json()
+          const sessionFromBackend = data.data || data
+          setSessions(prevSessions =>
+            prevSessions.map(session =>
+              session.id === editingSessionId
+                ? { ...session, title: sessionFromBackend.title }
+                : session
+            )
+          )
+        }
+      } catch (e) { /* fallback: non fare nulla, resta il titolo locale */ }
+    }
     setEditingSessionId(null)
     setEditingTitle("")
   }
@@ -957,7 +997,6 @@ function SessionsPageContent() {
                             value={editingTitle}
                             onChange={(e) => setEditingTitle(e.target.value)}
                             onKeyDown={(e) => handleTitleKeyDown(e, session.id)}
-                            onBlur={() => handleTitleSubmit(session.id)}
                             className="text-lg font-semibold"
                             autoFocus
                           />
@@ -972,7 +1011,7 @@ function SessionsPageContent() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={handleTitleCancel}
+                            onClick={() => handleTitleCancel()}
                             className="text-red-600 hover:text-red-700"
                           >
                             ✕
@@ -984,7 +1023,7 @@ function SessionsPageContent() {
                           onClick={() => handleTitleClick(session.id, session.title)}
                           title="Click to edit title"
                         >
-                          {session.title}
+                          {session.title || "Sessione senza titolo"}
                         </span>
                       )}
                       {getStatusBadge(session.status)}
