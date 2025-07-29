@@ -72,13 +72,15 @@ interface TopicAnalysisProps {
   combinedTranscript: string
   onAnalysisComplete?: (result: AnalysisResult | CustomTopicSearchResult) => void
   cachedData?: any // Dati topic analysis dalla cache
+  onRequestAnalysis?: (sessionId: string) => void; // Aggiunto per avviare l'analisi
 }
 
 export default function TopicAnalysisComponent({ 
   selectedSessions, 
   combinedTranscript, 
   onAnalysisComplete,
-  cachedData 
+  cachedData,
+  onRequestAnalysis
 }: TopicAnalysisProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   // Cambia il tipo di stato analysisResult per accettare anche array
@@ -822,6 +824,12 @@ Rispondi SOLO con JSON:
     return [analysisResult];
   }, [analysisResult]);
 
+  const allTopicSessions = selectedSessions.map((s) => {
+    const found = topicSessions.find(ts => ts.session_id === s.id);
+    if (found) return found;
+    return { session_id: s.id, session_title: s.title, missing: true };
+  });
+
   const goToPreviousSession = () => {
     setCurrentSessionIndex(prev => prev > 0 ? prev - 1 : topicSessions.length - 1);
   };
@@ -836,6 +844,11 @@ Rispondi SOLO con JSON:
     topicSessionsLength: topicSessions.length,
     selectedSessionsLength: selectedSessions.length
   });
+
+  // Type guard per distinguere tra sessione con analisi e placeholder
+  function isTopicAnalysis(obj: any): obj is AnalysisResult {
+    return obj && Array.isArray(obj.topics);
+  }
 
   return (
     <div className="h-full space-y-6">
@@ -1101,11 +1114,11 @@ Rispondi SOLO con JSON:
                   <Brain className="h-5 w-5" /> Macrotemi individuati
                 </CardTitle> */}
                 <CardDescription className="mb-2">
-                  {topicSessions[currentSessionIndex]?.summary}
+                  {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].summary : ''}
                 </CardDescription>
               </CardHeader>
               {/* Barra di navigazione sessioni topic modeling standard - sempre visibile se più di una sessione selezionata */}
-              {topicSessions.length > 1 && (
+              {allTopicSessions.length > 1 && (
                 <div className="flex justify-center mb-4 mt-2">
                   <div className="flex flex-col w-full max-w-xl bg-gray-50 rounded-xl py-4 px-6 items-center shadow-sm">
                     <div className="flex w-full items-center justify-between mb-1">
@@ -1114,7 +1127,7 @@ Rispondi SOLO con JSON:
                         <span className="font-semibold">Precedente</span>
                       </Button>
                       <div className="flex flex-col items-center flex-1">
-                        <span className="font-semibold text-lg">{topicSessions[currentSessionIndex]?.session_title || topicSessions[currentSessionIndex]?.title || 'Sessione'}</span>
+                        <span className="font-semibold text-lg">{allTopicSessions[currentSessionIndex]?.session_title || (isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].title : '') || 'Sessione'}</span>
                       </div>
                       <Button variant="outline" size="sm" onClick={goToNextSession} className="flex items-center gap-1">
                         <span className="font-semibold">Successiva</span>
@@ -1123,85 +1136,96 @@ Rispondi SOLO con JSON:
                     </div>
                     <div className="text-center text-gray-600 text-base mt-1">
                       {/* Mostra solo il nome della sessione, non il codice */}
-                      {topicSessions[currentSessionIndex]?.session_title || topicSessions[currentSessionIndex]?.title || 'Sessione'}
+                      {allTopicSessions[currentSessionIndex]?.session_title || (isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].title : '') || 'Sessione'}
                     </div>
                   </div>
                 </div>
               )}
-              {topicSessions.length === 1 && (
+              {allTopicSessions.length === 1 && (
                 <div className="flex justify-center mb-4 mt-2">
                   <div className="flex flex-col w-full max-w-xl bg-gray-50 rounded-xl py-4 px-6 items-center shadow-sm">
                     <div className="flex w-full items-center justify-center mb-1">
                       {/* Mostra solo il nome della sessione, non il codice */}
-                      <span className="font-semibold text-lg">{topicSessions[0]?.session_title || topicSessions[0]?.title || 'Sessione'}</span>
+                      <span className="font-semibold text-lg">{allTopicSessions[0]?.session_title || (isTopicAnalysis(allTopicSessions[0]) ? allTopicSessions[0].title : '') || 'Sessione'}</span>
                     </div>
                   </div>
                 </div>
               )}
               <CardContent>
-                {/* Elenco Macrotemi e keywords - ora PRIMA della trascrizione evidenziata */}
-                <div className="mb-6">
-                  <h4 className="font-semibold text-lg mb-2">Elenco Macrotemi</h4>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {topicSessions[currentSessionIndex]?.topics && Array.isArray(topicSessions[currentSessionIndex]?.topics) ? (
-                      topicSessions[currentSessionIndex].topics.map((topic, index) => (
-                        <Badge
-                          key={topic.topic_id}
-                          className={getTopicColor(topic.topic_id) + ' text-base px-3 py-1 cursor-pointer transition-all'}
-                          title={topic.description}
-                        >
-                          {topic.description.replace(/\s*\([^)]*\)$/, '')}
-                        </Badge>
-                      ))
-                    ) : (
-                      <p className="text-gray-500 italic">Nessun topic disponibile</p>
-                    )}
-                  </div>
-                  {/* Keywords per ogni topic */}
-                  <div className="space-y-2">
-                    {topicSessions[currentSessionIndex]?.topics && Array.isArray(topicSessions[currentSessionIndex]?.topics) ? (
-                      topicSessions[currentSessionIndex].topics.map((topic, index) => (
-                        <div key={topic.topic_id} className="mb-2">
-                          <span className="font-semibold text-blue-900">{topic.description.replace(/\s*\([^)]*\)$/, '')}:</span>
-                          <span className="ml-2 text-gray-700 text-sm">
-                            {topic.keywords && Array.isArray(topic.keywords) ? topic.keywords.join(', ') : <span className="italic text-gray-400">Nessuna parola chiave</span>}
-                          </span>
-                        </div>
-                      ))
-                    ) : null}
-                  </div>
-                </div>
-                {/* Testo evidenziato con i topic - sempre visibile */}
-                <div className="p-4 bg-gray-50 rounded-lg border max-h-96 overflow-y-auto text-base leading-relaxed">
-                  {topicSessions[currentSessionIndex]?.text_segments && Array.isArray(topicSessions[currentSessionIndex]?.text_segments) ? (
-                    topicSessions[currentSessionIndex].text_segments.map((segment, index) => {
-                      const isSessionSeparator = segment.text.includes('---') && segment.topic_id === null
-                      if (isSessionSeparator) {
-                        return (
-                          <div
-                            key={index}
-                            className="py-3 my-4 text-center font-medium text-gray-700 border-t border-b border-gray-300 bg-gray-100"
-                          >
-                            {segment.text.replace(/\n/g, '').trim()}
-                          </div>
-                        )
-                      }
-                      return (
-                        <span
-                          key={index}
-                          className={`inline-block p-1 rounded transition-all ${getTopicBackgroundColor(segment.topic_id)} ${segment.topic_id ? 'border-l-4 border-blue-400 font-semibold text-blue-900' : 'text-gray-800'}`}
-                          title={segment.topic_id ? `${topicSessions[currentSessionIndex]?.topics?.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)` : 'Unclassified'}
-                        >
-                          {segment.text}
-                        </span>
-                      )
-                    })
-                  ) : (
-                    <p className="text-gray-500 italic">
-                      Classificazione del testo in corso...
+                {allTopicSessions[currentSessionIndex] && !isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <p className="text-lg font-medium text-gray-700 mb-4 text-center">
+                      L'analisi topic modeling per questa sessione non è ancora pronta.<br />
+                      Premi il pulsante qui sotto per avviarla.
                     </p>
-                  )}
-                </div>
+                    <Button onClick={() => onRequestAnalysis?.(allTopicSessions[currentSessionIndex].session_id)}>
+                      Avvia Analisi Topic
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-6">
+                      <h4 className="font-semibold text-lg mb-2">Elenco Macrotemi</h4>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
+                          allTopicSessions[currentSessionIndex].topics.map((topic, index) => (
+                            <Badge
+                              key={topic.topic_id}
+                              className={getTopicColor(topic.topic_id) + ' text-base px-3 py-1 cursor-pointer transition-all'}
+                              title={topic.description}
+                            >
+                              {topic.description.replace(/\s*\([^)]*\)$/, '')}
+                            </Badge>
+                          ))
+                        ) : (
+                          <p className="text-gray-500 italic">Nessun topic disponibile</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
+                          allTopicSessions[currentSessionIndex].topics.map((topic, index) => (
+                            <div key={topic.topic_id} className="mb-2">
+                              <span className="font-semibold text-blue-900">{topic.description.replace(/\s*\([^)]*\)$/, '')}:</span>
+                              <span className="ml-2 text-gray-700 text-sm">
+                                {topic.keywords && Array.isArray(topic.keywords) ? topic.keywords.join(', ') : <span className="italic text-gray-400">Nessuna parola chiave</span>}
+                              </span>
+                            </div>
+                          ))
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg border max-h-96 overflow-y-auto text-base leading-relaxed">
+                      {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
+                        allTopicSessions[currentSessionIndex].text_segments.map((segment, index) => {
+                          const isSessionSeparator = segment.text.includes('---') && segment.topic_id === null;
+                          if (isSessionSeparator) {
+                            return (
+                              <div
+                                key={index}
+                                className="py-3 my-4 text-center font-medium text-gray-700 border-t border-b border-gray-300 bg-gray-100"
+                              >
+                                {segment.text.replace(/\n/g, '').trim()}
+                              </div>
+                            );
+                          }
+                          return (
+                            <span
+                              key={index}
+                              className={`inline-block p-1 rounded transition-all ${getTopicBackgroundColor(segment.topic_id)} ${segment.topic_id ? 'border-l-4 border-blue-400 font-semibold text-blue-900' : 'text-gray-800'}`}
+                              title={segment.topic_id ? `${isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (allTopicSessions[currentSessionIndex].topics?.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '')) : ''} (${Math.round(segment.confidence * 100)}% confidence)` : 'Unclassified'}
+                            >
+                              {segment.text}
+                            </span>
+                          );
+                        })
+                      ) : (
+                        <p className="text-gray-500 italic">
+                          Classificazione del testo in corso...
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
