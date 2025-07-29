@@ -235,9 +235,7 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
   }, [memoizedSessionIds, analyses])
 
   const getTopicData = useCallback(() => {
-    // Aggrega i dati di topic analysis per tutte le sessioni
-    const results = [];
-    for (const sessionId of memoizedSessionIds) {
+    return memoizedSessionIds.map(sessionId => {
       const analysis = analyses[sessionId];
       let sessionTitle = `Sessione ${sessionId}`;
       if (analysis && typeof analysis === 'object') {
@@ -245,7 +243,7 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
         else if ('title' in analysis && typeof analysis.title === 'string') sessionTitle = analysis.title;
       }
       if (analysis && analysis.topicAnalysis) {
-        results.push({
+        return {
           session_id: sessionId,
           session_title: sessionTitle,
           topics: analysis.topicAnalysis.topics || [],
@@ -253,11 +251,12 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
           analysis_timestamp: analysis.topicAnalysis.analysis_timestamp || '',
           text_segments: analysis.topicAnalysis.text_segments || [],
           patient_content_stats: analysis.topicAnalysis.patient_content_stats || null
-        })
+        }
       }
-    }
-    return results
-  }, [memoizedSessionIds, analyses])
+      // Placeholder se non c'è analisi
+      return { session_id: sessionId, session_title: sessionTitle, missing: true };
+    });
+  }, [memoizedSessionIds, analyses]);
 
   const getCustomTopicData = useCallback(() => {
     // Aggrega i dati di custom topic analysis per tutte le sessioni

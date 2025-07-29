@@ -831,10 +831,10 @@ Rispondi SOLO con JSON:
   });
 
   const goToPreviousSession = () => {
-    setCurrentSessionIndex(prev => prev > 0 ? prev - 1 : topicSessions.length - 1);
+    setCurrentSessionIndex(prev => prev > 0 ? prev - 1 : allTopicSessions.length - 1);
   };
   const goToNextSession = () => {
-    setCurrentSessionIndex(prev => prev < topicSessions.length - 1 ? prev + 1 : 0);
+    setCurrentSessionIndex(prev => prev < allTopicSessions.length - 1 ? prev + 1 : 0);
   };
 
   // DEBUG: logga lo stato delle variabili chiave
