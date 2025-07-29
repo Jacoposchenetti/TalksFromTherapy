@@ -20,7 +20,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Download Spacy model (but don't initialize EmoAtlas during build)
 RUN python -m spacy download it_core_news_lg
-RUN python -m nltk.downloader wordnet
+
+# Download required NLTK packages
+RUN python -m nltk.downloader wordnet omw-1.4 punkt
+
 # NOTE: EmoAtlas initialization moved to runtime with timeout protection
 
 # Copy application code
