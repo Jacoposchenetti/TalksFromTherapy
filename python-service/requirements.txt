@@ -7,7 +7,6 @@ pydantic==2.5.0
 openai
 python-dotenv
 spacy>=3.4.0
-https://github.com/explosion/spacy-models/releases/download/it_core_news_lg-3.7.0/it_core_news_lg-3.7.0-py3-none-any.whl
 matplotlib
 networkx
 numpy

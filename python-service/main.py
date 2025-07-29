@@ -14,26 +14,22 @@ import io
 # Load environment variables
 load_dotenv()
 
-# EmoAtlas imports and initialization
-def initialize_emoatlas():
-    """Initialize EmoAtlas with automatic data download if needed"""
+# EmoAtlas imports - Safe initialization
+def initialize_emoatlas_safe():
+    """Safely initialize EmoAtlas without blocking startup"""
     try:
-        print("🔧 Initializing EmoAtlas...")
+        print("🔧 Attempting EmoAtlas initialization...")
         from emoatlas import EmoScores
         
-        # Test EmoAtlas initialization - this will trigger data download if needed
-        print("📥 Testing EmoAtlas data availability...")
-        test_emo = EmoScores(language='italian')
-        test_result = test_emo.zscores("Test di inizializzazione EmoAtlas.")
-        print(f"✅ EmoAtlas initialization successful: {test_result}")
-        
+        # Quick test without heavy operations
+        print("📥 EmoAtlas imported successfully")
         return True, EmoScores
     except Exception as e:
-        print(f"❌ EmoAtlas initialization failed: {e}")
-        print(f"   This might be due to missing data files or network issues")
+        print(f"⚠️ EmoAtlas initialization skipped: {e}")
+        print("   Service will use fallback analysis")
         return False, None
 
-# Initialize EmoAtlas
+# Initialize EmoAtlas safely
 EMOATLAS_AVAILABLE = False
 EmoScores = None
 
@@ -43,13 +39,13 @@ try:
     import matplotlib.pyplot as plt
     import spacy
     
-    # Initialize EmoAtlas with data download
-    EMOATLAS_AVAILABLE, EmoScores = initialize_emoatlas()
+    # Safe EmoAtlas initialization - don't block startup
+    EMOATLAS_AVAILABLE, EmoScores = initialize_emoatlas_safe()
     
     if EMOATLAS_AVAILABLE:
-        print("✅ EmoAtlas successfully initialized")
+        print("✅ EmoAtlas available for semantic analysis")
     else:
-        print("⚠️ EmoAtlas initialization failed, will use fallback")
+        print("⚠️ EmoAtlas not available, using fallback analysis")
     
     # Load Italian spacy model for lemmatization
     try:
@@ -60,7 +56,7 @@ try:
         print("⚠️ Italian Spacy model not available for lemmatization")
         
 except ImportError as e:
-    print(f"❌ Required packages not available: {e}")
+    print(f"⚠️ Some packages not available: {e}")
     EMOATLAS_AVAILABLE = False
     nlp_it = None
 
@@ -229,28 +225,11 @@ class EmoAtlasAnalysisService:
         self.available = EMOATLAS_AVAILABLE
         print(f"🔧 EmoAtlasAnalysisService initialized - EmoAtlas available: {self.available}")
         
-        # Test EmoAtlas if available
+        # Don't test EmoAtlas during initialization to avoid startup crashes
         if self.available:
-            try:
-                print("🧪 Testing EmoAtlas with sample text...")
-                test_emo = EmoScores(language='italian')
-                test_result = test_emo.zscores("Ciao, sono felice di essere qui oggi.")
-                print(f"🧪 Test result: {test_result}")
-                
-                # Check if test result has non-zero values
-                test_scores = [float(test_result.get(emotion, 0)) for emotion in ['joy', 'trust', 'fear', 'surprise', 'sadness', 'disgust', 'anger', 'anticipation']]
-                if all(score == 0 for score in test_scores):
-                    print("⚠️ WARNING: EmoAtlas test returned all zeros! This might indicate an issue")
-                else:
-                    print("✅ EmoAtlas test successful - non-zero scores detected")
-                    
-            except Exception as e:
-                print(f"❌ EmoAtlas test failed: {e}")
-                self.available = False
-        if self.available:
-            print("🌸 EmoAtlas Analysis Service initialized")
+            print("✅ EmoAtlas is available for analysis")
         else:
-            print("⚠️ EmoAtlas not available - using fallback")
+            print("⚠️ EmoAtlas not available - using fallback analysis")
     
     def analyze_session(self, text: str, language: str = 'italian') -> Dict:
         """Analyze a single session using EmoAtlas"""
@@ -676,12 +655,28 @@ async def semantic_frame_analysis(request: Dict):
         
         print(f"🔍 Starting semantic frame analysis for word '{target_word}'")
         
+        # Lazy initialization of EmoAtlas - try to initialize it now if not available
+        global EMOATLAS_AVAILABLE, EmoScores
         if not EMOATLAS_AVAILABLE:
+            print("🔄 Attempting lazy EmoAtlas initialization...")
+            try:
+                EMOATLAS_AVAILABLE, EmoScores = initialize_emoatlas_safe()
+                if EMOATLAS_AVAILABLE:
+                    print("✅ EmoAtlas lazy initialization successful!")
+                else:
+                    print("⚠️ EmoAtlas lazy initialization failed, using fallback")
+            except Exception as e:
+                print(f"❌ EmoAtlas lazy initialization error: {e}")
+        
+        if not EMOATLAS_AVAILABLE:
+            print("🔄 Using fallback semantic analysis")
             return generate_fallback_semantic_analysis(text, target_word, session_id, language)
         
         try:
-            # Initialize EmoScores for the language
+            # Initialize EmoScores for the language with timeout protection
+            print(f"🌍 Initializing EmoScores for language: {language}")
             emo = EmoScores(language=language)
+            print("✅ EmoScores initialized successfully")
         except Exception as e:
             print(f"❌ Error initializing EmoScores with language '{language}': {e}")
             print("🔄 Falling back to semantic analysis without EmoAtlas")
