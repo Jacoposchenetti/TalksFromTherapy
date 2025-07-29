@@ -18,12 +18,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Download Spacy model required by EmoAtlas (LARGE model needed!)
+# Download Spacy model (but don't initialize EmoAtlas during build)
 RUN python -m spacy download it_core_news_lg
-
-# Download and initialize EmoAtlas data (fixed syntax!)
-RUN echo "🔧 Initializing EmoAtlas data..." && \
-    python -c "from emoatlas import EmoScores; print('📥 EmoAtlas imported'); emo = EmoScores(language='italian'); print('✅ Italian EmoAtlas initialized'); result = emo.zscores('Test di inizializzazione EmoAtlas.'); print('✅ Test successful:', result); print('🌸 EmoAtlas ready!')"
+RUN python -m nltk.downloader wordnet
+# NOTE: EmoAtlas initialization moved to runtime with timeout protection
 
 # Copy application code
 COPY . .
