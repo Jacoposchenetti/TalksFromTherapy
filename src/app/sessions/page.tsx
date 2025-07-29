@@ -875,28 +875,30 @@ function SessionsPageContent() {
             Gestisci le sessioni di terapia e le trascrizioni
           </p>
         </div>
-      </div>      {/* Upload card - always visible */}
-      <Card className="mb-6">
+      </div>      {/* Upload card - Modern Design */}
+      <Card className="mb-6 border-0 shadow-lg bg-gradient-to-br from-white to-gray-50">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
             Carica nuova sessione
-          </CardTitle>          <CardDescription>
-            Carica un file audio per avviare la trascrizione automatica o un file di testo già trascritto
+          </CardTitle>
+          <CardDescription>
+            Seleziona il tipo di file che vuoi caricare
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          <div className="space-y-6">
             {/* Patient selector - only show when not in patient-specific view */}
             {!patientId && (
               <div>
                 <label htmlFor="patient-select" className="block text-sm font-medium text-gray-700 mb-2">
                   Seleziona paziente
-                </label>                <select
+                </label>
+                <select
                   id="patient-select"
                   value={selectedPatientForUpload}
                   onChange={(e) => setSelectedPatientForUpload(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                   disabled={uploading}
                 >
                   <option value="">-- Seleziona un paziente --</option>
@@ -912,62 +914,108 @@ function SessionsPageContent() {
                 </select>
               </div>
             )}
-              {/* File inputs */}
-            <div className="space-y-4">              {/* Audio file input */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Carica file audio
-                </label>
-                <div className="flex items-center gap-4">
+            
+            {/* Modern Upload Buttons */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Audio Upload Button */}
+              <div className="group relative">
+                <label className="block">
                   <input
                     type="file"
                     accept="audio/*"
                     onChange={handleFileUpload}
                     disabled={uploading || uploadingText || (!patientId && !selectedPatientForUpload)}
-                    className="flex-1"
+                    className="sr-only"
                   />
-                  {uploading && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                      Uploading audio...
+                  <div className={`
+                    flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed cursor-pointer
+                    transition-all duration-300 ease-in-out
+                    ${uploading || uploadingText || (!patientId && !selectedPatientForUpload) 
+                      ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-50' 
+                      : 'border-blue-300 bg-blue-50 hover:border-blue-400 hover:bg-blue-100 hover:shadow-lg group-hover:scale-105'
+                    }
+                  `}>
+                    <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4 group-hover:bg-blue-200 transition-colors">
+                      <Play className="w-6 h-6 text-blue-600" />
                     </div>
-                  )}
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Audio</h3>
+                    <p className="text-sm text-gray-600 text-center">
+                      {uploading ? 'Caricamento in corso...' : 'Clicca per selezionare un file audio'}
+                    </p>
+                    {uploading && (
+                      <div className="flex items-center gap-2 mt-3">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <span className="text-sm text-blue-600">Uploading...</span>
+                      </div>
+                    )}
+                  </div>
+                </label>
+                
+                {/* Hover Tooltip for Audio */}
+                <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+                  <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap">
+                    Formati: MP3, WAV, M4A, OGG • Max: 50MB
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Formati supportati: MP3, WAV, M4A, OGG • Dimensione massima: 50MB
-                </p>
               </div>
 
-              {/* Text file input */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Carica file di testo
-                </label>
-                <div className="flex items-center gap-4">
+              {/* Text Upload Button */}
+              <div className="group relative">
+                <label className="block">
                   <input
                     type="file"
                     accept={DocumentParser.getAcceptString()}
                     onChange={handleTextFileUpload}
                     disabled={uploading || uploadingText || (!patientId && !selectedPatientForUpload)}
-                    className="flex-1"
+                    className="sr-only"
                   />
-                  {uploadingText && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                      Processing document...
+                  <div className={`
+                    flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed cursor-pointer
+                    transition-all duration-300 ease-in-out
+                    ${uploading || uploadingText || (!patientId && !selectedPatientForUpload)
+                      ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-50'
+                      : 'border-green-300 bg-green-50 hover:border-green-400 hover:bg-green-100 hover:shadow-lg group-hover:scale-105'
+                    }
+                  `}>
+                    <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-4 group-hover:bg-green-200 transition-colors">
+                      <FileText className="w-6 h-6 text-green-600" />
                     </div>
-                  )}
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Text File</h3>
+                    <p className="text-sm text-gray-600 text-center">
+                      {uploadingText ? 'Elaborazione in corso...' : 'Clicca per selezionare un file di testo'}
+                    </p>
+                    {uploadingText && (
+                      <div className="flex items-center gap-2 mt-3">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                        <span className="text-sm text-green-600">Processing...</span>
+                      </div>
+                    )}
+                  </div>
+                </label>
+                
+                {/* Hover Tooltip for Text */}
+                <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+                  <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap">
+                    Formati: {DocumentParser.getSupportedFormats().map(f => f.toUpperCase()).join(', ')} • Max: 10MB
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Formati supportati: {DocumentParser.getSupportedFormats().map(f => f.toUpperCase()).join(', ')} • Dimensione massima: 10MB
-                </p>
               </div>
             </div>
-              {/* Helper text */}
+
+            {/* Helper text */}
             {!patientId && !selectedPatientForUpload && (
-              <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                ⚠️ Seleziona un paziente prima di caricare file audio o di testo
-              </p>
+              <div className="flex items-center gap-2 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex-shrink-0">
+                  <svg className="w-5 h-5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <p className="text-sm text-amber-800">
+                  Seleziona un paziente prima di caricare file
+                </p>
+              </div>
             )}
           </div>
         </CardContent>
