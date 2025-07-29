@@ -18,6 +18,29 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Download and initialize EmoAtlas data (this is the key!)
+RUN echo "🔧 Initializing EmoAtlas data..." && \
+    python -c "
+import sys
+try:
+    print('📥 Importing EmoAtlas...')
+    from emoatlas import EmoScores
+    print('✅ EmoAtlas imported successfully')
+    
+    print('🇮🇹 Initializing Italian language model...')
+    emo = EmoScores(language='italian')
+    print('✅ Italian EmoAtlas initialized')
+    
+    print('🧪 Testing with sample text...')
+    result = emo.zscores('Test di inizializzazione EmoAtlas.')
+    print(f'✅ Test successful: {result}')
+    
+    print('🌸 EmoAtlas fully initialized and ready!')
+except Exception as e:
+    print(f'❌ EmoAtlas initialization failed: {e}')
+    sys.exit(1)
+"
+
 # Download minimal Spacy model
 RUN python -m spacy download it_core_news_sm
 
