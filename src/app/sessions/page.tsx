@@ -845,7 +845,7 @@ function SessionsPageContent() {
 
   if (!session) return null
   return (
-    <div className="container mx-auto p-6 max-w-full overflow-hidden">
+    <div className="container mx-auto p-6 max-w-7xl">
       <div className="flex items-center gap-4 mb-6">
         {patientId && (
           <Button
@@ -1035,9 +1035,9 @@ function SessionsPageContent() {
               </p>
             </CardContent>
           </Card>        ) : (          getFilteredSessions().map((session) => (
-            <Card key={session.id} className="hover:shadow-md transition-shadow w-full overflow-visible">
-              <CardHeader className="overflow-visible">
-                <div className="flex items-start justify-between gap-4 overflow-visible">
+            <Card key={session.id} className="hover:shadow-md transition-shadow w-full">
+              <CardHeader>
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div className="flex-1 min-w-0">                    <CardTitle className="flex items-center gap-2 flex-wrap">
                       {editingSessionId === session.id ? (
                         <div className="flex items-center gap-2 flex-1">
@@ -1100,7 +1100,9 @@ function SessionsPageContent() {
                           {formatDocumentMetadata(session.documentMetadata)}
                         </span>                      )}                    </CardDescription>
                   </div>
-                    <div className="flex gap-2 flex-wrap items-center justify-end min-w-0 overflow-visible">{session.audioUrl && (
+                  
+                  {/* Action buttons - responsive layout */}
+                  <div className="flex gap-2 flex-wrap lg:flex-nowrap items-center justify-start lg:justify-end lg:min-w-fit">{session.audioUrl && (
                       <Button 
                         variant="outline" 
                         size="sm"
