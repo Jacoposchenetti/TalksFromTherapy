@@ -18,12 +18,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Download Spacy model required by EmoAtlas (LARGE model needed!)
+RUN python -m spacy download it_core_news_lg
+
 # Download and initialize EmoAtlas data (fixed syntax!)
 RUN echo "🔧 Initializing EmoAtlas data..." && \
     python -c "from emoatlas import EmoScores; print('📥 EmoAtlas imported'); emo = EmoScores(language='italian'); print('✅ Italian EmoAtlas initialized'); result = emo.zscores('Test di inizializzazione EmoAtlas.'); print('✅ Test successful:', result); print('🌸 EmoAtlas ready!')"
-
-# Download minimal Spacy model
-RUN python -m spacy download it_core_news_sm
 
 # Copy application code
 COPY . .
