@@ -917,9 +917,20 @@ async def semantic_frame_analysis(request: Dict):
             connected_ratio = len(connected_words) / max(total_words, 1)
             semantic_similarity = min(1.0, connected_ratio * 10)  # Normalize
             
-            # Generate semantic network visualization using EmoAtlas
-            # Pass the extracted subnetwork instead of the full network
-            network_plot = generate_semantic_network_plot(fmnt_word, actual_target_word, connected_words, frame_z_scores)
+            # Generate semantic network visualization - SIMPLIFIED for Railway
+            print(f"🎨 Generating semantic frame visualization for '{actual_target_word}'...")
+            
+            # For Railway: Skip image generation for large networks to prevent 502 errors
+            if len(connected_words) > 20:
+                print(f"⚠️ Large network ({len(connected_words)} connections) - returning text-only analysis")
+                network_plot = ""  # Empty image - frontend will handle gracefully
+            else:
+                print(f"🖼️ Small network ({len(connected_words)} connections) - generating image")
+                try:
+                    network_plot = generate_semantic_network_plot(fmnt_word, actual_target_word, connected_words, frame_z_scores)
+                except Exception as plot_error:
+                    print(f"❌ Plot generation failed: {plot_error}")
+                    network_plot = ""  # Fallback to no image
             
             return {
                 "success": True,
@@ -1019,16 +1030,19 @@ def generate_semantic_network_plot(fmnt_word, target_word: str, connected_words:
             
             # Add title with emotional information
             emotion_info = f"Valenza: {frame_z_scores.get('joy', 0) - frame_z_scores.get('sadness', 0):.2f}"
-            plt.title(f'Rete Cognitiva EmoAtlas - "{target_word}"\n{emotion_info} | Connessioni: {max_connections}', 
+            plt.title(f'Rete Cognitiva EmoAtlas - "{target_word}"\n{emotion_info} | Connessioni: {len(connected_words)}', 
                      fontsize=14, fontweight='bold', pad=15)
             
-            # Improve layout
+            # Improve layout and ensure proper rendering
             plt.tight_layout()
+            
+            # Force matplotlib to render everything before saving
+            plt.draw()
             
             # Convert to base64 with optimization
             buffer = io.BytesIO()
             plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100, 
-                       facecolor='white', edgecolor='none', optimize=True)
+                       facecolor='white', edgecolor='none')
             buffer.seek(0)
             
             # Encode to base64
@@ -1164,7 +1178,6 @@ def generate_fallback_network_plot(target_word: str, connected_words: list, fram
         except:
             pass
         # Return empty base64 for a 1x1 transparent PNG as absolute fallback
-        import base64
         minimal_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
         return minimal_png
         

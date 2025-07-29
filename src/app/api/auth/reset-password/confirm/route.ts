@@ -63,12 +63,25 @@ export async function POST(request: NextRequest) {
     // Per i token PKCE (che iniziano con pkce_), usiamo un approccio diverso
     if (accessToken.startsWith('pkce_')) {
       console.log('🔄 Gestione token PKCE')
-      // Per i token PKCE, usiamo direttamente updateUser senza setSession
+      
+      // Per i token PKCE, dobbiamo prima verificare il token e poi aggiornare
       try {
+        // Prima verifichiamo il token PKCE e stabiliamo la sessione
+        const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+          type: 'recovery',
+          token_hash: accessToken,
+        })
+
+        if (verifyError) {
+          console.error('PKCE token verification error:', verifyError)
+          return createErrorResponse(`Token non valido o scaduto: ${verifyError.message}`, 400)
+        }
+
+        console.log('✅ Token PKCE verificato, sessione stabilita')
+
+        // Ora che abbiamo una sessione valida, aggiorniamo la password
         const { error: updateError } = await supabase.auth.updateUser({
           password: password
-        }, {
-          emailRedirectTo: undefined // Disabilita redirect
         })
 
         if (updateError) {
@@ -77,6 +90,10 @@ export async function POST(request: NextRequest) {
         }
 
         console.log('✅ Password aggiornata con successo via PKCE')
+        
+        // Logout dopo il reset per forzare un nuovo login
+        await supabase.auth.signOut()
+        
         return createSuccessResponse({
           message: 'Password aggiornata con successo'
         })
