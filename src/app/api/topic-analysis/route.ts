@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 import { createClient } from '@supabase/supabase-js'
+import { CreditsService } from "@/lib/credits-service"
 
 // Client supabase con service role per operazioni RLS
 const supabaseAdmin = createClient(
@@ -60,6 +61,28 @@ export async function POST(request: NextRequest) {
     const authResult = await verifyApiAuth()
     if (!authResult.success) {
       return createErrorResponse(authResult.error || "Non autorizzato", 401)
+    }
+
+    console.log("🧠 POST /api/topic-analysis - Richiesta autorizzata", { 
+      userId: authResult.user?.id 
+    })
+
+    // STEP 2: Verifica crediti prima di procedere
+    const creditsService = new CreditsService()
+    const requiredCredits = 1 // Topic analysis costa 1 credito
+    
+    try {
+      const userCredits = await creditsService.getUserCredits(authResult.user!.id)
+      if (userCredits.credits_balance < requiredCredits) {
+        return createErrorResponse(
+          `Crediti insufficienti. Richiesti: ${requiredCredits}, Disponibili: ${userCredits.credits_balance}`, 
+          402 // Payment Required
+        )
+      }
+      console.log(`✅ Crediti sufficienti: ${userCredits.credits_balance} >= ${requiredCredits}`)
+    } catch (creditsError) {
+      console.error("❌ Errore verifica crediti:", creditsError)
+      return createErrorResponse("Errore nella verifica crediti", 500)
     }
 
     const requestData = await request.json()
@@ -162,6 +185,20 @@ export async function POST(request: NextRequest) {
         createdAt: session.createdAt
       })),
       analysis_timestamp: new Date().toISOString()
+    }
+
+    // STEP 5: Deduci crediti dopo successo completamento
+    try {
+      const newBalance = await creditsService.deductCredits(
+        authResult.user!.id,
+        'TOPIC_MODELLING', // CreditFeature
+        `Analisi topic modeling su ${sessionIds.length} sessioni`,
+        sessionIds.join(',') // referenceId con lista sessioni
+      )
+      console.log(`💳 Crediti dedotti: 1. Nuovo saldo: ${newBalance}`)
+    } catch (creditsError) {
+      console.error("⚠️ Errore deduzione crediti (analisi completata):", creditsError)
+      // Non bloccare la risposta, l'analisi è già stata completata
     }
 
     return createSuccessResponse(enrichedResult, "Analisi dei topic completata con successo")

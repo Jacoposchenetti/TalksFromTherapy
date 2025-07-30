@@ -5,20 +5,21 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, FileAudio, FileText, Plus, BarChart3, HelpCircle, Zap, Mail } from "lucide-react"
+import { Users, FileAudio, Plus, BarChart3, HelpCircle, Zap, Mail, Coins } from "lucide-react"
 import GuidedTour from "@/components/guided-tour"
 import { useTour, dashboardTourSteps } from "@/hooks/useTour"
+import { useCredits } from "@/hooks/useCredits"
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const { isTourOpen, hasCompletedTour, startTour, closeTour, completeTour } = useTour()
+  const { credits, loading: creditsLoading } = useCredits()
   const [stats, setStats] = useState({
     patientsCount: 0,
     sessionsCount: 0,
-    transcriptionsCount: 0,
   })
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -53,43 +54,35 @@ export default function DashboardPage() {
 
   const fetchStats = async () => {
     try {
-      setIsLoading(true)
       setError(null)
       
-      console.log("🔄 Dashboard: Fetching patients from API...")
-      const patientsRes = await fetch("/api/patients")
-      console.log("📡 Dashboard: Patients API Response status:", patientsRes.status, patientsRes.statusText)
+      console.log("🔄 Dashboard: Fetching patients and sessions in parallel...")
+      // Fetch both APIs in parallel for faster loading
+      const [patientsRes, sessionsRes] = await Promise.all([
+        fetch("/api/patients"),
+        fetch("/api/sessions")
+      ])
       
-      console.log("🔄 Dashboard: Fetching sessions from API...")
-      const sessionsRes = await fetch("/api/sessions")
-      console.log("📡 Dashboard: Sessions API Response status:", sessionsRes.status, sessionsRes.statusText)
+      console.log("📡 Dashboard: API Responses - Patients:", patientsRes.status, "Sessions:", sessionsRes.status)
       
       if (patientsRes.ok && sessionsRes.ok) {
-        const patientsData = await patientsRes.json()
-        const sessionsData = await sessionsRes.json()
+        const [patientsData, sessionsData] = await Promise.all([
+          patientsRes.json(),
+          sessionsRes.json()
+        ])
         
-        console.log("📦 Dashboard: Raw patients API data:", patientsData)
-        console.log("📦 Dashboard: Raw sessions API data:", sessionsData)
+        console.log("📦 Dashboard: Raw data - Patients:", patientsData, "Sessions:", sessionsData)
         
-        // Patients: { success: true, data: { patients: [...] } }
+        // Extract the data arrays
         const patients = patientsData.data?.patients || patientsData.patients || []
-        
-        // Sessions: { success: true, data: [...sessions...] }
         const sessions = sessionsData.data || sessionsData || []
-        
-        console.log("👥 Dashboard: Patients array:", patients)
-        console.log("📊 Dashboard: Patients count:", patients?.length)
-        console.log("📋 Dashboard: Sessions array:", sessions)
-        console.log("📊 Dashboard: Sessions count:", sessions?.length)
         
         const patientsCount = Array.isArray(patients) ? patients.length : 0
         const sessionsCount = Array.isArray(sessions) ? sessions.length : 0
-        const transcriptionsCount = Array.isArray(sessions) ? sessions.filter((s: any) => s.transcript && s.transcript.trim().length > 0).length : 0
         
         const newStats = {
           patientsCount: patientsCount,
           sessionsCount: sessionsCount,
-          transcriptionsCount: transcriptionsCount,
         }
         
         console.log("Dashboard: New stats:", newStats)
@@ -100,8 +93,6 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("Error fetching stats:", error)
       setError(error instanceof Error ? error.message : "Errore nel caricamento delle statistiche")
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -181,15 +172,17 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push("/credits")}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Transcriptions</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Credits</CardTitle>
+              <Coins className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.transcriptionsCount}</div>
+              <div className="text-2xl font-bold">
+                {creditsLoading ? '...' : credits?.credits_balance || 0}
+              </div>
               <p className="text-xs text-muted-foreground">
-                {stats.transcriptionsCount === 0 ? "Awaiting transcriptions" : "Completed transcriptions"}
+                {credits?.credits_balance === 0 ? "Crediti esauriti" : "Crediti disponibili"}
               </p>
             </CardContent>
           </Card>

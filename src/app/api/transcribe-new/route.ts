@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifyApiAuth, validateApiInput, sanitizeInput, createErrorResponse, createSuccessResponse } from "@/lib/auth-utils"
 import { createClient } from "@supabase/supabase-js"
 import { transcribeAudio, diarizeTranscript } from "@/lib/openai"
+import { CreditsService } from "@/lib/credits-service"
 
 // Client supabase con service role per operazioni RLS
 const supabaseAdmin = createClient(
@@ -24,7 +25,25 @@ export async function POST(request: NextRequest) {
       userId: authResult.user?.id 
     })
 
-    // STEP 2: Validazione input
+    // STEP 2: Verifica crediti prima di procedere
+    const creditsService = new CreditsService()
+    const requiredCredits = 5 // Trascrizione costa 5 crediti
+    
+    try {
+      const userCredits = await creditsService.getUserCredits(authResult.user!.id)
+      if (userCredits.credits_balance < requiredCredits) {
+        return createErrorResponse(
+          `Crediti insufficienti. Richiesti: ${requiredCredits}, Disponibili: ${userCredits.credits_balance}`, 
+          402 // Payment Required
+        )
+      }
+      console.log(`✅ Crediti sufficienti: ${userCredits.credits_balance} >= ${requiredCredits}`)
+    } catch (creditsError) {
+      console.error("❌ Errore verifica crediti:", creditsError)
+      return createErrorResponse("Errore nella verifica crediti", 500)
+    }
+
+    // STEP 3: Validazione input
     const requestData = await request.json()
     
     if (!validateApiInput(requestData, ['sessionId'])) {
@@ -37,7 +56,7 @@ export async function POST(request: NextRequest) {
     console.log(`🔍 Ricerca sessione con ID: ${sessionId}`)
     console.log(`👤 User ID: ${authResult.user!.id}`)
 
-    // STEP 3: Verifica accesso alla risorsa
+    // STEP 4: Verifica accesso alla risorsa
     const { data: sessionRecord, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .select('id, userId, status, audioFileName, audioUrl, title')
@@ -205,6 +224,20 @@ export async function POST(request: NextRequest) {
       if (finalUpdateError) {
         console.error('[Supabase] Error updating session with transcript:', finalUpdateError)
         throw new Error('Errore nel salvataggio della trascrizione su Supabase')
+      }
+
+      // STEP 5: Deduci crediti dopo successo completamento
+      try {
+        const newBalance = await creditsService.deductCredits(
+          authResult.user!.id,
+          'TRANSCRIPTION', // CreditFeature
+          'Trascrizione audio completata',
+          sessionId // referenceId
+        )
+        console.log(`💳 Crediti dedotti: 5. Nuovo saldo: ${newBalance}`)
+      } catch (creditsError) {
+        console.error("⚠️ Errore deduzione crediti (trascrizione completata):", creditsError)
+        // Non bloccare la risposta, la trascrizione è già stata salvata
       }
 
       console.log(`✅ Processo completo (trascrizione${finalTranscript === initialTranscript ? '' : ' + diarizzazione'}) completato per sessione ${sessionId}`)
