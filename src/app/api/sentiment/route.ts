@@ -3,6 +3,7 @@ import { verifyApiAuth, createErrorResponse, createSuccessResponse } from "@/lib
 import { emoatlasService } from "@/lib/emoatlas"
 import { createClient } from '@supabase/supabase-js'
 import { decryptIfEncrypted } from "@/lib/encryption"
+import { CreditsService } from "@/lib/credits-service"
 
 // Initialize Supabase Admin client for server-side operations
 const supabaseAdmin = createClient(
@@ -46,7 +47,25 @@ export async function POST(request: NextRequest) {
 
     console.log(`🌸 Processing sentiment analysis for ${sessionIds.length} sessions`)
 
-    // STEP 3: Fetch sessions with transcripts from database
+    // STEP 3: Verifica crediti (1 credito per analisi sentiment)
+    const creditsService = new CreditsService()
+    const requiredCredits = 1
+    
+    try {
+      const userCredits = await creditsService.getUserCredits(authResult.user!.id)
+      if (userCredits.credits_balance < requiredCredits) {
+        return createErrorResponse(
+          `Crediti insufficienti. Richiesti: ${requiredCredits}, Disponibili: ${userCredits.credits_balance}`, 
+          402 // Payment Required
+        )
+      }
+      console.log(`✅ Crediti sufficienti: ${userCredits.credits_balance} >= ${requiredCredits}`)
+    } catch (creditsError) {
+      console.error("❌ Errore verifica crediti:", creditsError)
+      return createErrorResponse("Errore nella verifica crediti", 500)
+    }
+
+    // STEP 4: Fetch sessions with transcripts from database
     const { data: sessions, error: fetchError } = await supabaseAdmin
       .from('sessions')
       .select('id, title, transcript, createdAt')
@@ -129,6 +148,20 @@ export async function POST(request: NextRequest) {
       }
 
       console.log(`✅ Sentiment analysis completed for ${analysisResult.individual_sessions.length} sessions`)
+      
+      // STEP 6: Deduci crediti dopo successo completamento
+      try {
+        const newBalance = await creditsService.deductCredits(
+          authResult.user!.id,
+          'SENTIMENT_ANALYSIS',
+          `Analisi sentiment completata per ${sessionIds.length} sessioni`,
+          sessionIds.join(',') // referenceId con tutti gli ID sessioni
+        )
+        console.log(`💳 Crediti dedotti: 1. Nuovo saldo: ${newBalance}`)
+      } catch (creditsError) {
+        console.error("⚠️ Errore deduzione crediti (analisi completata):", creditsError)
+        // Non bloccare la risposta, l'analisi è già stata completata
+      }
       
       // Return the analysisResult directly to match the frontend expectations
       return NextResponse.json(analysisResult, { status: 200 })

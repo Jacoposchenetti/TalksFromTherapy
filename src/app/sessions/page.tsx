@@ -468,7 +468,7 @@ function SessionsPageContent() {
   }
   const handleStartTranscription = async (sessionId: string) => {
     try {
-      const response = await fetch("/api/transcribe", {
+      const response = await fetch("/api/transcribe-new", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
