@@ -864,9 +864,9 @@ function AnalysisPageInner() {
                         </Button>
                       </CardTitle>
                     ) : (
-                      <CardTitle className="flex flex-col items-center justify-center h-12 space-y-1">
-                        <FileText className="h-5 w-5" />
-                        <Button
+                                             <CardTitle className="flex flex-col items-center justify-center h-12 space-y-1 -mt-6">
+                         <FileText className="h-5 w-5" />
+                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -1463,9 +1463,9 @@ function AnalysisPageInner() {
                         </div>
                       </CardTitle>
                     ) : (
-                      <CardTitle className="flex flex-col items-center justify-center h-12 space-y-1">
-                        <MessageSquare className="h-5 w-5" />
-                        <Button
+                                             <CardTitle className="flex flex-col items-center justify-center h-12 space-y-1 mt-0">
+                         <MessageSquare className="h-5 w-5" />
+                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => setNotesOpen(!notesOpen)}

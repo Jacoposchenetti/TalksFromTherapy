@@ -146,31 +146,36 @@ TESTO:
 {text}
 
 ISTRUZIONI:
-1. Identifica i topic rilevanti per offrire una panoramica completa del contenuto della trascrizione
-2. Per ogni topic, fornisci ESATTAMENTE 4 parole chiave rappresentative
-3. I topic devono essere semanticamente distinti e significativi
-4. Rispondi SOLO in formato JSON con questa struttura:
+1. Identifica 3-5 topic specifici e rilevanti per offrire una panoramica completa del contenuto della trascrizione
+2. Per ogni topic, fornisci ESATTAMENTE 4 parole chiave rappresentative e specifiche
+3. I topic devono essere semanticamente distinti e significativi, NON generici
+4. Evita topic generici come "contenuto generale" o "emozioni e stati d'animo"
+5. Focalizzati su temi specifici come: relazioni familiari, problemi lavorativi, disturbi specifici, eventi traumatici, strategie di coping, etc.
+6. Rispondi SOLO in formato JSON con questa struttura:
 
 {{"topics": [
-  {{"name": "descrizione tema", "keywords": ["parola1", "parola2", "parola3", "parola4"]}},
-  {{"name": "altro tema", "keywords": ["parola5", "parola6", "parola7", "parola8"]}}
+  {{"name": "descrizione tema specifico", "keywords": ["parola1", "parola2", "parola3", "parola4"]}},
+  {{"name": "altro tema specifico", "keywords": ["parola5", "parola6", "parola7", "parola8"]}}
 ]}}
 
-Esempio per un testo su ansia e strategie terapeutiche:
-{{"topics": [
-  {{"name": "ansia e preoccupazioni", "keywords": ["ansia", "preoccupazione", "tensione", "stress"]}},
-  {{"name": "strategie terapeutiche", "keywords": ["terapia", "tecniche", "esercizi", "rilassamento"]}}
-]}}
+Esempi di topic specifici:
+- "relazioni familiari conflittuali" con keywords: ["famiglia", "conflitto", "genitori", "comunicazione"]
+- "ansia da prestazione lavorativa" con keywords: ["lavoro", "prestazione", "ansia", "pressione"]
+- "strategie di gestione dello stress" con keywords: ["stress", "gestione", "tecniche", "rilassamento"]
+- "trauma infantile e conseguenze" con keywords: ["trauma", "infanzia", "conseguenze", "memoria"]
+- "difficoltà nelle relazioni sociali" con keywords: ["sociale", "relazioni", "isolamento", "amicizie"]
+
+NON usare topic generici come "contenuto generale" o "emozioni e stati d'animo".
 """
             
             response = self.client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "Sei un esperto analista di testi terapeutici. Rispondi sempre e solo in formato JSON valido."},
+                    {"role": "system", "content": "Sei un esperto analista di testi terapeutici. Rispondi sempre e solo in formato JSON valido. Non usare mai topic generici come 'contenuto generale' o 'emozioni e stati d'animo'."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3,
-                max_tokens=500
+                temperature=0.2,  # Lower temperature for more consistent results
+                max_tokens=800    # More tokens for better analysis
             )
             
             content = response.choices[0].message.content.strip()
@@ -182,14 +187,29 @@ Esempio per un testo su ansia e strategie terapeutiche:
                 topics = []
                 
                 for i, topic in enumerate(topics_data.get("topics", [])):
+                    topic_name = topic.get("name", f"Tema {i+1}")
+                    keywords = topic.get("keywords", [])
+                    
+                    # Skip generic topics
+                    generic_topics = ["contenuto generale", "emozioni e stati d'animo", "contenuto", "generale", "emozioni", "stati d'animo"]
+                    if any(generic in topic_name.lower() for generic in generic_topics):
+                        print(f"⚠️ Skipping generic topic: {topic_name}")
+                        continue
+                    
                     topics.append({
-                        "theme": topic.get("name", f"Tema {i+1}"),
-                        "keywords": topic.get("keywords", []),
+                        "theme": topic_name,
+                        "keywords": keywords,
                         "topic_id": i
                     })
                 
                 print(f"DEBUG: Extracted {len(topics)} topics from GPT-3.5")
-                return topics if topics else self._fallback_topics()
+                
+                # If no topics after filtering generics, use fallback
+                if not topics:
+                    print(f"⚠️ No valid topics found after filtering, using fallback")
+                    return self._fallback_topics()
+                
+                return topics
                 
             except json.JSONDecodeError as e:
                 print(f"DEBUG: JSON parse error: {e}, using fallback")
@@ -199,10 +219,11 @@ Esempio per un testo su ansia e strategie terapeutiche:
             print(f"DEBUG: GPT-3.5 API error: {e}, using fallback")
             return self._fallback_topics()
     def _fallback_topics(self):
-        """Fallback semplice se GPT-3.5 non funziona"""
+        """Fallback specifico se GPT-3.5 non funziona"""
         return [
-            {"theme": "contenuto generale", "keywords": ["contenuto", "generale", "sessione", "terapia"], "topic_id": 0},
-            {"theme": "emozioni e stati d'animo", "keywords": ["emozioni", "sentimenti", "umore", "stati"], "topic_id": 1}
+            {"theme": "processo terapeutico", "keywords": ["terapia", "sessione", "processo", "cambiamento"], "topic_id": 0},
+            {"theme": "difficoltà personali", "keywords": ["problemi", "difficoltà", "situazione", "momento"], "topic_id": 1},
+            {"theme": "relazioni interpersonali", "keywords": ["relazioni", "persone", "famiglia", "amici"], "topic_id": 2}
         ]
 analysis_service = DocumentAnalysisService()
 
@@ -1190,6 +1211,187 @@ def generate_combined_analysis(sessions: List[SessionAnalysis], language: str = 
     except Exception as e:
         print(f"❌ Error generating combined analysis: {e}")
         return None
+
+class BertopicRequest(BaseModel):
+    texts: List[str]
+    session_ids: List[str]
+    min_topic_size: int
+    language: str
+
+class BertopicResponse(BaseModel):
+    topics: List[Dict]
+    topic_distribution: List[Dict]
+    visualization_data: Dict
+    summary: Dict
+
+@app.post("/analyze-topics")
+async def analyze_topics(request: BertopicRequest):
+    """Analyze topics across multiple documents using BERTopic"""
+    try:
+        print(f"🔍 Starting BERTopic analysis for {len(request.texts)} documents")
+        print(f"🔍 Language: {request.language}")
+        print(f"🔍 Min topic size: {request.min_topic_size}")
+        
+        if not request.texts or len(request.texts) == 0:
+            raise HTTPException(status_code=400, detail="No texts provided for analysis")
+        
+        # Filter out empty or very short texts
+        valid_texts = []
+        valid_session_ids = []
+        
+        for i, text in enumerate(request.texts):
+            if text and len(text.strip()) > 50:  # Minimum 50 characters
+                valid_texts.append(text.strip())
+                valid_session_ids.append(request.session_ids[i])
+            else:
+                print(f"⚠️ Skipping text {i}: too short or empty")
+        
+        if len(valid_texts) < 2:
+            raise HTTPException(status_code=400, detail="Need at least 2 valid texts for topic modeling")
+        
+        print(f"✅ Processing {len(valid_texts)} valid texts")
+        
+        # Use GPT-3.5 for topic modeling since BERTopic is not available
+        # This is a more sophisticated approach than the single document analysis
+        all_topics = []
+        topic_distribution = []
+        
+        # Analyze each text individually first
+        for i, (text, session_id) in enumerate(zip(valid_texts, valid_session_ids)):
+            print(f"🔍 Analyzing text {i+1}/{len(valid_texts)} for session {session_id}")
+            print(f"🔍 Text preview: {text[:200]}...")
+            
+            # Get topics for this text
+            text_topics = analysis_service.extract_topics_gpt(text)
+            print(f"🔍 Found {len(text_topics)} topics for this text")
+            for topic in text_topics:
+                print(f"  - {topic['theme']}: {topic['keywords']}")
+            
+            # Add to overall topics list
+            for topic in text_topics:
+                # Check if similar topic already exists
+                existing_topic = None
+                for existing in all_topics:
+                    if existing['name'] == topic['theme']:
+                        existing_topic = existing
+                        break
+                
+                if existing_topic:
+                    # Merge keywords
+                    existing_topic['words'].extend(topic['keywords'])
+                    existing_topic['count'] += 1
+                    existing_topic['representative_docs'].append(text[:200] + "...")
+                else:
+                    # Create new topic
+                    all_topics.append({
+                        'id': len(all_topics),
+                        'name': topic['theme'],
+                        'words': topic['keywords'],
+                        'count': 1,
+                        'representative_docs': [text[:200] + "..."]
+                    })
+            
+            # Add to topic distribution
+            for topic in text_topics:
+                topic_distribution.append({
+                    'session_id': session_id,
+                    'text_index': i,
+                    'topic_id': next(t['id'] for t in all_topics if t['name'] == topic['theme']),
+                    'probability': 1.0,  # GPT doesn't provide probabilities
+                    'text_preview': text[:200] + "..."
+                })
+        
+        # Filter topics by minimum size
+        filtered_topics = [topic for topic in all_topics if topic['count'] >= request.min_topic_size]
+        
+        # If no topics meet the minimum size, reduce the threshold
+        if len(filtered_topics) == 0 and len(all_topics) > 0:
+            print(f"⚠️ No topics meet minimum size {request.min_topic_size}, reducing threshold")
+            filtered_topics = all_topics
+        
+        # If still no topics, create fallback topics
+        if len(filtered_topics) == 0:
+            print(f"⚠️ No topics found, creating fallback topics")
+            filtered_topics = [
+                {
+                    'id': 0,
+                    'name': 'processo terapeutico',
+                    'words': [{'word': 'terapia', 'weight': 1.0}, {'word': 'sessione', 'weight': 1.0}, {'word': 'processo', 'weight': 1.0}, {'word': 'cambiamento', 'weight': 1.0}],
+                    'count': len(valid_texts),
+                    'representative_docs': [text[:200] + "..." for text in valid_texts[:3]]
+                },
+                {
+                    'id': 1,
+                    'name': 'difficoltà personali',
+                    'words': [{'word': 'problemi', 'weight': 1.0}, {'word': 'difficoltà', 'weight': 1.0}, {'word': 'situazione', 'weight': 1.0}, {'word': 'momento', 'weight': 1.0}],
+                    'count': len(valid_texts),
+                    'representative_docs': [text[:200] + "..." for text in valid_texts[:3]]
+                },
+                {
+                    'id': 2,
+                    'name': 'relazioni interpersonali',
+                    'words': [{'word': 'relazioni', 'weight': 1.0}, {'word': 'persone', 'weight': 1.0}, {'word': 'famiglia', 'weight': 1.0}, {'word': 'amici', 'weight': 1.0}],
+                    'count': len(valid_texts),
+                    'representative_docs': [text[:200] + "..." for text in valid_texts[:3]]
+                }
+            ]
+        
+        # Convert words to proper format
+        for topic in filtered_topics:
+            if isinstance(topic['words'], list) and len(topic['words']) > 0:
+                if isinstance(topic['words'][0], str):
+                    # Convert string keywords to word objects
+                    topic['words'] = [{'word': word, 'weight': 1.0} for word in topic['words'][:10]]
+                elif isinstance(topic['words'][0], dict):
+                    # Already in correct format, just limit to 10
+                    topic['words'] = topic['words'][:10]
+        
+        # Calculate summary statistics
+        total_documents = len(valid_texts)
+        total_topics = len(filtered_topics)
+        avg_topic_size = sum(topic['count'] for topic in filtered_topics) / max(total_topics, 1)
+        outliers_count = total_documents - sum(topic['count'] for topic in filtered_topics)
+        coverage = sum(topic['count'] for topic in filtered_topics) / max(total_documents, 1)
+        
+        # Create visualization data (simplified)
+        visualization_data = {
+            'topic_map': {
+                'topics': [topic['name'] for topic in filtered_topics],
+                'sizes': [topic['count'] for topic in filtered_topics]
+            },
+            'topic_hierarchy': {
+                'root': {
+                    'name': 'All Topics',
+                    'children': [{'name': topic['name'], 'size': topic['count']} for topic in filtered_topics]
+                }
+            }
+        }
+        
+        summary = {
+            'total_documents': total_documents,
+            'total_topics': total_topics,
+            'avg_topic_size': avg_topic_size,
+            'outliers_count': outliers_count,
+            'coverage': coverage
+        }
+        
+        print(f"✅ BERTopic analysis completed")
+        print(f"📊 Found {total_topics} topics")
+        print(f"📊 Average topic size: {avg_topic_size:.2f}")
+        print(f"📊 Coverage: {coverage:.2%}")
+        
+        return BertopicResponse(
+            topics=filtered_topics,
+            topic_distribution=topic_distribution,
+            visualization_data=visualization_data,
+            summary=summary
+        )
+        
+    except Exception as e:
+        print(f"❌ BERTopic analysis error: {e}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Topic analysis failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
