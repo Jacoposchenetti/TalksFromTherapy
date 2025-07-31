@@ -796,8 +796,8 @@ function AnalysisPageInner() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="w-full py-8 px-4 sm:px-6 lg:px-8">
+              {/* Main Content */}
+        <div className={`w-full py-8 ${sidebarOpen ? 'lg:pl-0 lg:pr-8' : 'px-4 sm:px-6 lg:pl-0 lg:pr-8'}`}>
         {sessions.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -812,20 +812,20 @@ function AnalysisPageInner() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 w-full items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 w-full">
             {/* Sidebar - Sessions List */}
-            <div className={`transition-all duration-300 ease-in-out ${
+            <div className={`transition-all duration-300 ease-in-out min-w-0 ${
               sidebarOpen 
                 ? 'lg:col-span-3 xl:col-span-2' 
                 : 'lg:col-span-1'
-            }`}>
+            } ${!sidebarOpen ? 'lg:ml-0' : ''}`}>
               <div className={`transition-all duration-300 ease-in-out ${
                 sidebarOpen ? 'opacity-100' : 'opacity-0 lg:opacity-100'
               }`}>
-                <Card className="h-[900px]">
-                  <CardHeader>
+                <Card className={`h-[900px] ${!sidebarOpen ? 'lg:w-12 lg:min-w-12 lg:max-w-12' : ''}`}>
+                  <CardHeader className={!sidebarOpen ? 'lg:p-2' : ''}>
                     <CardTitle className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className={`flex items-center gap-2 ${!sidebarOpen ? 'lg:hidden' : ''}`}>
                         <FileText className="h-5 w-5" />
                         <span className={sidebarOpen ? 'block' : 'hidden lg:hidden'}>
                           Transcribed sessions
@@ -858,7 +858,7 @@ function AnalysisPageInner() {
                       </label>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-0">
+                  <CardContent className={`p-0 ${!sidebarOpen ? 'lg:hidden' : ''}`}>
                     <div className={`space-y-1 max-h-[750px] overflow-y-auto ${sidebarOpen ? 'block' : 'hidden lg:hidden'}`}>
                       {sessions.map((session, index) => (
                         <div key={session.id} className="border-b last:border-b-0">
@@ -916,12 +916,12 @@ function AnalysisPageInner() {
                 </Button>
               </div>
             </div>
-            {/* Main Sliding Analysis Panel */}
-            <div className={`transition-all duration-300 ease-in-out ${
-              sidebarOpen 
-                ? 'lg:col-span-6 xl:col-span-7' 
-                : 'lg:col-span-8 xl:col-span-9'
-            }`}>
+                                   {/* Main Sliding Analysis Panel */}
+                       <div className={`transition-all duration-300 ease-in-out min-w-0 ${
+                         sidebarOpen
+                           ? 'lg:col-span-6 xl:col-span-7'
+                           : 'lg:col-span-8 xl:col-span-8'
+                       }`}>
               <Card className="h-[900px]">
                 <CardHeader className="pb-4">
                   {/* Slide Navigation */}
@@ -1406,56 +1406,61 @@ function AnalysisPageInner() {
               </Card>
             </div>
             {/* Notes Section - ora a destra */}
-            <div className="lg:col-span-3 xl:col-span-3 flex flex-col gap-4 h-[900px] overflow-y-auto">
-              {getSelectedSessionsData().length > 0 && getSelectedSessionsData().map((session) => (
-                <Card key={session.id} className="flex-0">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-3">
-                      <MessageSquare className="h-5 w-5" />
-                      Note Terapeutiche - {session.title}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {editingNotes[session.id] ? (
-                      <div className="space-y-3">
-                        <textarea
-                          value={sessionNotes[session.id] || ""}
-                          onChange={e => setSessionNotes(prev => ({ ...prev, [session.id]: e.target.value }))}
-                          placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
-                          className="w-full h-32 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          autoFocus
-                        />
-                        <div className="flex gap-2 justify-end">
-                          <Button size="sm" variant="outline" onClick={() => handleCancelEdit(session.id)}>
-                            Annulla
-                          </Button>
-                          <Button size="sm" onClick={() => handleSaveSessionNote(session.id)} disabled={savingNotes[session.id]}>
-                            <Save className="h-3 w-3 mr-1" />
-                            {savingNotes[session.id] ? "Salvataggio..." : "Salva"}
-                          </Button>
+            <div className={`transition-all duration-300 ease-in-out min-w-0 ${
+              sidebarOpen 
+                ? 'lg:col-span-3 xl:col-span-3' 
+                : 'lg:col-span-3 xl:col-span-3'
+            }`}>
+              <div className="flex flex-col gap-4 h-full">
+                {getSelectedSessionsData().length > 0 && getSelectedSessionsData().map((session) => (
+                  <Card key={session.id} className="flex-1 min-h-0">
+                    <CardHeader className="flex-shrink-0">
+                      <CardTitle className="text-lg flex items-center gap-3">
+                        <MessageSquare className="h-5 w-5" />
+                        Note Terapeutiche - {session.title}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-1 min-h-0 flex flex-col">
+                      {editingNotes[session.id] ? (
+                        <div className="space-y-3 flex-1 flex flex-col">
+                          <textarea
+                            value={sessionNotes[session.id] || ""}
+                            onChange={e => setSessionNotes(prev => ({ ...prev, [session.id]: e.target.value }))}
+                            placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
+                            className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            autoFocus
+                          />
+                          <div className="flex gap-2 justify-end flex-shrink-0">
+                            <Button size="sm" variant="outline" onClick={() => handleCancelEdit(session.id)}>
+                              Annulla
+                            </Button>
+                            <Button size="sm" onClick={() => handleSaveSessionNote(session.id)} disabled={savingNotes[session.id]}>
+                              <Save className="h-3 w-3 mr-1" />
+                              {savingNotes[session.id] ? "Salvataggio..." : "Salva"}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div
-                          className="h-32 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
-                          onClick={() => handleEnterEdit(session.id)}
-                          tabIndex={0}
-                          role="textbox"
-                          title="Clicca per modificare la nota"
-                          style={{ minHeight: '8rem' }}
-                        >
-                          {sessionNotes[session.id] || (
-                            <span className="text-gray-500 italic">
-                              Qui il terapeuta può scrivere liberamente note e osservazioni
-                            </span>
-                          )}
+                      ) : (
+                        <div className="space-y-3 flex-1 flex flex-col">
+                          <div
+                            className="flex-1 min-h-0 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
+                            onClick={() => handleEnterEdit(session.id)}
+                            tabIndex={0}
+                            role="textbox"
+                            title="Clicca per modificare la nota"
+                          >
+                            {sessionNotes[session.id] || (
+                              <span className="text-gray-500 italic">
+                                Qui il terapeuta può scrivere liberamente note e osservazioni
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </div>
           </div>
         )}
