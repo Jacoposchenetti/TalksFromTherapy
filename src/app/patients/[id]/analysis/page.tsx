@@ -50,6 +50,7 @@ function AnalysisPageInner() {
 
 
   const [currentSlide, setCurrentSlide] = useState(0) // 0: Trascrizioni, 1: Topic Modelling, 2: Sentiment Analysis, 3: Semantic Frame
+  const [sidebarOpen, setSidebarOpen] = useState(true) // Sidebar visibility state
   
   // Semantic Frame Analysis state
   const [targetWord, setTargetWord] = useState("")
@@ -767,7 +768,7 @@ function AnalysisPageInner() {
     const session = selectedSessionsData.find(s => s.id === result.session_id);
     return {
       ...result,
-      session_title: session?.title || result.session_title || result.title || `Sessione ${result.session_id}`,
+      session_title: session?.title || result.session_title || `Sessione ${result.session_id}`,
     };
   });
 
@@ -796,7 +797,7 @@ function AnalysisPageInner() {
       </div>
 
       {/* Main Content */}
-      <div className="w-full py-8 flex justify-start"> {/* RIMOSSO max-w-full e padding orizzontale */}
+      <div className="w-full py-8 px-4 sm:px-6 lg:px-8">
         {sessions.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -811,85 +812,135 @@ function AnalysisPageInner() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-12 gap-6 w-full items-start"> {/* grid ora w-full */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 w-full items-start">
             {/* Sidebar - Sessions List */}
-            <div className="col-span-2">
-              <Card className="h-[900px]">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Transcribed sessions
-                  </CardTitle>
-                  <div className="flex items-center gap-2 pt-2">
-                    <input
-                      type="checkbox"
-                      id="select-all"
-                      checked={selectedSessions.size === sessions.length && sessions.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded border-gray-300"
-                    />
-                    <label htmlFor="select-all" className="text-sm text-gray-600">
-                      Mark all
-                    </label>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="space-y-1 max-h-[750px] overflow-y-auto">
-                    {sessions.map((session, index) => (
-                      <div key={session.id} className="border-b last:border-b-0">
-                        <div className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
-                          <input
-                            type="checkbox"
-                            id={`session-${session.id}`}
-                            checked={selectedSessions.has(session.id)}
-                            onChange={() => handleSessionToggle(session.id)}
-                            className="rounded border-gray-300"
-                          />
-                          <button
-                            onClick={() => {
-                              // Toggle selezione per analisi (checkbox)
-                              handleSessionToggle(session.id)
-                            }}
-                            className="flex-1 text-left p-2 rounded transition-colors hover:bg-gray-50"
-                            title="Click to select/deselect this session"
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="font-medium text-sm">
-                                {session.title}
-                              </div>
-                              {hasSessionNote(session.id) && (
-                                <MessageSquare className="h-4 w-4 text-sky-500" />
-                              )}
-                            </div>
-                          </button>
-                        </div>
+            <div className={`transition-all duration-300 ease-in-out ${
+              sidebarOpen 
+                ? 'lg:col-span-3 xl:col-span-2' 
+                : 'lg:col-span-1'
+            }`}>
+              <div className={`transition-all duration-300 ease-in-out ${
+                sidebarOpen ? 'opacity-100' : 'opacity-0 lg:opacity-100'
+              }`}>
+                <Card className="h-[900px]">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        <span className={sidebarOpen ? 'block' : 'hidden lg:hidden'}>
+                          Transcribed sessions
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSidebarOpen(!sidebarOpen)}
+                        className="hidden lg:flex h-8 w-8 p-0"
+                        title={sidebarOpen ? "Nascondi sidebar" : "Mostra sidebar"}
+                      >
+                        {sidebarOpen ? (
+                          <ChevronLeft className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </CardTitle>
+                    <div className={`flex items-center gap-2 pt-2 ${sidebarOpen ? 'block' : 'hidden lg:hidden'}`}>
+                      <input
+                        type="checkbox"
+                        id="select-all"
+                        checked={selectedSessions.size === sessions.length && sessions.length > 0}
+                        onChange={handleSelectAll}
+                        className="rounded border-gray-300"
+                      />
+                      <label htmlFor="select-all" className="text-sm text-gray-600">
+                        Mark all
+                      </label>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className={`space-y-1 max-h-[750px] overflow-y-auto ${sidebarOpen ? 'block' : 'hidden lg:hidden'}`}>
+                      {sessions.map((session, index) => (
+                        <div key={session.id} className="border-b last:border-b-0">
+                          <div className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
+                            <input
+                              type="checkbox"
+                              id={`session-${session.id}`}
+                              checked={selectedSessions.has(session.id)}
+                              onChange={() => handleSessionToggle(session.id)}
+                              className="rounded border-gray-300"
+                            />
+                            <button
+                              onClick={() => {
+                                // Toggle selezione per analisi (checkbox)
+                                handleSessionToggle(session.id)
+                              }}
+                              className="flex-1 text-left p-2 rounded transition-colors hover:bg-gray-50"
+                              title="Click to select/deselect this session"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="font-medium text-sm">
+                                  {session.title}
+                                </div>
+                                {hasSessionNote(session.id) && (
+                                  <MessageSquare className="h-4 w-4 text-sky-500" />
+                                )}
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              {/* Toggle Button - Always visible */}
+              <div className="lg:hidden mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="w-full"
+                >
+                  {sidebarOpen ? (
+                    <>
+                      <ChevronLeft className="h-4 w-4 mr-2" />
+                      Nascondi Sessioni
+                    </>
+                  ) : (
+                    <>
+                      <ChevronRight className="h-4 w-4 mr-2" />
+                      Mostra Sessioni
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
             {/* Main Sliding Analysis Panel */}
-            <div className="col-span-7">
+            <div className={`transition-all duration-300 ease-in-out ${
+              sidebarOpen 
+                ? 'lg:col-span-6 xl:col-span-7' 
+                : 'lg:col-span-8 xl:col-span-9'
+            }`}>
               <Card className="h-[900px]">
                 <CardHeader className="pb-4">
                   {/* Slide Navigation */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                       {slides.map((slide, index) => {
                         const Icon = slide.icon
                         return (
                           <button
                             key={index}
                             onClick={() => goToSlide(index)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all relative ${
+                            className={`flex items-center gap-2 px-2 sm:px-4 py-2 rounded-lg transition-all relative text-sm sm:text-base ${
                               currentSlide === index
                                 ? "bg-blue-100 text-blue-700 font-medium"
                                 : "text-gray-600 hover:bg-gray-100"
                             }`}
                           >
                             <Icon className="h-4 w-4" />
-                            {slide.title}
+                            <span className="hidden sm:inline">{slide.title}</span>
                           </button>
                         )
                       })}
@@ -948,7 +999,7 @@ function AnalysisPageInner() {
                                   value={searchTerm}
                                   onChange={(e) => setSearchTerm(e.target.value)}
                                   className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                  placeholder="Search words in transcripts..."
+                                  placeholder="Cerca parole nelle trascrizioni..."
                                 />
                                 {searchTerm && (
                                   <button
@@ -961,7 +1012,7 @@ function AnalysisPageInner() {
                               </div>
                               {searchTerm && (
                                 <div className="mt-2 text-xs text-gray-500">
-                                  {countSearchOccurrences(searchTerm)} results found
+                                  {countSearchOccurrences(searchTerm)} risultati trovati
                                 </div>
                               )}
                             </div>
@@ -1085,7 +1136,7 @@ function AnalysisPageInner() {
                                   <Database className="h-4 w-4" />
                                   Analisi disponibili ({getAllSemanticFrameWords().length})
                                 </h5>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                                   {getAllSemanticFrameWords().map((word, index) => (
                                     <div key={word} className={`flex items-center justify-between rounded-lg px-3 py-2 hover:shadow-sm transition-all ${
                                       currentDisplayedWord === word 
@@ -1262,7 +1313,7 @@ function AnalysisPageInner() {
                                   <h5 className="text-lg font-semibold text-gray-700 mb-3">
                                     Profilo Emotivo
                                   </h5>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3 sm:gap-4">
                                     {Object.entries(semanticFrameResult.emotional_analysis.z_scores).map(([emotion, score]) => (
                                       <div key={emotion} className="bg-gray-50 rounded-lg p-3 text-center">
                                         <div className="text-sm font-medium text-gray-600 capitalize">
@@ -1290,7 +1341,7 @@ function AnalysisPageInner() {
                                   <h5 className="text-lg font-semibold text-gray-700 mb-3">
                                     Parole Connesse ({semanticFrameResult.semantic_frame.connected_words.length})
                                   </h5>
-                                  <div className="flex flex-wrap gap-2">
+                                  <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                                     {semanticFrameResult.semantic_frame.connected_words.map((word: string, index: number) => (
                                       <button
                                         key={index}
@@ -1355,7 +1406,7 @@ function AnalysisPageInner() {
               </Card>
             </div>
             {/* Notes Section - ora a destra */}
-            <div className="col-span-3 flex flex-col gap-4 h-[900px] overflow-y-auto">
+            <div className="lg:col-span-3 xl:col-span-3 flex flex-col gap-4 h-[900px] overflow-y-auto">
               {getSelectedSessionsData().length > 0 && getSelectedSessionsData().map((session) => (
                 <Card key={session.id} className="flex-0">
                   <CardHeader>

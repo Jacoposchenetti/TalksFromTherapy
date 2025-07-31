@@ -31,6 +31,22 @@ interface AnalysisResult {
   summary: string;
   analysis_timestamp: string;
   text_segments?: TextSegment[];
+  topicAnalysis?: {
+    topics: Topic[];
+    summary: string;
+    analysis_timestamp: string;
+    text_segments: TextSegment[];
+    patient_content_stats?: {
+      originalLength: number;
+      patientContentLength: number;
+      reductionPercentage: number;
+      originalTranscript: string;
+      patientContent: string;
+    };
+    session_id?: string;
+    language?: string;
+    version?: string;
+  };
   patient_content_stats?: {
     originalLength: number;
     patientContentLength: number;
@@ -300,20 +316,19 @@ export default function TopicAnalysisComponent({
     setError(null)
 
     try {
+      console.log(`Starting topic analysis for ${selectedSessions.length} sessions`)
+
       let allTopics: Topic[] = []
       let allSummaries: string[] = []
 
-      // Se ci sono più sessioni, analizza ognuna separatamente per i topic
       if (selectedSessions.length > 1) {
-        console.log(`Analyzing ${selectedSessions.length} sessions separately for topics`)
+        // Multi-session analysis: analizza tutte le sessioni selezionate
+        console.log('Multi-session analysis mode')
         
+        // Analizza ogni sessione separatamente
         for (let i = 0; i < selectedSessions.length; i++) {
           const session = selectedSessions[i]
           console.log(`Analyzing session ${i + 1}/${selectedSessions.length}: ${session.title}`)
-
-          // Estrai il contenuto del paziente per questa sessione
-          const patientContent = extractPatientContent(session.transcript)
-          console.log(`📊 Sessione ${session.id}: ${session.transcript.length} → ${patientContent.length} caratteri`)
 
           const response = await fetch('/api/single-session-analysis', {
             method: 'POST',
@@ -322,7 +337,8 @@ export default function TopicAnalysisComponent({
             },
             body: JSON.stringify({
               session_id: session.id,
-              transcript: session.transcript // L'API estrae automaticamente il contenuto del paziente
+              transcript: session.transcript
+              // L'API estrae automaticamente il contenuto del paziente
             }),
           })
 
@@ -392,16 +408,20 @@ export default function TopicAnalysisComponent({
       onAnalysisComplete?.(result)
 
       // Classifica automaticamente il testo se l'analisi è riuscita
-      if (result.topics && result.topics.length > 0) {
+      if (allTopics.length > 0) {
         console.log('Starting text classification...')
-        const segments = await classifyTextToTopicsSeparately(selectedSessions, result.topics)
-        console.log('Classification completed, segments:', segments)
+        const textSegments = await classifyTextToTopicsSeparately(selectedSessions, allTopics)
         
-        // Aggiorna il risultato con i text_segments
-        const resultWithSegments = { ...result, text_segments: segments }
-        setAnalysisResult(resultWithSegments)
+        // Aggiorna il risultato con i segmenti classificati
+        const updatedResult = {
+          ...result,
+          text_segments: textSegments
+        }
         
-        // Salva il risultato completo per ogni sessione
+        setAnalysisResult(updatedResult)
+        onAnalysisComplete?.(updatedResult)
+        
+        // Salva il risultato per ogni sessione
         for (const session of selectedSessions) {
           try {
             const response = await fetch('/api/analyses', {
@@ -412,10 +432,10 @@ export default function TopicAnalysisComponent({
               body: JSON.stringify({
                 sessionId: session.id,
                 analysisType: 'topics',
-                analysisData: resultWithSegments
+                analysisData: updatedResult
               })
             })
-            
+
             if (response.ok) {
               console.log(`✅ Topic analysis saved for session: ${session.id}`)
             } else {
@@ -426,11 +446,90 @@ export default function TopicAnalysisComponent({
           }
         }
         
-        onAnalysisComplete?.(resultWithSegments)
+        console.log(`Classification completed: ${textSegments.length} segments`)
       }
 
     } catch (error) {
       console.error('Errore durante l\'analisi:', error)
+      setError(error instanceof Error ? error.message : 'Unknown error during analysis')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  // Nuova funzione per analizzare una singola sessione specifica
+  const runSingleSessionAnalysis = async (sessionId: string) => {
+    const targetSession = selectedSessions.find(s => s.id === sessionId)
+    if (!targetSession) {
+      setError("Sessione non trovata")
+      return
+    }
+
+    setIsAnalyzing(true)
+    setError(null)
+
+    try {
+      console.log(`Starting single session analysis for: ${targetSession.title}`)
+
+      const response = await fetch('/api/single-session-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: targetSession.id,
+          transcript: targetSession.transcript
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      
+      // Classifica il testo per questa sessione
+      console.log('Starting text classification for single session...')
+      const textSegments = await classifyTextToTopicsSeparately([targetSession], result.topics)
+      
+      const finalResult = {
+        ...result,
+        text_segments: textSegments,
+        session_title: targetSession.title
+      }
+
+      // Salva il risultato per questa sessione specifica
+      if (onAnalysisComplete) {
+        onAnalysisComplete(finalResult)
+      }
+
+      // Salva anche nel database
+      try {
+        const saveResponse = await fetch('/api/analyses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            sessionId: targetSession.id,
+            analysisType: 'topics',
+            analysisData: finalResult
+          })
+        })
+
+        if (saveResponse.ok) {
+          console.log(`✅ Topic analysis saved for session: ${targetSession.id}`)
+        } else {
+          console.error(`❌ Failed to save topic analysis for session: ${targetSession.id}`)
+        }
+      } catch (error) {
+        console.error(`❌ Error saving topic analysis for session ${targetSession.id}:`, error)
+      }
+
+      console.log(`Single session analysis completed: ${textSegments.length} segments`)
+
+    } catch (error) {
+      console.error('Errore durante l\'analisi della sessione singola:', error)
       setError(error instanceof Error ? error.message : 'Unknown error during analysis')
     } finally {
       setIsAnalyzing(false)
@@ -549,6 +648,7 @@ Rispondi SOLO con JSON:
 
     const topicList = topics.map(t => `${t.topic_id}: ${t.description} (parole chiave: ${t.keywords.join(', ')})`).join('\n')
     console.log(`Processing ${sessions.length} sessions separately`)
+    console.log('📋 Topics disponibili:', topics.map(t => `${t.topic_id}: ${t.description}`));
 
     let allSegments: TextSegment[] = []
 
@@ -803,11 +903,45 @@ Rispondi SOLO con JSON:
 
   // Funzione per scrollare al primo segmento del topic
   const scrollToTopic = (topicId: number) => {
+    console.log('🎯 scrollToTopic chiamata con topicId:', topicId)
+    console.log('🎯 topicRefs.current:', topicRefs.current)
     const el = topicRefs.current[topicId]
+    console.log('🎯 Elemento trovato:', el)
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      console.log('🎯 Scrolling to element...')
+      
+      // Trova il contenitore scrollabile
+      const scrollContainer = el.closest('.overflow-y-auto')
+      console.log('🎯 Scroll container:', scrollContainer)
+      
+      if (scrollContainer) {
+        // Calcola la posizione dell'elemento rispetto al contenitore
+        const containerRect = scrollContainer.getBoundingClientRect()
+        const elementRect = el.getBoundingClientRect()
+        
+        // Calcola la posizione relativa dell'elemento rispetto al contenitore
+        const relativeTop = elementRect.top - containerRect.top
+        const scrollTop = scrollContainer.scrollTop + relativeTop - 50
+        
+        console.log('🎯 Container rect:', containerRect)
+        console.log('🎯 Element rect:', elementRect)
+        console.log('🎯 Relative top:', relativeTop)
+        console.log('🎯 Current scrollTop:', scrollContainer.scrollTop)
+        console.log('🎯 Scrolling to position:', scrollTop)
+        
+        scrollContainer.scrollTo({
+          top: scrollTop,
+          behavior: 'smooth'
+        })
+      } else {
+        // Fallback: usa scrollIntoView
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+      
       el.classList.add('ring-2', 'ring-blue-400')
       setTimeout(() => el.classList.remove('ring-2', 'ring-blue-400'), 1200)
+    } else {
+      console.log('❌ Nessun elemento trovato per topicId:', topicId)
     }
   }
 
@@ -815,6 +949,13 @@ Rispondi SOLO con JSON:
   let firstTopicSegmentRendered: Record<number, boolean> = {}
 
   const [currentSessionIndex, setCurrentSessionIndex] = useState(0);
+
+  // Reset currentSessionIndex quando cambiano le sessioni selezionate
+  React.useEffect(() => {
+    if (currentSessionIndex >= selectedSessions.length) {
+      setCurrentSessionIndex(0);
+    }
+  }, [selectedSessions.length, currentSessionIndex]);
 
   // topicSessions: array di AnalysisResult, uno per sessione selezionata
   const topicSessions = React.useMemo(() => {
@@ -850,11 +991,160 @@ Rispondi SOLO con JSON:
     return obj && Array.isArray(obj.topics);
   }
 
+  // Nuova funzione per mappare i risultati del topic modeling alla trascrizione completa
+  // Approccio semplice e diretto: mapping basato su ricerca esatta e fuzzy
+  const mapTopicResultsToFullTranscript = (session: Session, patientSegments: TextSegment[]): TextSegment[] => {
+    const fullTranscript = session.transcript;
+    
+    // Se non ci sono segmenti del paziente, restituisci la trascrizione completa senza evidenziazione
+    if (!patientSegments || patientSegments.length === 0) {
+      return [{
+        text: fullTranscript,
+        topic_id: null,
+        confidence: 0
+      }];
+    }
+
+    // Estrai il contenuto del paziente dalla trascrizione completa
+    const patientContent = extractPatientContent(fullTranscript);
+    
+    // Se non c'è contenuto del paziente, restituisci la trascrizione senza evidenziazione
+    if (!patientContent || patientContent.trim().length === 0) {
+      return [{
+        text: fullTranscript,
+        topic_id: null,
+        confidence: 0
+      }];
+    }
+
+    // APPROCCIO SEMPLICE: Dividi la trascrizione per speaker e cerca match esatti
+    const fullSegments: TextSegment[] = [];
+    
+    // Pattern per identificare speaker
+    const speakerPattern = /(PAZIENTE:|P:|Terapeuta:|Paziente:)/gi;
+    
+    // Dividi la trascrizione mantenendo i separatori
+    const parts = fullTranscript.split(speakerPattern);
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      
+      // Se questa parte è un marker di speaker
+      if (speakerPattern.test(part)) {
+        // Aggiungi il marker senza evidenziazione
+        fullSegments.push({
+          text: part,
+          topic_id: null,
+          confidence: 0
+        });
+        
+        // La prossima parte sarà il contenuto dello speaker
+        if (i + 1 < parts.length) {
+          const content = parts[i + 1];
+          
+          // Determina se questo è contenuto del paziente
+          const isPatientContent = /^(PAZIENTE:|P:|Paziente:)/gi.test(part);
+          
+          if (isPatientContent && content) {
+            // CERCA MATCH ESATTI PRIMA
+            let foundMatch = false;
+            let bestTopicId: number | null = null;
+            let bestConfidence = 0;
+            
+            // Prima prova: ricerca esatta
+            for (const segment of patientSegments) {
+              if (segment.topic_id === null) continue;
+              
+              // Normalizza i testi
+              const normalizedContent = content.toLowerCase().trim();
+              const normalizedSegment = segment.text.toLowerCase().trim();
+              
+              // Match esatto
+              if (normalizedContent === normalizedSegment) {
+                bestTopicId = segment.topic_id;
+                bestConfidence = segment.confidence;
+                foundMatch = true;
+                break;
+              }
+              
+              // Match contenuto (il segmento è contenuto nel contenuto)
+              if (normalizedContent.includes(normalizedSegment) && normalizedSegment.length > 20) {
+                if (segment.confidence > bestConfidence) {
+                  bestTopicId = segment.topic_id;
+                  bestConfidence = segment.confidence;
+                  foundMatch = true;
+                }
+              }
+            }
+            
+            // Se non hai trovato match esatti, prova con frasi più piccole
+            if (!foundMatch) {
+              // Dividi il contenuto in frasi più piccole
+              const sentences = content.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10);
+              
+              for (const sentence of sentences) {
+                for (const segment of patientSegments) {
+                  if (segment.topic_id === null) continue;
+                  
+                  const normalizedSentence = sentence.toLowerCase().trim();
+                  const normalizedSegment = segment.text.toLowerCase().trim();
+                  
+                  // Match esatto per frase
+                  if (normalizedSentence === normalizedSegment) {
+                    if (segment.confidence > bestConfidence) {
+                      bestTopicId = segment.topic_id;
+                      bestConfidence = segment.confidence;
+                      foundMatch = true;
+                    }
+                  }
+                  
+                  // Match parziale per frase
+                  if (normalizedSentence.includes(normalizedSegment) && normalizedSegment.length > 15) {
+                    if (segment.confidence > bestConfidence) {
+                      bestTopicId = segment.topic_id;
+                      bestConfidence = segment.confidence;
+                      foundMatch = true;
+                    }
+                  }
+                }
+              }
+            }
+            
+            // Aggiungi il contenuto con il topic trovato
+            fullSegments.push({
+              text: content,
+              topic_id: bestTopicId,
+              confidence: bestConfidence
+            });
+          } else {
+            // Contenuto del terapeuta o altro
+            fullSegments.push({
+              text: content,
+              topic_id: null,
+              confidence: 0
+            });
+          }
+          
+          i++; // Salta la prossima parte (contenuto)
+        }
+      } else {
+        // Questa è una parte normale (non un marker di speaker)
+        fullSegments.push({
+          text: part,
+          topic_id: null,
+          confidence: 0
+        });
+      }
+    }
+    
+    return fullSegments;
+  };
+
   return (
-    <div className="h-full space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold flex items-center gap-2">
+    <div className="h-full space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex-1">
+          <h3 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
             Topic Analysis
             {cachedData && !isCustomMode && (
               <Badge variant="secondary" className="text-xs">
@@ -883,17 +1173,17 @@ Rispondi SOLO con JSON:
             setAnalysisResult(null);
             setError(null);
           }}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 w-full sm:w-auto"
         >
           {isCustomMode ? (
             <>
               <Search className="h-4 w-4" />
-              Auto Discovery
+              <span className="hidden sm:inline">Auto Discovery</span>
             </>
           ) : (
             <>
               <Search className="h-4 w-4" />
-              Custom Topics
+              <span className="hidden sm:inline">Custom Topics</span>
             </>
           )}
         </Button>
@@ -915,7 +1205,7 @@ Rispondi SOLO con JSON:
             </>
           ) : (
             <>
-              Avvia Analisi Topic
+              Avvia Analisi Topic (Tutte le Sessioni)
             </>
           )}
         </Button>
@@ -948,7 +1238,7 @@ Rispondi SOLO con JSON:
                 </Label>
                 
                 {/* Griglia delle analisi precedenti */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                   {uniqueSearches.map((search, index) => {
                     const key = search.id || search.timestamp || search.query || String(index);
                     return (
@@ -969,17 +1259,17 @@ Rispondi SOLO con JSON:
                           className="text-sm text-blue-800 font-medium hover:text-blue-600 hover:underline cursor-pointer flex-1 text-left"
                           title={`Carica analisi: ${search.query}`}
                         >
-                          <div className="flex flex-col">
+                          <div className="flex flex-col min-w-0">
                             <div className="flex items-center gap-2">
-                              <Search className="h-3 w-3" />
+                              <Search className="h-3 w-3 flex-shrink-0" />
                               <span className="truncate">{search.query}</span>
                             </div>
-                            <span className="text-xs text-gray-500 mt-1">
+                            <span className="text-xs text-gray-500 mt-1 truncate">
                               {new Date(search.timestamp).toLocaleDateString()} - {search.results.reduce((total, sessionResult) => total + sessionResult.topics.length, 0)} topic
                             </span>
                           </div>
                         </button>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           <span className={`text-xs px-1.5 py-0.5 rounded border ${
                             selectedCustomSearchId === key
                               ? 'bg-blue-100 text-blue-800 border-blue-300'
@@ -1036,34 +1326,35 @@ Rispondi SOLO con JSON:
               ))}
             </div>
             
-            <div className="flex items-center gap-2">
-                              <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={addCustomTopic}
-                  disabled={customTopics.length >= 5}
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Aggiungi Topic
-                </Button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addCustomTopic}
+                disabled={customTopics.length >= 5}
+                className="flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Aggiungi Topic</span>
+              </Button>
               
-                              <Button
-                  onClick={runCustomTopicSearch}
-                  disabled={isSearching || !combinedTranscript || customTopics.every(t => t.trim().length === 0)}
-                  className="flex items-center gap-2"
-                >
-                  {isSearching ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Ricerca in corso...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4" />
-                      Cerca Topics
-                    </>
-                  )}
-                </Button>
+              <Button
+                onClick={runCustomTopicSearch}
+                disabled={isSearching || !combinedTranscript || customTopics.every(t => t.trim().length === 0)}
+                className="flex items-center gap-2 flex-1 sm:flex-none"
+              >
+                {isSearching ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="hidden sm:inline">Ricerca in corso...</span>
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4" />
+                    <span className="hidden sm:inline">Cerca Topics</span>
+                  </>
+                )}
+              </Button>
             </div>
             
             {/* Progress indicator */}
@@ -1106,7 +1397,7 @@ Rispondi SOLO con JSON:
           {/* Freccette di navigazione per topic modeling standard - fuori dalla Card */}
           {/* Overlay del titolo in alto a sinistra */}
           {/* Rimuovi la box overlay con Brain e 'Identified Topics' */}
-          {analysisResult && !isCustomMode && topicSessions.length > 0 && (
+          {selectedSessions.length > 0 && !isCustomMode && (
             <Card className="relative">
               <CardHeader className="pt-2 pb-0">
                 {/* RIMUOVI CardTitle con Macrotemi individuati */}
@@ -1114,39 +1405,39 @@ Rispondi SOLO con JSON:
                   <Brain className="h-5 w-5" /> Macrotemi individuati
                 </CardTitle> */}
                 <CardDescription className="mb-2">
-                  {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].summary : ''}
+                  {allTopicSessions[currentSessionIndex] && isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].summary : ''}
                 </CardDescription>
               </CardHeader>
               {/* Barra di navigazione sessioni topic modeling standard - sempre visibile se più di una sessione selezionata */}
               {allTopicSessions.length > 1 && (
                 <div className="flex justify-center mb-4 mt-2">
-                  <div className="flex flex-col w-full max-w-xl bg-gray-50 rounded-xl py-4 px-6 items-center shadow-sm">
+                  <div className="flex flex-col w-full max-w-xl bg-gray-50 rounded-xl py-4 px-4 sm:px-6 items-center shadow-sm">
                     <div className="flex w-full items-center justify-between mb-1">
-                      <Button variant="outline" size="sm" onClick={goToPreviousSession} className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" onClick={goToPreviousSession} className="flex items-center gap-1 text-xs sm:text-sm">
                         <ChevronLeft className="h-4 w-4" />
-                        <span className="font-semibold">Precedente</span>
+                        <span className="font-semibold hidden sm:inline">Precedente</span>
                       </Button>
-                      <div className="flex flex-col items-center flex-1">
-                        <span className="font-semibold text-lg">{allTopicSessions[currentSessionIndex]?.session_title || (isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].title : '') || 'Sessione'}</span>
+                      <div className="flex flex-col items-center flex-1 px-2">
+                        <span className="font-semibold text-sm sm:text-lg text-center truncate max-w-full">{allTopicSessions[currentSessionIndex]?.session_title || (allTopicSessions[currentSessionIndex] && isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].title : '') || 'Sessione'}</span>
                       </div>
-                      <Button variant="outline" size="sm" onClick={goToNextSession} className="flex items-center gap-1">
-                        <span className="font-semibold">Successiva</span>
+                      <Button variant="outline" size="sm" onClick={goToNextSession} className="flex items-center gap-1 text-xs sm:text-sm">
+                        <span className="font-semibold hidden sm:inline">Successiva</span>
                         <ChevronRight className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="text-center text-gray-600 text-base mt-1">
+                    <div className="text-center text-gray-600 text-xs sm:text-base mt-1 px-2">
                       {/* Mostra solo il nome della sessione, non il codice */}
-                      {allTopicSessions[currentSessionIndex]?.session_title || (isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].title : '') || 'Sessione'}
+                      <span className="truncate max-w-full block">{allTopicSessions[currentSessionIndex]?.session_title || (allTopicSessions[currentSessionIndex] && isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].title : '') || 'Sessione'}</span>
                     </div>
                   </div>
                 </div>
               )}
               {allTopicSessions.length === 1 && (
                 <div className="flex justify-center mb-4 mt-2">
-                  <div className="flex flex-col w-full max-w-xl bg-gray-50 rounded-xl py-4 px-6 items-center shadow-sm">
+                  <div className="flex flex-col w-full max-w-xl bg-gray-50 rounded-xl py-4 px-4 sm:px-6 items-center shadow-sm">
                     <div className="flex w-full items-center justify-center mb-1">
                       {/* Mostra solo il nome della sessione, non il codice */}
-                      <span className="font-semibold text-lg">{allTopicSessions[0]?.session_title || (isTopicAnalysis(allTopicSessions[0]) ? allTopicSessions[0].title : '') || 'Sessione'}</span>
+                      <span className="font-semibold text-sm sm:text-lg text-center truncate max-w-full px-2">{allTopicSessions[0]?.session_title || (allTopicSessions[0] && isTopicAnalysis(allTopicSessions[0]) ? allTopicSessions[0].title : '') || 'Sessione'}</span>
                     </div>
                   </div>
                 </div>
@@ -1158,7 +1449,7 @@ Rispondi SOLO con JSON:
                       L'analisi topic modeling per questa sessione non è ancora pronta.<br />
                       Premi il pulsante qui sotto per avviarla.
                     </p>
-                    <Button onClick={() => onRequestAnalysis?.(allTopicSessions[currentSessionIndex].session_id)}>
+                    <Button onClick={() => runSingleSessionAnalysis(allTopicSessions[currentSessionIndex].session_id)}>
                       Avvia Analisi Topic
                     </Button>
                   </div>
@@ -1166,59 +1457,75 @@ Rispondi SOLO con JSON:
                   <>
                     <div className="mb-6">
                       <h4 className="font-semibold text-lg mb-2">Elenco Macrotemi</h4>
-                      <div className="flex flex-wrap gap-2 mb-2">
+                      <div className="space-y-2">
                         {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
                           allTopicSessions[currentSessionIndex].topics.map((topic, index) => (
-                            <Badge
-                              key={topic.topic_id}
-                              className={getTopicColor(topic.topic_id) + ' text-base px-3 py-1 cursor-pointer transition-all'}
-                              title={topic.description}
-                            >
-                              {topic.description.replace(/\s*\([^)]*\)$/, '')}
-                            </Badge>
+                            <div key={topic.topic_id} className="mb-2">
+                              <Badge
+                                className={getTopicColor(topic.topic_id) + ' text-sm sm:text-base px-2 sm:px-3 py-1 cursor-pointer transition-all mb-2 break-words'}
+                                title={topic.description}
+                                onClick={() => scrollToTopic(topic.topic_id)}
+                              >
+                                {topic.description.replace(/\s*\([^)]*\)$/, '')}
+                              </Badge>
+                              <div className="ml-2">
+                                <span className="text-gray-700 text-xs sm:text-sm break-words">
+                                  {topic.keywords && Array.isArray(topic.keywords) ? topic.keywords.join(', ') : <span className="italic text-gray-400">Nessuna parola chiave</span>}
+                                </span>
+                              </div>
+                            </div>
                           ))
                         ) : (
                           <p className="text-gray-500 italic">Nessun topic disponibile</p>
                         )}
                       </div>
-                      <div className="space-y-2">
-                        {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
-                          allTopicSessions[currentSessionIndex].topics.map((topic, index) => (
-                            <div key={topic.topic_id} className="mb-2">
-                              <span className="font-semibold text-blue-900">{topic.description.replace(/\s*\([^)]*\)$/, '')}:</span>
-                              <span className="ml-2 text-gray-700 text-sm">
-                                {topic.keywords && Array.isArray(topic.keywords) ? topic.keywords.join(', ') : <span className="italic text-gray-400">Nessuna parola chiave</span>}
-                              </span>
-                            </div>
-                          ))
-                        ) : null}
-                      </div>
                     </div>
-                    <div className="p-4 bg-gray-50 rounded-lg border max-h-96 overflow-y-auto text-base leading-relaxed">
-                      {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
-                        allTopicSessions[currentSessionIndex].text_segments.map((segment, index) => {
-                          const isSessionSeparator = segment.text.includes('---') && segment.topic_id === null;
-                          if (isSessionSeparator) {
-                            return (
-                              <div
-                                key={index}
-                                className="py-3 my-4 text-center font-medium text-gray-700 border-t border-b border-gray-300 bg-gray-100"
-                              >
-                                {segment.text.replace(/\n/g, '').trim()}
-                              </div>
-                            );
-                          }
-                          return (
-                            <span
-                              key={index}
-                              className={`inline-block p-1 rounded transition-all ${getTopicBackgroundColor(segment.topic_id)} ${segment.topic_id ? 'border-l-4 border-blue-400 font-semibold text-blue-900' : 'text-gray-800'}`}
-                              title={segment.topic_id ? `${isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (allTopicSessions[currentSessionIndex].topics?.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '')) : ''} (${Math.round(segment.confidence * 100)}% confidence)` : 'Unclassified'}
-                            >
-                              {segment.text}
-                            </span>
-                          );
-                        })
-                      ) : (
+                    <div className="p-3 sm:p-4 bg-gray-50 rounded-lg border max-h-96 overflow-y-auto text-sm sm:text-base leading-relaxed">
+                        {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
+                          (() => {
+                            const currentSession = selectedSessions.find(s => s.id === allTopicSessions[currentSessionIndex].session_id);
+                            const analysisResult = allTopicSessions[currentSessionIndex] as AnalysisResult;
+                            
+
+                            
+                            // Usa i text_segments da topicAnalysis se disponibili, altrimenti da analysisResult direttamente
+                            const textSegments = analysisResult.topicAnalysis?.text_segments || analysisResult.text_segments || [];
+                            
+                            const fullSegments = currentSession ? 
+                              mapTopicResultsToFullTranscript(currentSession, textSegments) :
+                              textSegments;
+                            
+                            return fullSegments.map((segment, index) => {
+                              const isSessionSeparator = segment.text.includes('---') && segment.topic_id === null;
+                              if (isSessionSeparator) {
+                                return (
+                                  <div
+                                    key={index}
+                                    className="py-3 my-4 text-center font-medium text-gray-700 border-t border-b border-gray-300 bg-gray-100"
+                                  >
+                                    {segment.text.replace(/\n/g, '').trim()}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <span
+                                  key={index}
+                                  ref={segment.topic_id ? (el) => {
+                                    if (el && !topicRefs.current[segment.topic_id!]) {
+                                      // Salva solo il primo segmento per ogni topic_id
+                                      topicRefs.current[segment.topic_id!] = el;
+                                      console.log('🔗 Ref assegnato per topicId:', segment.topic_id, 'elemento:', el)
+                                    }
+                                  } : undefined}
+                                  className={`inline-block p-1 rounded transition-all ${getTopicBackgroundColor(segment.topic_id)} ${segment.topic_id ? 'border-l-4 border-blue-400 font-semibold text-blue-900' : 'text-gray-800'}`}
+                                  title={segment.topic_id ? `${isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (allTopicSessions[currentSessionIndex].topics?.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '')) : ''} (${Math.round(segment.confidence * 100)}% confidence)` : 'Unclassified'}
+                                >
+                                  {segment.text}
+                                </span>
+                              );
+                            });
+                          })()
+                        ) : (
                         <p className="text-gray-500 italic">
                           Classificazione del testo in corso...
                         </p>

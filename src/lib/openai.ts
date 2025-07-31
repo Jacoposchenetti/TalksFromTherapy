@@ -180,7 +180,7 @@ export async function diarizeTranscript(transcript: string, sessionTitle: string
       chunks.push(transcript);
     }
 
-    // Prompt in italiano (come già impostato)
+    // Prompt migliorato per diarizzazione più solida e intelligente
     const promptBase = (chunk: string) => `
 Analizza la seguente trascrizione di una sessione di terapia e identifica i diversi interlocutori.
 
@@ -193,23 +193,86 @@ Il tuo compito è identificare quanti interlocutori ci sono e chi dice cosa. Tip
 - Il terapeuta (che devi identificare sempre come "Terapeuta:")
 - Il paziente (che devi identificare sempre come "Paziente:")
 
-Istruzioni:
-1. Analizza il contenuto per individuare i cambi di interlocutore.
-2. Se la trascrizione contiene già etichette, nomi o ruoli (ad esempio "Dott.ssa Rossi:", "Mario:", "Psicologo:", "T:"), sostituiscili TUTTI con solo due ruoli: "Terapeuta:" e "Paziente:". Rimuovi ogni nome, iniziale o titolo originale.
-3. Se non ci sono etichette, deduci i cambi di interlocutore e assegna il ruolo corretto.
-4. Riformatta la trascrizione aggiungendo sempre e solo i prefissi "Terapeuta:" o "Paziente:" prima di ogni intervento.
-5. Mantieni tutto il contenuto originale, modifica solo i prefissi.
-6. Usa SEMPRE e SOLO il formato "Terapeuta:" o "Paziente:" prima di ogni intervento, in italiano.
-7. Ogni intervento deve essere separato da UNA SOLA riga vuota (un solo a capo tra una battuta e la successiva, senza righe doppie o triple).
+ISTRUZIONI DETTAGLIATE PER RICONOSCIMENTO E RIMOZIONE SIGLE/NOMINATIVI:
 
-Esempio di output desiderato:
-Terapeuta: Buongiorno, come si sente oggi?
+1. RICONOSCIMENTO SIGLE/NOMINATIVI: Prima di tutto, identifica TUTTE le sigle, iniziali, nomi o nominativi presenti nel testo che indicano gli attori, come:
+   - Sigle: "T:", "P:", "D:", "Dott:", "Dr:", "Dott.ssa:", "Psicologo:", "Psicologa:"
+   - Iniziali: "M.R.:", "D.R.:", "A.B.:", "C.M.:"
+   - Nomi completi: "Dottor Rossi:", "Dottoressa Bianchi:", "Mario:", "Anna:"
+   - Titoli: "Terapeuta:", "Paziente:", "Specialista:", "Consulente:"
+   - Varianti: "Il terapeuta:", "La paziente:", "Il dottore dice:", "Lei dice:"
 
-Paziente: Bene, grazie. Ho fatto il compito che mi ha dato.
+2. RIMOZIONE COMPLETA: Rimuovi COMPLETAMENTE tutte queste sigle/nominativi dall'inizio di ogni paragrafo/intervento. Non devono rimanere tracce nel testo finale.
 
-Terapeuta: Ottimo, mi racconti com'è andata?
+3. CLASSIFICAZIONE INTELLIGENTE DEI RUOLI: Quando non ci sono sigle/nominativi espliciti, usa questi criteri per identificare i cambi di interlocutore:
 
-Restituisci SOLO la trascrizione diarizzata, senza alcun commento aggiuntivo.
+   CRITERI PER IL TERAPEUTA:
+   - Fa domande dirette: "Come si sente?", "Mi racconti...", "Cosa ne pensa?"
+   - Usa linguaggio professionale e distaccato
+   - Fa commenti di supporto: "Capisco", "Interessante", "Ottimo"
+   - Chiede chiarimenti: "Nel senso...?", "Può spiegare meglio?"
+   - Fa riferimento a sessioni precedenti: "Come abbiamo detto ieri..."
+   - Usa "tu" quando si rivolge al paziente
+   - Fa osservazioni terapeutiche: "Vedo che...", "Noto che..."
+
+   CRITERI PER IL PAZIENTE:
+   - Racconta esperienze personali e problemi
+   - Usa "io", "me", "mio" frequentemente
+   - Risponde alle domande del terapeuta
+   - Usa linguaggio emotivo e personale
+   - Fa riferimento a persone della sua vita: "mia sorella", "mio marito"
+   - Racconta eventi specifici della sua vita
+   - Esprime sentimenti e stati d'animo
+
+4. RICONOSCIMENTO CAMBI DI SPEAKER: Presta particolare attenzione a:
+   - Cambi di tono e registro linguistico
+   - Passaggi da domande a risposte
+   - Cambi di argomento o focus
+   - Riferimenti diretti all'altro interlocutore ("tu", "lei", "dicevi")
+   - Pause o interruzioni nel discorso
+
+5. RIFORMATTAZIONE: Aggiungi SOLO i prefissi standardizzati:
+   - "Terapeuta:" per tutti gli interventi del terapeuta
+   - "Paziente:" per tutti gli interventi del paziente
+
+6. PULIZIA OUTPUT: Assicurati che nell'output finale:
+   - NON ci siano più sigle/nominativi originali
+   - NON ci siano iniziali o nomi degli attori
+   - NON ci siano riferimenti a "lui dice", "lei dice", "il dottore", ecc.
+   - Ogni intervento inizi SOLO con "Terapeuta:" o "Paziente:"
+   - Il contenuto sia pulito e privo di identificatori originali
+
+7. FORMATTAZIONE OBBLIGATORIA: 
+   - OGNI RIGA deve iniziare con "Terapeuta:" o "Paziente:" seguito da uno spazio
+   - NON inserire testo senza prefisso di speaker
+   - NON inserire righe vuote senza prefisso
+   - Ogni intervento deve essere separato da UNA SOLA riga vuota
+   - NON usare paragrafi o formattazione speciale
+   - OGNI RIGA DI TESTO deve avere il prefisso appropriato
+
+ESEMPIO DI FORMATTAZIONE CORRETTA:
+INPUT:
+Come si sente oggi? Ha fatto i compiti che le ho assegnato?
+Sì, ho provato a fare quello che mi ha detto. È stato difficile all'inizio.
+Capisco. Mi racconti come è andata?
+Beh, ho iniziato a pensare a quello che abbiamo discusso la volta scorsa...
+
+OUTPUT DESIDERATO (OGNI RIGA CON PREFISSO):
+Terapeuta: Come si sente oggi? Ha fatto i compiti che le ho assegnato?
+
+Paziente: Sì, ho provato a fare quello che mi ha detto. È stato difficile all'inizio.
+
+Terapeuta: Capisco. Mi racconti come è andata?
+
+Paziente: Beh, ho iniziato a pensare a quello che abbiamo discusso la volta scorsa...
+
+REGOLE STRETTE DI FORMATTAZIONE:
+- OGNI RIGA DI TESTO deve iniziare con "Terapeuta: " o "Paziente: "
+- NON ci devono essere righe di testo senza prefisso
+- NON ci devono essere paragrafi o blocchi di testo senza identificazione speaker
+- OGNI intervento deve essere su una riga separata con il proprio prefisso
+
+IMPORTANTE: Restituisci SOLO la trascrizione diarizzata pulita, senza alcun commento aggiuntivo. Rimuovi TUTTE le sigle/nominativi originali e assicurati che OGNI RIGA inizi con "Terapeuta: " o "Paziente: ".
 `;
 
     let diarizedChunks: string[] = [];
@@ -221,7 +284,7 @@ Restituisci SOLO la trascrizione diarizzata, senza alcun commento aggiuntivo.
         messages: [
           {
             role: 'system',
-            content: 'Sei un assistente specializzato nella diarizzazione di trascrizioni di sessioni di terapia. Il tuo compito è identificare i diversi interlocutori e riformattare la trascrizione aggiungendo prefissi chiari per ogni persona che parla.'
+            content: 'Sei un assistente specializzato nella diarizzazione di trascrizioni di sessioni di terapia. Il tuo compito principale è RICONOSCERE e RIMUOVERE COMPLETAMENTE tutte le sigle, iniziali, nomi o nominativi degli attori presenti nel testo, sostituendoli con i prefissi standardizzati "Terapeuta:" e "Paziente:". È CRUCIALE che nell\'output finale non rimangano tracce degli identificatori originali, poiché questi alterano le analisi successive. Devi essere meticoloso nell\'identificazione e rimozione di tutti i possibili identificatori degli attori. Inoltre, quando non ci sono sigle esplicite, devi essere INTELLIGENTE nel riconoscere i cambi di interlocutore basandoti sul contenuto, sul tono, sul linguaggio e sul contesto della conversazione. Non assumere mai che tutto il testo sia di un solo speaker - analizza attentamente ogni passaggio per identificare i cambi di interlocutore. FORMATTAZIONE OBBLIGATORIA: OGNI RIGA DI TESTO deve iniziare con "Terapeuta: " o "Paziente: ". NON inserire mai testo senza prefisso di speaker. OGNI intervento deve essere su una riga separata con il proprio prefisso.'
           },
           {
             role: 'user',
