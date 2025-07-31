@@ -127,6 +127,43 @@ Use professional and clinical language, respecting confidentiality and the sensi
 }
 
 /**
+ * Normalizza la struttura del transcript per garantire una formattazione consistente
+ * @param transcript - Il testo da normalizzare
+ * @returns string - Il testo normalizzato
+ */
+const normalizeTranscriptStructure = (transcript: string): string => {
+  if (!transcript) return transcript;
+  
+  console.log('🔧 [Diarization] Normalizing transcript structure...');
+  console.log('📝 [Diarization] Original transcript (first 200 chars):', transcript.substring(0, 200));
+  
+  // Rimuovi tutti i newline e metti tutto su una riga
+  let normalized = transcript.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  // Aggiungi newline prima e dopo ogni speaker marker
+  normalized = normalized
+    .replace(/(PAZIENTE:|P:|Paziente:)/gi, '\n$1\n')
+    .replace(/(TERAPEUTA:|T:|Terapeuta:)/gi, '\n$1\n')
+    .replace(/(THERAPIST:|Therapist:)/gi, '\n$1\n');
+  
+  // Rimuovi newline multipli consecutivi e normalizza
+  normalized = normalized
+    .replace(/\n\s*\n/g, '\n')
+    .replace(/\n\s+/g, '\n')
+    .trim();
+  
+  // Se non ci sono speaker markers, aggiungi un marker di default per il paziente
+  if (!/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi.test(normalized)) {
+    normalized = `Paziente:\n${normalized}`;
+  }
+  
+  console.log('✅ [Diarization] Normalized transcript (first 200 chars):', normalized.substring(0, 200));
+  console.log('🔍 [Diarization] Speaker markers found:', (normalized.match(/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi) || []).length);
+  
+  return normalized;
+};
+
+/**
  * Diarizza una trascrizione utilizzando GPT-3.5-turbo per identificare i diversi interlocutori
  * @param transcript - Il testo trascritto da diarizzare
  * @param sessionTitle - Titolo della sessione per contesto
@@ -301,13 +338,10 @@ IMPORTANTE: Restituisci SOLO la trascrizione diarizzata pulita, senza alcun comm
       diarizedChunks.push(diarized.trim());
     }
     const diarizedTranscript = diarizedChunks.join('\n');
-    // Normalizza: un solo a capo tra ogni battuta (Terapeuta:/Paziente:)
-    const normalizedTranscript = diarizedTranscript
-      .replace(/\s*\n\s*/g, '\n') // elimina spazi extra attorno agli a capo
-      .replace(/\n{2,}/g, '\n') // sostituisci doppi/tripli a capo con uno solo
-      .replace(/(Terapeuta:|Paziente:)/g, '\n$1') // assicura che ogni battuta inizi su una nuova riga
-      .replace(/^\n+/, '') // rimuovi eventuali a capo iniziali
-      .replace(/\n+$/, ''); // rimuovi eventuali a capo finali
+    
+    // Applica la normalizzazione della struttura del transcript
+    const normalizedTranscript = normalizeTranscriptStructure(diarizedTranscript);
+    
     console.log('Diarization completed successfully');
     console.log(`Diarized transcript length: ${normalizedTranscript.length} characters`);
     return normalizedTranscript;

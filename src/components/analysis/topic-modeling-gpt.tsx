@@ -330,6 +330,9 @@ export default function TopicAnalysisComponent({
           const session = selectedSessions[i]
           console.log(`Analyzing session ${i + 1}/${selectedSessions.length}: ${session.title}`)
 
+          // Normalizza la struttura del transcript per l'analisi
+          const normalizedTranscript = normalizeTranscriptStructure(session.transcript);
+
           const response = await fetch('/api/single-session-analysis', {
             method: 'POST',
             headers: {
@@ -337,7 +340,7 @@ export default function TopicAnalysisComponent({
             },
             body: JSON.stringify({
               session_id: session.id,
-              transcript: session.transcript
+              transcript: normalizedTranscript
               // L'API estrae automaticamente il contenuto del paziente
             }),
           })
@@ -374,6 +377,9 @@ export default function TopicAnalysisComponent({
 
       } else {
         // Sessione singola: usa l'approccio originale
+        // Normalizza la struttura del transcript combinato
+        const normalizedCombinedTranscript = normalizeTranscriptStructure(combinedTranscript);
+        
         const response = await fetch('/api/single-session-analysis', {
           method: 'POST',
           headers: {
@@ -381,7 +387,7 @@ export default function TopicAnalysisComponent({
           },
           body: JSON.stringify({
             session_id: `combined_${Date.now()}`,
-            transcript: combinedTranscript
+            transcript: normalizedCombinedTranscript
           }),
         })
 
@@ -471,6 +477,9 @@ export default function TopicAnalysisComponent({
     try {
       console.log(`Starting single session analysis for: ${targetSession.title}`)
 
+      // Normalizza la struttura del transcript per l'analisi
+      const normalizedTranscript = normalizeTranscriptStructure(targetSession.transcript);
+
       const response = await fetch('/api/single-session-analysis', {
         method: 'POST',
         headers: {
@@ -478,7 +487,7 @@ export default function TopicAnalysisComponent({
         },
         body: JSON.stringify({
           session_id: targetSession.id,
-          transcript: targetSession.transcript
+          transcript: normalizedTranscript
         }),
       })
 
@@ -658,9 +667,12 @@ Rispondi SOLO con JSON:
         const session = sessions[i]
         console.log(`Processing session ${i + 1}/${sessions.length}: ${session.title}`)
 
+        // Normalizza la struttura del transcript per l'analisi
+        const normalizedTranscript = normalizeTranscriptStructure(session.transcript);
+        
         // Estrai il contenuto del paziente per questa sessione
-        const patientContent = extractPatientContent(session.transcript)
-        console.log(`📊 Sessione ${session.id}: ${session.transcript.length} → ${patientContent.length} caratteri`)
+        const patientContent = extractPatientContent(normalizedTranscript)
+        console.log(`📊 Sessione ${session.id}: ${session.transcript.length} → ${normalizedTranscript.length} → ${patientContent.length} caratteri`)
 
         // Split patient text into sentences
         const allSentences = patientContent
@@ -991,10 +1003,45 @@ Rispondi SOLO con JSON:
     return obj && Array.isArray(obj.topics);
   }
 
+  // Funzione per normalizzare la struttura del transcript per il topic modeling
+  const normalizeTranscriptStructure = (transcript: string): string => {
+    if (!transcript) return transcript;
+    
+    console.log('🔧 [Topic Modeling] Normalizing transcript structure...');
+    console.log('📝 [Topic Modeling] Original transcript (first 200 chars):', transcript.substring(0, 200));
+    
+    // Rimuovi tutti i newline e metti tutto su una riga
+    let normalized = transcript.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+    
+    // Aggiungi newline prima e dopo ogni speaker marker
+    normalized = normalized
+      .replace(/(PAZIENTE:|P:|Paziente:)/gi, '\n$1\n')
+      .replace(/(TERAPEUTA:|T:|Terapeuta:)/gi, '\n$1\n')
+      .replace(/(THERAPIST:|Therapist:)/gi, '\n$1\n');
+    
+    // Rimuovi newline multipli consecutivi e normalizza
+    normalized = normalized
+      .replace(/\n\s*\n/g, '\n')
+      .replace(/\n\s+/g, '\n')
+      .trim();
+    
+    // Se non ci sono speaker markers, aggiungi un marker di default per il paziente
+    if (!/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi.test(normalized)) {
+      normalized = `Paziente:\n${normalized}`;
+    }
+    
+    console.log('✅ [Topic Modeling] Normalized transcript (first 200 chars):', normalized.substring(0, 200));
+    console.log('🔍 [Topic Modeling] Speaker markers found:', (normalized.match(/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi) || []).length);
+    
+    return normalized;
+  };
+
   // Nuova funzione per mappare i risultati del topic modeling alla trascrizione completa
   // Approccio semplice e diretto: mapping basato su ricerca esatta e fuzzy
   const mapTopicResultsToFullTranscript = (session: Session, patientSegments: TextSegment[]): TextSegment[] => {
-    const fullTranscript = session.transcript;
+    // Normalizza la struttura del transcript per il topic modeling
+    const normalizedTranscript = normalizeTranscriptStructure(session.transcript);
+    const fullTranscript = normalizedTranscript;
     
     // Se non ci sono segmenti del paziente, restituisci la trascrizione completa senza evidenziazione
     if (!patientSegments || patientSegments.length === 0) {
@@ -1106,6 +1153,7 @@ Rispondi SOLO con JSON:
                       foundMatch = true;
                     }
                   }
+
                 }
               }
             }

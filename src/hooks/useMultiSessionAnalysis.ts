@@ -243,6 +243,13 @@ export function useMultiSessionAnalysis({ sessionIds, autoLoad = true }: UseMult
         else if ('title' in analysis && typeof analysis.title === 'string') sessionTitle = analysis.title;
       }
       if (analysis && analysis.topicAnalysis) {
+        // DEBUG: Log dei dati topic analysis
+        console.log(`[DEBUG] getTopicData for session ${sessionId}:`, {
+          topics: analysis.topicAnalysis.topics?.length || 0,
+          text_segments: analysis.topicAnalysis.text_segments?.length || 0,
+          text_segments_with_topic: analysis.topicAnalysis.text_segments?.filter(s => s.topic_id !== null).length || 0
+        });
+        
         return {
           session_id: sessionId,
           session_title: sessionTitle,

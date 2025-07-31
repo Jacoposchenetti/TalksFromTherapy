@@ -103,6 +103,14 @@ export async function GET(request: NextRequest) {
     const customTopicAnalysisResults = analysis.customTopicAnalysisResults ? JSON.parse(decryptIfEncrypted(analysis.customTopicAnalysisResults)) : null;
     const semanticFrameResults = analysis.semanticFrameResults ? JSON.parse(decryptIfEncrypted(analysis.semanticFrameResults)) : null;
     
+    // DEBUG: Log dei dati topic analysis decodificati
+    console.log('[API/analyses] Decoded topicAnalysisResult:', topicAnalysisResult ? {
+      topics_count: topicAnalysisResult.topics?.length || 0,
+      text_segments_count: topicAnalysisResult.text_segments?.length || 0,
+      text_segments_with_topic: topicAnalysisResult.text_segments?.filter(s => s.topic_id !== null).length || 0,
+      sample_segments: topicAnalysisResult.text_segments?.slice(0, 3) || []
+    } : 'null');
+    
     console.log('[API/analyses] Decoded keyTopics:', keyTopics ? 'success' : 'null');
     console.log('[API/analyses] Decoded customTopicAnalysisResults:', customTopicAnalysisResults ? 'success' : 'null');
     console.log('[API/analyses] Decoded customTopicAnalysisResults structure:', customTopicAnalysisResults ? Object.keys(customTopicAnalysisResults) : 'null');

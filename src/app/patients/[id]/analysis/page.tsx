@@ -398,15 +398,21 @@ function AnalysisPageInner() {
   const highlightSearchTerm = (text: string, searchTerm: string) => {
     if (!text) return text
     
-    // First, format the dialogue by adding line breaks before "Therapist:" and "Patient:"
+    // First, format the dialogue by adding line breaks before speaker markers
+    // Handle Italian markers (Paziente:, Terapeuta:, P:, T:)
     let formattedText = text
-      .replace(/(\s+)(Therapist:)/g, '<br/><br/><strong class="text-blue-600">$2</strong>')
+      .replace(/(\s+)(Paziente:|P:)/g, '<br/><br/><strong class="text-green-600">$2</strong>')
+      .replace(/(\s+)(Terapeuta:|T:)/g, '<br/><br/><strong class="text-blue-600">$2</strong>')
+      // Handle English markers (Patient:, Therapist:)
       .replace(/(\s+)(Patient:)/g, '<br/><br/><strong class="text-green-600">$2</strong>')
+      .replace(/(\s+)(Therapist:)/g, '<br/><br/><strong class="text-blue-600">$2</strong>')
     
-    // Handle the case where Therapist: or Patient: appears at the beginning
+    // Handle the case where speaker markers appear at the beginning
     formattedText = formattedText
-      .replace(/^(Therapist:)/g, '<strong class="text-blue-600">$1</strong>')
+      .replace(/^(Paziente:|P:)/g, '<strong class="text-green-600">$1</strong>')
+      .replace(/^(Terapeuta:|T:)/g, '<strong class="text-blue-600">$1</strong>')
       .replace(/^(Patient:)/g, '<strong class="text-green-600">$1</strong>')
+      .replace(/^(Therapist:)/g, '<strong class="text-blue-600">$1</strong>')
     
     // Then highlight search terms if provided
     if (!searchTerm.trim()) return formattedText
@@ -476,11 +482,44 @@ function AnalysisPageInner() {
   const getSelectedSessionsData = () => {
     return sessions.filter(s => selectedSessions.has(s.id))
   }
+  // Funzione per normalizzare la struttura del transcript per il topic modeling
+  const normalizeTranscriptStructure = (transcript: string): string => {
+    if (!transcript) return transcript;
+    
+    console.log('🔧 Normalizing transcript structure...');
+    console.log('📝 Original transcript (first 200 chars):', transcript.substring(0, 200));
+    
+    // Rimuovi tutti i newline e metti tutto su una riga
+    let normalized = transcript.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+    
+    // Aggiungi newline prima e dopo ogni speaker marker
+    normalized = normalized
+      .replace(/(PAZIENTE:|P:|Paziente:)/gi, '\n$1\n')
+      .replace(/(TERAPEUTA:|T:|Terapeuta:)/gi, '\n$1\n')
+      .replace(/(THERAPIST:|Therapist:)/gi, '\n$1\n');
+    
+    // Rimuovi newline multipli consecutivi e normalizza
+    normalized = normalized
+      .replace(/\n\s*\n/g, '\n')
+      .replace(/\n\s+/g, '\n')
+      .trim();
+    
+    // Se non ci sono speaker markers, aggiungi un marker di default per il paziente
+    if (!/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi.test(normalized)) {
+      normalized = `Paziente:\n${normalized}`;
+    }
+    
+    console.log('✅ Normalized transcript (first 200 chars):', normalized.substring(0, 200));
+    console.log('🔍 Speaker markers found:', (normalized.match(/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi) || []).length);
+    
+    return normalized;
+  };
+
   // Get combined transcript
   const getCombinedTranscript = () => {
     const selectedSessionsData = getSelectedSessionsData()
     return selectedSessionsData
-      .map(session => session.transcript || "")
+      .map(session => normalizeTranscriptStructure(session.transcript || ""))
       .filter(transcript => transcript.trim().length > 0)
       .join("\n\n--- SESSIONE SUCCESSIVA ---\n\n")
   }
@@ -857,7 +896,7 @@ function AnalysisPageInner() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setSidebarOpen(!sidebarOpen)}
-                          className="hidden lg:flex h-8 w-8 p-0"
+                          className="hidden lg:flex h-8 w-8 p-0 ml-auto"
                           title="Nascondi sidebar"
                         >
                           <ChevronLeft className="h-4 w-4" />
@@ -870,7 +909,7 @@ function AnalysisPageInner() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setSidebarOpen(!sidebarOpen)}
-                          className="h-6 w-6 p-0"
+                          className="h-6 w-6 p-0 ml-auto"
                           title="Mostra sidebar"
                         >
                           <ChevronRight className="h-3 w-3" />
@@ -1059,7 +1098,7 @@ function AnalysisPageInner() {
                                   {session.transcript ? (
                                     <div 
                                       dangerouslySetInnerHTML={{
-                                        __html: highlightSearchTerm(session.transcript, searchTerm)
+                                        __html: highlightSearchTerm(normalizeTranscriptStructure(session.transcript), searchTerm)
                                       }}
                                     />
                                   ) : (
@@ -1452,7 +1491,7 @@ function AnalysisPageInner() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setNotesOpen(!notesOpen)}
-                          className="hidden lg:flex h-8 w-8 p-0"
+                          className="hidden lg:flex h-8 w-8 p-0 mr-auto"
                           title="Nascondi note"
                         >
                           <ChevronRight className="h-4 w-4" />
@@ -1469,7 +1508,7 @@ function AnalysisPageInner() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setNotesOpen(!notesOpen)}
-                          className="h-6 w-6 p-0"
+                          className="h-6 w-6 p-0 mr-auto"
                           title="Mostra note"
                         >
                           <ChevronLeft className="h-3 w-3" />
