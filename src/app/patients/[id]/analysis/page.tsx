@@ -51,6 +51,7 @@ function AnalysisPageInner() {
 
   const [currentSlide, setCurrentSlide] = useState(0) // 0: Trascrizioni, 1: Topic Modelling, 2: Sentiment Analysis, 3: Semantic Frame
   const [sidebarOpen, setSidebarOpen] = useState(true) // Sidebar visibility state
+  const [notesOpen, setNotesOpen] = useState(true) // Notes tab visibility state
   
   // Semantic Frame Analysis state
   const [targetWord, setTargetWord] = useState("")
@@ -93,6 +94,28 @@ function AnalysisPageInner() {
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
   // Per gestire il revert, salvo il valore originale della nota quando si entra in modalità editing
   const [originalNotes, setOriginalNotes] = useState<Record<string, string>>({})
+
+  // Constants for adaptive height logic
+  const MIN_NOTE_HEIGHT = 200 // Minimum height in pixels for notes with no text or short text
+  const TEXT_LENGTH_THRESHOLD = 300 // Character threshold for adaptive height
+  const MAX_NOTE_HEIGHT = 600 // Maximum height for very long notes
+
+  // Function to calculate adaptive height for note tabs
+  const getNoteHeight = (content: string): string => {
+    const contentLength = content?.length || 0
+    
+    if (contentLength === 0 || contentLength < TEXT_LENGTH_THRESHOLD) {
+      return `${MIN_NOTE_HEIGHT}px`
+    } else {
+      // Calculate adaptive height based on content length
+      // More responsive scaling: base height + additional height for longer content
+      const adaptiveHeight = Math.min(
+        MIN_NOTE_HEIGHT + (contentLength - TEXT_LENGTH_THRESHOLD) * 0.8,
+        MAX_NOTE_HEIGHT
+      )
+      return `${adaptiveHeight}px`
+    }
+  }
 
   // Quando si entra in modalità editing, salvo il valore originale
   const handleEnterEdit = (sessionId: string) => {
@@ -797,7 +820,7 @@ function AnalysisPageInner() {
       </div>
 
               {/* Main Content */}
-        <div className={`w-full py-8 ${sidebarOpen ? 'lg:pl-0 lg:pr-8' : 'px-4 sm:px-6 lg:pl-0 lg:pr-8'}`}>
+        <div className={`w-full py-8 ${sidebarOpen ? 'px-0' : 'px-4 sm:px-6 lg:pl-0 lg:pr-8'} ${notesOpen ? 'lg:pr-0' : 'lg:pr-0'} ${!notesOpen ? 'lg:pr-0' : ''}`}>
         {sessions.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -822,29 +845,38 @@ function AnalysisPageInner() {
               <div className={`transition-all duration-300 ease-in-out ${
                 sidebarOpen ? 'opacity-100' : 'opacity-0 lg:opacity-100'
               }`}>
-                <Card className={`h-[900px] ${!sidebarOpen ? 'lg:w-12 lg:min-w-12 lg:max-w-12' : ''}`}>
-                  <CardHeader className={!sidebarOpen ? 'lg:p-2' : ''}>
-                    <CardTitle className="flex items-center justify-between">
-                      <div className={`flex items-center gap-2 ${!sidebarOpen ? 'lg:hidden' : ''}`}>
-                        <FileText className="h-5 w-5" />
-                        <span className={sidebarOpen ? 'block' : 'hidden lg:hidden'}>
-                          Transcribed sessions
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className="hidden lg:flex h-8 w-8 p-0"
-                        title={sidebarOpen ? "Nascondi sidebar" : "Mostra sidebar"}
-                      >
-                        {sidebarOpen ? (
+                <Card className={`${!sidebarOpen ? 'lg:w-12 lg:min-w-12 lg:max-w-12 lg:h-16' : ''}`}>
+                  <CardHeader className={!sidebarOpen ? 'lg:p-2 lg:px-2' : ''}>
+                    {sidebarOpen ? (
+                      <CardTitle className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-5 w-5" />
+                          <span>Transcribed sessions</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSidebarOpen(!sidebarOpen)}
+                          className="hidden lg:flex h-8 w-8 p-0"
+                          title="Nascondi sidebar"
+                        >
                           <ChevronLeft className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </CardTitle>
+                        </Button>
+                      </CardTitle>
+                    ) : (
+                      <CardTitle className="flex flex-col items-center justify-center h-12 space-y-1">
+                        <FileText className="h-5 w-5" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSidebarOpen(!sidebarOpen)}
+                          className="h-6 w-6 p-0"
+                          title="Mostra sidebar"
+                        >
+                          <ChevronRight className="h-3 w-3" />
+                        </Button>
+                      </CardTitle>
+                    )}
                     <div className={`flex items-center gap-2 pt-2 ${sidebarOpen ? 'block' : 'hidden lg:hidden'}`}>
                       <input
                         type="checkbox"
@@ -859,7 +891,7 @@ function AnalysisPageInner() {
                     </div>
                   </CardHeader>
                   <CardContent className={`p-0 ${!sidebarOpen ? 'lg:hidden' : ''}`}>
-                    <div className={`space-y-1 max-h-[750px] overflow-y-auto ${sidebarOpen ? 'block' : 'hidden lg:hidden'}`}>
+                    <div className={`space-y-1 max-h-[600px] overflow-y-auto ${sidebarOpen ? 'block' : 'hidden lg:hidden'}`}>
                       {sessions.map((session, index) => (
                         <div key={session.id} className="border-b last:border-b-0">
                           <div className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
@@ -868,24 +900,22 @@ function AnalysisPageInner() {
                               id={`session-${session.id}`}
                               checked={selectedSessions.has(session.id)}
                               onChange={() => handleSessionToggle(session.id)}
-                              className="rounded border-gray-300"
+                              className="rounded border-gray-300 flex-shrink-0"
                             />
                             <button
                               onClick={() => {
                                 // Toggle selezione per analisi (checkbox)
                                 handleSessionToggle(session.id)
                               }}
-                              className="flex-1 text-left p-2 rounded transition-colors hover:bg-gray-50"
+                              className="flex-1 text-left p-2 rounded transition-colors hover:bg-gray-50 flex items-center gap-2 min-h-0"
                               title="Click to select/deselect this session"
                             >
-                              <div className="flex items-center gap-2">
-                                <div className="font-medium text-sm">
-                                  {session.title}
-                                </div>
-                                {hasSessionNote(session.id) && (
-                                  <MessageSquare className="h-4 w-4 text-sky-500" />
-                                )}
+                              <div className="font-medium text-sm leading-tight">
+                                {session.title}
                               </div>
+                              {hasSessionNote(session.id) && (
+                                <MessageSquare className="h-4 w-4 text-sky-500 flex-shrink-0" />
+                              )}
                             </button>
                           </div>
                         </div>
@@ -919,10 +949,10 @@ function AnalysisPageInner() {
                                    {/* Main Sliding Analysis Panel */}
                        <div className={`transition-all duration-300 ease-in-out min-w-0 ${
                          sidebarOpen
-                           ? 'lg:col-span-6 xl:col-span-7'
-                           : 'lg:col-span-8 xl:col-span-8'
+                           ? notesOpen ? 'lg:col-span-6 xl:col-span-7' : 'lg:col-span-9 xl:col-span-9'
+                           : notesOpen ? 'lg:col-span-8 xl:col-span-8' : 'lg:col-span-10 xl:col-span-10'
                        }`}>
-              <Card className="h-[900px]">
+              <Card>
                 <CardHeader className="pb-4">
                   {/* Slide Navigation */}
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -977,7 +1007,7 @@ function AnalysisPageInner() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="h-[800px] overflow-y-auto">
+                <CardContent className="min-h-[600px] max-h-[800px] overflow-y-auto">
                   <div className="h-full">
                     {/* Slide 0: Trascrizioni */}
                     {currentSlide === 0 && (
@@ -1405,62 +1435,124 @@ function AnalysisPageInner() {
                 </CardContent>
               </Card>
             </div>
-            {/* Notes Section - ora a destra */}
+            {/* Notes Section - minimizable */}
             <div className={`transition-all duration-300 ease-in-out min-w-0 ${
-              sidebarOpen 
+              notesOpen 
                 ? 'lg:col-span-3 xl:col-span-3' 
-                : 'lg:col-span-3 xl:col-span-3'
-            }`}>
-              <div className="flex flex-col gap-4 h-full">
-                {getSelectedSessionsData().length > 0 && getSelectedSessionsData().map((session) => (
-                  <Card key={session.id} className="flex-1 min-h-0">
-                    <CardHeader className="flex-shrink-0">
-                      <CardTitle className="text-lg flex items-center gap-3">
-                        <MessageSquare className="h-5 w-5" />
-                        Note Terapeutiche - {session.title}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex-1 min-h-0 flex flex-col">
-                      {editingNotes[session.id] ? (
-                        <div className="space-y-3 flex-1 flex flex-col">
-                          <textarea
-                            value={sessionNotes[session.id] || ""}
-                            onChange={e => setSessionNotes(prev => ({ ...prev, [session.id]: e.target.value }))}
-                            placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
-                            className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            autoFocus
-                          />
-                          <div className="flex gap-2 justify-end flex-shrink-0">
-                            <Button size="sm" variant="outline" onClick={() => handleCancelEdit(session.id)}>
-                              Annulla
-                            </Button>
-                            <Button size="sm" onClick={() => handleSaveSessionNote(session.id)} disabled={savingNotes[session.id]}>
-                              <Save className="h-3 w-3 mr-1" />
-                              {savingNotes[session.id] ? "Salvataggio..." : "Salva"}
-                            </Button>
-                          </div>
+                : 'lg:col-span-1'
+            } ${!notesOpen ? 'lg:mr-0 lg:pr-0 lg:relative' : ''}`}>
+              <div className={`transition-all duration-300 ease-in-out ${
+                notesOpen ? 'opacity-100' : 'opacity-0 lg:opacity-100'
+              }`}>
+                <Card className={`${!notesOpen ? 'lg:w-12 lg:min-w-12 lg:max-w-12 lg:py-0 lg:px-0 lg:absolute lg:right-0 lg:h-16' : ''}`}>
+                  <CardHeader className={!notesOpen ? 'lg:p-2 lg:px-2' : ''}>
+                    {notesOpen ? (
+                      <CardTitle className="flex items-center justify-between">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setNotesOpen(!notesOpen)}
+                          className="hidden lg:flex h-8 w-8 p-0"
+                          title="Nascondi note"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                        <div className="flex items-center gap-2 flex-1 justify-start">
+                          <MessageSquare className="h-5 w-5" />
+                          <span>Note Terapeutiche</span>
                         </div>
-                      ) : (
-                        <div className="space-y-3 flex-1 flex flex-col">
-                          <div
-                            className="flex-1 min-h-0 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
-                            onClick={() => handleEnterEdit(session.id)}
-                            tabIndex={0}
-                            role="textbox"
-                            title="Clicca per modificare la nota"
+                      </CardTitle>
+                    ) : (
+                      <CardTitle className="flex flex-col items-center justify-center h-12 space-y-1">
+                        <MessageSquare className="h-5 w-5" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setNotesOpen(!notesOpen)}
+                          className="h-6 w-6 p-0"
+                          title="Mostra note"
+                        >
+                          <ChevronLeft className="h-3 w-3" />
+                        </Button>
+                      </CardTitle>
+                    )}
+                  </CardHeader>
+                  <CardContent className={`p-0 ${!notesOpen ? 'lg:hidden' : ''}`}>
+                    <div className={`space-y-4 ${notesOpen ? 'block' : 'hidden lg:hidden'}`}>
+                      {getSelectedSessionsData().length > 0 ? (
+                        getSelectedSessionsData().map((session) => (
+                          <Card 
+                            key={session.id} 
+                            className="flex-shrink-0"
+                            style={{ height: getNoteHeight(sessionNotes[session.id] || "") }}
                           >
-                            {sessionNotes[session.id] || (
-                              <span className="text-gray-500 italic">
-                                Qui il terapeuta può scrivere liberamente note e osservazioni
-                              </span>
-                            )}
-                          </div>
+                            <CardHeader className="flex-shrink-0">
+                              <CardTitle className="text-lg flex items-center gap-3">
+                                <MessageSquare className="h-5 w-5" />
+                                Note Terapeutiche - {session.title}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="flex-1 min-h-0 flex flex-col">
+                              {editingNotes[session.id] ? (
+                                <div className="space-y-3 flex-1 flex flex-col">
+                                  <textarea
+                                    value={sessionNotes[session.id] || ""}
+                                    onChange={e => setSessionNotes(prev => ({ ...prev, [session.id]: e.target.value }))}
+                                    placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
+                                    className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    autoFocus
+                                  />
+                                  <div className="flex gap-2 justify-end flex-shrink-0">
+                                    <Button size="sm" variant="outline" onClick={() => handleCancelEdit(session.id)}>
+                                      Annulla
+                                    </Button>
+                                    <Button size="sm" onClick={() => handleSaveSessionNote(session.id)} disabled={savingNotes[session.id]}>
+                                      <Save className="h-3 w-3 mr-1" />
+                                      {savingNotes[session.id] ? "Salvataggio..." : "Salva"}
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-3 flex-1 flex flex-col">
+                                  <div
+                                    className="flex-1 min-h-0 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
+                                    onClick={() => handleEnterEdit(session.id)}
+                                    tabIndex={0}
+                                    role="textbox"
+                                    title="Clicca per modificare la nota"
+                                  >
+                                    {sessionNotes[session.id] || (
+                                      <span className="text-gray-500 italic">
+                                        Qui il terapeuta può scrivere liberamente note e osservazioni
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))
+                      ) : (
+                        <div className="text-center text-gray-500 py-8">
+                          <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Seleziona una sessione per vedere le sue note</p>
                         </div>
                       )}
-                    </CardContent>
-                  </Card>
-                ))}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
+              {/* Mobile toggle button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setNotesOpen(!notesOpen)}
+                className="lg:hidden w-full mt-2"
+                title={notesOpen ? "Nascondi note" : "Mostra note"}
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                {notesOpen ? "Nascondi Note" : "Mostra Note"}
+              </Button>
             </div>
           </div>
         )}
