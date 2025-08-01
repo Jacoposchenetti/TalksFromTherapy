@@ -23,6 +23,17 @@ export default function PaymentSuccessPage() {
     if (type) {
       setPaymentInfo({ type, amount: amount || undefined })
     }
+
+    // Se è un nuovo abbonamento, controlla se c'è una registrazione pendente
+    if (type === 'subscription') {
+      const pendingEmail = localStorage.getItem('pendingRegistrationEmail')
+      if (pendingEmail) {
+        // Rimuovi l'email dal localStorage
+        localStorage.removeItem('pendingRegistrationEmail')
+        // L'account dovrebbe essere già stato creato dal webhook
+        console.log('Account creato per:', pendingEmail)
+      }
+    }
   }, [searchParams])
 
   if (!session) {

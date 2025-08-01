@@ -19,11 +19,11 @@ export async function POST(req: NextRequest) {
     console.log(`🧪 Manual test: Adding ${credits} credits to user ${session.user.id}`)
     
     const creditsService = new CreditsService()
-    await creditsService.addCreditsFromWebhook(
+    await creditsService.addCredits(
       session.user.id,
       credits,
-      description,
-      'manual_test_' + Date.now()
+      'purchase',
+      description
     )
 
     return NextResponse.json({ 

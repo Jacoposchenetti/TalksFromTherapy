@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Coins, History, TrendingUp, ArrowLeft, CreditCard, Gift } from "lucide-react"
 import { useCredits } from "@/hooks/useCredits"
 import { CREDIT_COSTS, CREDIT_PACKAGES } from "@/lib/credits-config"
+import SubscriptionManager from "@/components/subscription-manager"
 
 export default function CreditsPage() {
   const { data: session, status } = useSession()
@@ -54,6 +55,18 @@ export default function CreditsPage() {
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Gestione Crediti</h1>
           <p className="text-gray-600">Monitora e gestisci i tuoi crediti per le funzionalità AI</p>
+        </div>
+
+        {/* Gestione Abbonamento */}
+        <div className="mb-8">
+          <SubscriptionManager 
+            subscription={{
+              status: 'active',
+              current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              cancel_at_period_end: false
+            }}
+            onCancel={() => refresh()}
+          />
         </div>
 
         {/* Saldo attuale e statistiche */}

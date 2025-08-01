@@ -12,11 +12,11 @@ export async function testAddCredits() {
   const testDescription = 'Test manual credit addition - Pacchetto Base'
   
   try {
-    await creditsService.addCreditsFromWebhook(
+    await creditsService.addCredits(
       testUserId,
       testCredits,
-      testDescription,
-      'test_payment_12345'
+      'purchase',
+      testDescription
     )
     
     console.log(`✅ Successfully added ${testCredits} credits to user ${testUserId}`)

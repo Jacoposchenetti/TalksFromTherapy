@@ -4,7 +4,7 @@ import { headers } from 'next/headers'
 import { CreditsService } from '@/lib/credits-service'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-11-20.acacia',
+  apiVersion: '2025-06-30.basil',
 })
 
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!
@@ -35,6 +35,22 @@ export async function POST(req: NextRequest) {
         await handlePaymentSucceeded(event.data.object as Stripe.PaymentIntent)
         break
       
+      case 'invoice.payment_succeeded':
+        await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice)
+        break
+      
+      case 'customer.subscription.updated':
+        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription)
+        break
+      
+      case 'customer.subscription.deleted':
+        await handleSubscriptionCanceled(event.data.object as Stripe.Subscription)
+        break
+        
+      case 'invoice.payment_failed':
+        await handlePaymentFailed(event.data.object as Stripe.Invoice)
+        break
+      
       default:
         console.log(`Evento non gestito: ${event.type}`)
     }
@@ -57,27 +73,38 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   let userId = metadata?.userId
   let type = metadata?.type
   
-  // FALLBACK: Se non ci sono metadati, prova a recuperare l'utente dall'email
+  // Se è un abbonamento e non abbiamo userId, potrebbe essere un nuovo utente
   if (!userId && session.customer_details?.email) {
-    console.log(`🔍 No userId in metadata, trying to find user by email: ${session.customer_details.email}`)
+    console.log(`🔍 No userId in metadata, checking for new user registration: ${session.customer_details.email}`)
     
     try {
-      // Importa supabase admin per cercare l'utente
+      // Importa supabase admin per operazioni utente
       const { createClient } = await import('@supabase/supabase-js')
       const supabaseAdmin = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       )
       
-      // Query per trovare l'utente tramite l'associazione con la sessione
-      // Usiamo un approccio diverso: cerchiamo nelle transazioni recenti o nella user_credits
+      // Prima controlla se l'utente esiste già
       const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers()
-      
-      const foundUser = authUsers?.users?.find(u => u.email === session.customer_details.email)
+      const foundUser = authUsers?.users?.find(u => u.email === (session.customer_details as any)?.email)
       
       if (foundUser && !authError) {
         userId = foundUser.id
-        // Determina il tipo dal totale (amount_total è in centesimi)
+        console.log(`✅ Found existing user: ${userId}`)
+      } else if (session.amount_total === 5400) { // €54 = abbonamento
+        // Questo è un nuovo abbonamento, potrebbe essere necessario creare l'account
+        // Per ora determiniamo solo il tipo, la creazione dell'account avverrà nella success page
+        type = 'subscription'
+        console.log(`🆕 New subscription payment detected for email: ${session.customer_details.email}`)
+        
+        // Non creiamo l'account qui, ma segniamo che è un abbonamento
+        // L'account verrà creato nella pagina di successo usando i dati dal localStorage
+        return // Usciamo qui per gli abbonamenti di nuovi utenti
+      }
+      
+      if (foundUser) {
+        // Determina il tipo dal totale per utenti esistenti
         const amount = session.amount_total || 0
         if (amount === 800) { // €8 = 800 centesimi
           type = 'credits'
@@ -134,19 +161,89 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
 
 async function handleSubscriptionActivation(userId: string, session: Stripe.Checkout.Session) {
   try {
-    console.log(`🎯 Attivating subscription for user: ${userId}`)
+    console.log(`🎯 Activating subscription for user: ${userId}`)
     
-    const creditsService = new CreditsService()
-    
-    // Aggiungi 1000 crediti per l'abbonamento mensile
-    await creditsService.addCreditsFromWebhook(
-      userId, 
-      1000, 
-      'Abbonamento mensile attivato',
-      session.payment_intent as string
+    // Importa supabase admin per aggiornare lo stato abbonamento
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
     
-    console.log(`✅ Subscription activated: 1000 credits added to user ${userId}`)
+    // Ottieni i dettagli dell'abbonamento da Stripe
+    let subscriptionId = session.subscription as string
+    let currentPeriodEnd: Date
+    
+    if (subscriptionId) {
+      // È un abbonamento - ottieni i dettagli reali da Stripe
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId) as Stripe.Subscription
+      currentPeriodEnd = new Date(subscription.current_period_end * 1000) // Stripe usa timestamp Unix
+      console.log(`📅 Subscription period ends: ${currentPeriodEnd.toISOString()}`)
+    } else {
+      // Fallback: potrebbe essere un checkout one-time che crea un abbonamento
+      // In questo caso, cerca l'abbonamento del customer
+      if (session.customer) {
+        const subscriptions = await stripe.subscriptions.list({
+          customer: session.customer as string,
+          status: 'active',
+          limit: 1
+        })
+        
+        if (subscriptions.data.length > 0) {
+          const subscription = subscriptions.data[0] as Stripe.Subscription
+          subscriptionId = subscription.id
+          currentPeriodEnd = new Date(subscription.current_period_end * 1000)
+          console.log(`📅 Found subscription, period ends: ${currentPeriodEnd.toISOString()}`)
+        } else {
+          throw new Error('No active subscription found for customer')
+        }
+      } else {
+        throw new Error('No customer or subscription ID found')
+      }
+    }
+    
+    // Aggiorna lo stato dell'abbonamento nel database con i dati reali di Stripe
+    const { error: userUpdateError } = await supabaseAdmin
+      .from('users')
+      .upsert({
+        id: userId,
+        subscription_status: 'active',
+        subscription_expires_at: currentPeriodEnd.toISOString(),
+        subscription_stripe_id: subscriptionId,
+        updated_at: new Date().toISOString()
+      })
+    
+    if (userUpdateError) {
+      console.error('❌ Error updating user subscription status:', userUpdateError)
+      throw userUpdateError
+    }
+    
+    // Aggiungi 1000 crediti per l'abbonamento mensile (massimo 2000 totali)
+    const creditsService = new CreditsService()
+    
+    // Verifica i crediti attuali prima di aggiungere
+    const { data: currentCredits } = await supabaseAdmin
+      .from('user_credits')
+      .select('credits')
+      .eq('user_id', userId)
+      .single()
+    
+    const existingCredits = currentCredits?.credits || 0
+    const creditsToAdd = Math.min(1000, 2000 - existingCredits) // Non superare 2000 totali
+    
+    if (creditsToAdd > 0) {
+      await creditsService.addCredits(
+        userId, 
+        creditsToAdd, 
+        'purchase',
+        `Abbonamento mensile attivato - ${creditsToAdd} crediti aggiunti`
+      )
+      console.log(`💳 Added ${creditsToAdd} credits (existing: ${existingCredits}, new total: ${existingCredits + creditsToAdd})`)
+    } else {
+      console.log(`⚠️ No credits added - user already at maximum (${existingCredits}/2000)`)
+    }
+    
+    console.log(`✅ Subscription activated: status updated and ${creditsToAdd} credits added to user ${userId}`)
     
   } catch (error) {
     console.error('❌ Errore nell\'attivazione abbonamento:', error)
@@ -173,17 +270,246 @@ async function handleCreditsPurchase(
     const creditsService = new CreditsService()
     
     // Aggiungi i crediti acquistati
-    await creditsService.addCreditsFromWebhook(
+    await creditsService.addCredits(
       userId, 
       creditsAmount, 
-      `Acquisto pacchetto ${packageType} - ${creditsAmount} crediti`,
-      typeof paymentObject.payment_intent === 'string' ? paymentObject.payment_intent : paymentObject.id
+      'purchase',
+      `Acquisto pacchetto ${packageType} - ${creditsAmount} crediti`
     )
     
     console.log(`✅ Credits purchase completed: ${creditsAmount} credits added to user ${userId}`)
     
   } catch (error) {
     console.error('❌ Errore nell\'aggiunta crediti:', error)
+    throw error
+  }
+}
+
+async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
+  try {
+    console.log(`🚫 Processing subscription cancellation: ${subscription.id}`)
+    
+    // Importa supabase admin
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    
+    // Trova l'utente con questo subscription ID
+    const { data: users, error: findError } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('subscription_stripe_id', subscription.id)
+      .single()
+    
+    if (findError || !users) {
+      console.error('❌ User not found for subscription:', subscription.id)
+      return
+    }
+    
+    // Aggiorna lo stato dell'abbonamento
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update({
+        subscription_status: 'canceled',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', users.id)
+    
+    if (updateError) {
+      console.error('❌ Error updating subscription status:', updateError)
+      throw updateError
+    }
+    
+    console.log(`✅ Subscription canceled for user: ${users.id}`)
+    
+  } catch (error) {
+    console.error('❌ Error handling subscription cancellation:', error)
+    throw error
+  }
+}
+
+async function handlePaymentFailed(invoice: Stripe.Invoice) {
+  try {
+    console.log(`💸 Processing payment failed: ${invoice.id}`)
+    
+    // Importa supabase admin
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    
+    // Trova l'utente con questo subscription ID
+    const { data: users, error: findError } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('subscription_stripe_id', (invoice as any).subscription)
+      .single()
+    
+    if (findError || !users) {
+      console.error('❌ User not found for failed payment:', (invoice as any).subscription)
+      return
+    }
+    
+    // Aggiorna lo stato dell'abbonamento a expired
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update({
+        subscription_status: 'expired',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', users.id)
+    
+    if (updateError) {
+      console.error('❌ Error updating subscription status after failed payment:', updateError)
+      throw updateError
+    }
+    
+    console.log(`✅ User subscription marked as expired due to failed payment: ${users.id}`)
+    
+  } catch (error) {
+    console.error('❌ Error handling payment failure:', error)
+    throw error
+  }
+}
+
+async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
+  try {
+    console.log(`💰 Processing successful invoice payment: ${invoice.id}`)
+    
+    // Questo evento si verifica per i rinnovi automatici
+    if (!(invoice as any).subscription) {
+      console.log('⚠️ Invoice not related to subscription, skipping')
+      return
+    }
+    
+    // Ottieni i dettagli dell'abbonamento
+    const subscription = await stripe.subscriptions.retrieve((invoice as any).subscription as string) as Stripe.Subscription
+    
+    // Importa supabase admin
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    
+    // Trova l'utente con questo subscription ID
+    const { data: users, error: findError } = await supabaseAdmin
+      .from('users')
+      .select('id, name')
+      .eq('subscription_stripe_id', subscription.id)
+      .single()
+    
+    if (findError || !users) {
+      console.error('❌ User not found for subscription renewal:', subscription.id)
+      return
+    }
+    
+    // Aggiorna la data di scadenza con il nuovo periodo
+    const newPeriodEnd = new Date(subscription.current_period_end * 1000)
+    
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update({
+        subscription_status: 'active',
+        subscription_expires_at: newPeriodEnd.toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', users.id)
+    
+    if (updateError) {
+      console.error('❌ Error updating subscription renewal:', updateError)
+      throw updateError
+    }
+    
+    // Aggiungi crediti per il rinnovo (1000 crediti, massimo 2000 totali)
+    const creditsService = new CreditsService()
+    
+    // Verifica i crediti attuali prima di aggiungere
+    const { data: currentCredits } = await supabaseAdmin
+      .from('user_credits')
+      .select('credits')
+      .eq('user_id', users.id)
+      .single()
+    
+    const existingCredits = currentCredits?.credits || 0
+    const creditsToAdd = Math.min(1000, 2000 - existingCredits) // Non superare 2000 totali
+    
+    if (creditsToAdd > 0) {
+      await creditsService.addCredits(
+        users.id, 
+        creditsToAdd, 
+        'purchase',
+        `Rinnovo automatico abbonamento - ${creditsToAdd} crediti aggiunti`
+      )
+      console.log(`💳 Renewal: Added ${creditsToAdd} credits (existing: ${existingCredits}, new total: ${existingCredits + creditsToAdd})`)
+    } else {
+      console.log(`⚠️ Renewal: No credits added - user already at maximum (${existingCredits}/2000)`)
+    }
+    
+    console.log(`✅ Subscription renewed for user: ${users.id} (${users.name}). New period ends: ${newPeriodEnd.toISOString()}. Credits added: ${creditsToAdd}`)
+    
+  } catch (error) {
+    console.error('❌ Error handling invoice payment succeeded:', error)
+    throw error
+  }
+}
+
+async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
+  try {
+    console.log(`🔄 Processing subscription update: ${subscription.id}`)
+    
+    // Importa supabase admin
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    
+    // Trova l'utente con questo subscription ID
+    const { data: users, error: findError } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('subscription_stripe_id', subscription.id)
+      .single()
+    
+    if (findError || !users) {
+      console.error('❌ User not found for subscription update:', subscription.id)
+      return
+    }
+    
+    // Aggiorna lo stato basato sullo stato di Stripe
+    let newStatus = 'inactive'
+    if (subscription.status === 'active') {
+      newStatus = 'active'
+    } else if (subscription.status === 'canceled') {
+      newStatus = 'canceled'
+    } else if (subscription.status === 'past_due' || subscription.status === 'unpaid') {
+      newStatus = 'expired'
+    }
+    
+    const newPeriodEnd = new Date(subscription.current_period_end * 1000)
+    
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update({
+        subscription_status: newStatus,
+        subscription_expires_at: newPeriodEnd.toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', users.id)
+    
+    if (updateError) {
+      console.error('❌ Error updating subscription status:', updateError)
+      throw updateError
+    }
+    
+    console.log(`✅ Subscription updated for user: ${users.id}. Status: ${newStatus}, Period ends: ${newPeriodEnd.toISOString()}`)
+    
+  } catch (error) {
+    console.error('❌ Error handling subscription update:', error)
     throw error
   }
 }

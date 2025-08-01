@@ -111,33 +111,6 @@ export class CreditsService {
   }
 
   /**
-   * WEBHOOK: Aggiunge crediti da pagamento Stripe (bypass RLS)
-   */
-  async addCreditsFromWebhook(
-    userId: string, 
-    amount: number, 
-    description: string,
-    stripePaymentId?: string
-  ): Promise<void> {
-    console.log(`🔄 Webhook: Adding ${amount} credits to user ${userId}`)
-    
-    const { error } = await this.supabaseAdmin.rpc('add_credits_atomic', {
-      p_user_id: userId,
-      p_amount: amount,
-      p_type: 'purchase' as TransactionType,
-      p_description: `[STRIPE] ${description}`,
-      p_stripe_payment_intent_id: stripePaymentId
-    })
-
-    if (error) {
-      console.error('❌ Webhook credit addition failed:', error)
-      throw new Error(`Failed to add credits via webhook: ${error.message}`)
-    }
-
-    console.log(`✅ Webhook: Successfully added ${amount} credits to user ${userId}`)
-  }
-
-  /**
    * Controlla se l'utente ha crediti sufficienti per un'operazione
    */
   async hasEnoughCredits(userId: string, feature: CreditFeature): Promise<boolean> {

@@ -9,6 +9,7 @@ import { Users, FileAudio, Plus, BarChart3, HelpCircle, Zap, Mail, Coins } from 
 import GuidedTour from "@/components/guided-tour"
 import { useTour, dashboardTourSteps } from "@/hooks/useTour"
 import { useCredits } from "@/hooks/useCredits"
+import SubscriptionGuard from "@/components/SubscriptionGuard"
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
@@ -127,26 +128,27 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <div data-tour="dashboard-header" className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-              <p className="text-gray-600">Welcome, {session.user?.name}</p>
+    <SubscriptionGuard>
+      <div className="bg-gray-50 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-8">
+            <div data-tour="dashboard-header" className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+                <p className="text-gray-600">Welcome, {session.user?.name}</p>
+              </div>
+              
+              {/* Tour button */}
+              <Button
+                onClick={startTour}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <Zap className="h-4 w-4" />
+                Tour guidato
+              </Button>
             </div>
-            
-            {/* Tour button */}
-            <Button
-              onClick={startTour}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <Zap className="h-4 w-4" />
-              Tour guidato
-            </Button>
-          </div>
-        </div>        <div data-tour="stats-cards" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          </div>        <div data-tour="stats-cards" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push("/patients")}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Patients</CardTitle>
@@ -257,5 +259,6 @@ export default function DashboardPage() {
         />
       </div>
     </div>
+    </SubscriptionGuard>
   )
 }

@@ -7,23 +7,136 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { Checkbox } from "@/components/ui/checkbox"
 import { CheckCircle, Star, Zap } from "lucide-react"
+import Link from "next/link"
+import { getStripe } from "@/lib/stripe"
 
 export default function SignUpPage() {
-  const [email, setEmail] = useState('')
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    licenseNumber: '',
+    acceptTerms: false,
+    acceptPrivacy: false
+  })
+  const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubscriptionSignup = () => {
-    if (!email) {
-      alert('Inserisci la tua email prima di procedere')
+  const handleInputChange = (e) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+    // Rimuovi l'errore quando l'utente inizia a digitare
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }))
+    }
+  }
+
+  const handleCheckboxChange = (name, checked) => {
+    setFormData(prev => ({
+      ...prev,
+      [name]: checked
+    }))
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }))
+    }
+  }
+
+  const validateForm = () => {
+    const newErrors = {}
+
+    if (!formData.name.trim()) {
+      newErrors.name = 'Il nome è obbligatorio'
+    }
+
+    if (!formData.email.trim()) {
+      newErrors.email = 'L\'email è obbligatoria'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Formato email non valido'
+    }
+
+    if (!formData.password) {
+      newErrors.password = 'La password è obbligatoria'
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'La password deve essere di almeno 8 caratteri'
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Le password non coincidono'
+    }
+
+    if (!formData.acceptTerms) {
+      newErrors.acceptTerms = 'Devi accettare i termini di servizio'
+    }
+
+    if (!formData.acceptPrivacy) {
+      newErrors.acceptPrivacy = 'Devi accettare la privacy policy'
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSubscriptionSignup = async () => {
+    if (!validateForm()) {
       return
     }
     
-    // Salva l'email nel localStorage per il post-payment
-    localStorage.setItem('pendingRegistrationEmail', email)
+    setIsLoading(true)
     
-    // Apri Stripe checkout per abbonamento
-    window.open(process.env.NEXT_PUBLIC_STRIPE_SUBSCRIPTION_LINK + `?prefilled_email=${encodeURIComponent(email)}`, '_blank')
+    try {
+      // Salva i dati nel localStorage per recuperarli dopo il pagamento
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('registrationData', JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          licenseNumber: formData.licenseNumber,
+          termsAccepted: formData.acceptTerms,
+          privacyAccepted: formData.acceptPrivacy,
+          timestamp: Date.now()
+        }))
+      }
+
+      // Crea il link di pagamento Stripe
+      const stripe = await getStripe()
+      if (!stripe) throw new Error('Stripe non caricato')
+
+      // Reindirizza a Stripe Checkout
+      const { error } = await stripe.redirectToCheckout({
+        lineItems: [
+          {
+            price: process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID || 'price_1QIzTPIvCOcSRSrLZKHpDRVG', // ID del tuo piano mensile
+            quantity: 1,
+          },
+        ],
+        mode: 'subscription',
+        successUrl: `${window.location.origin}/signup/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${window.location.origin}/signup`,
+        customerEmail: formData.email,
+      })
+
+      if (error) {
+        console.error('Stripe error:', error)
+        throw new Error(error.message || 'Errore nel processo di pagamento')
+      }
+    } catch (error) {
+      console.error('Subscription signup error:', error)
+      alert(`Errore: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -88,23 +201,109 @@ export default function SignUpPage() {
 
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="name">Nome Completo *</Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    type="text"
+                    placeholder="Il tuo nome completo"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    className={errors.name ? 'border-red-500' : ''}
+                  />
+                  {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+                </div>
+
+                <div>
+                  <Label htmlFor="email">Email *</Label>
                   <Input
                     id="email"
+                    name="email"
                     type="email"
                     placeholder="la-tua-email@esempio.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    className={errors.email ? 'border-red-500' : ''}
                   />
+                  {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+                </div>
+
+                <div>
+                  <Label htmlFor="licenseNumber">Numero Albo Professionale (opzionale)</Label>
+                  <Input
+                    id="licenseNumber"
+                    name="licenseNumber"
+                    type="text"
+                    placeholder="Es. 12345"
+                    value={formData.licenseNumber}
+                    onChange={handleInputChange}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="password">Password *</Label>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    placeholder="Almeno 8 caratteri"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className={errors.password ? 'border-red-500' : ''}
+                  />
+                  {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+                </div>
+
+                <div>
+                  <Label htmlFor="confirmPassword">Conferma Password *</Label>
+                  <Input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type="password"
+                    placeholder="Ripeti la password"
+                    value={formData.confirmPassword}
+                    onChange={handleInputChange}
+                    className={errors.confirmPassword ? 'border-red-500' : ''}
+                  />
+                  {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>}
+                </div>
+
+                <div className="space-y-3 pt-4 border-t">
+                  <div className="flex items-start space-x-3">
+                    <Checkbox 
+                      id="acceptTerms"
+                      checked={formData.acceptTerms}
+                      onCheckedChange={(checked) => handleCheckboxChange('acceptTerms', checked)}
+                      className="mt-1 flex-shrink-0"
+                    />
+                    <div className="text-sm leading-relaxed">
+                      Accetto i <Link href="/terms" className="text-blue-600 hover:text-blue-800 underline">Termini di Servizio</Link> e autorizzo il trattamento dei miei dati professionali per fornire il servizio di trascrizione.
+                    </div>
+                  </div>
+                  {errors.acceptTerms && <p className="text-red-500 text-sm">{errors.acceptTerms}</p>}
+
+                  <div className="flex items-start space-x-3">
+                    <Checkbox 
+                      id="acceptPrivacy"
+                      checked={formData.acceptPrivacy}
+                      onCheckedChange={(checked) => handleCheckboxChange('acceptPrivacy', checked)}
+                      className="mt-1 flex-shrink-0"
+                    />
+                    <div className="text-sm leading-relaxed">
+                      Ho letto e accetto la <Link href="/privacy" className="text-blue-600 hover:text-blue-800 underline">Privacy Policy</Link> e consento al trattamento dei dati personali per i servizi di trascrizione terapeutica.
+                    </div>
+                  </div>
+                  {errors.acceptPrivacy && <p className="text-red-500 text-sm">{errors.acceptPrivacy}</p>}
                 </div>
 
                 <Button 
                   onClick={handleSubscriptionSignup}
                   className="w-full bg-blue-600 hover:bg-blue-700"
                   size="lg"
+                  disabled={isLoading}
                 >
                   <Zap className="h-5 w-5 mr-2" />
-                  Inizia Abbonamento Premium
+                  {isLoading ? 'Elaborazione...' : 'Procedi al Pagamento'}
                 </Button>
               </div>
             </CardContent>
