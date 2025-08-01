@@ -1123,86 +1123,61 @@ Rispondi SOLO con JSON:
           const isPatientContent = /^(PAZIENTE:|P:|Paziente:)/gi.test(part);
           
           if (isPatientContent && content) {
-            // CERCA MATCH PIÙ FLESSIBILI
-            let bestTopicId: number | null = null;
-            let bestConfidence = 0;
+            // MAPPING GRANULARE: Processa ogni frase individualmente
+            const sentences = content.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 5);
             
-            // Normalizza il contenuto per il confronto
-            const normalizedContent = content.toLowerCase().trim();
-            
-            // Prima prova: ricerca esatta
-            for (const segment of patientSegments) {
-              if (segment.topic_id === null) continue;
-              
-              const normalizedSegment = segment.text.toLowerCase().trim();
-              
-              // Match esatto
-              if (normalizedContent === normalizedSegment) {
-                bestTopicId = segment.topic_id;
-                bestConfidence = segment.confidence;
-                break;
-              }
-            }
-            
-            // Se non hai trovato match esatti, prova con match parziali
-            if (bestTopicId === null) {
-              for (const segment of patientSegments) {
-                if (segment.topic_id === null) continue;
+            if (sentences.length > 0) {
+              // Processa ogni frase individualmente
+              for (let j = 0; j < sentences.length; j++) {
+                const sentence = sentences[j];
+                let sentenceTopicId: number | null = null;
+                let sentenceConfidence = 0;
                 
-                const normalizedSegment = segment.text.toLowerCase().trim();
-                
-                // Match contenuto (il segmento è contenuto nel contenuto)
-                if (normalizedContent.includes(normalizedSegment) && normalizedSegment.length > 15) {
-                  if (segment.confidence > bestConfidence) {
-                    bestTopicId = segment.topic_id;
-                    bestConfidence = segment.confidence;
-                  }
-                }
-              }
-            }
-            
-            // Se ancora non hai trovato match, prova con frasi più piccole
-            if (bestTopicId === null) {
-              // Dividi il contenuto in frasi più piccole
-              const sentences = content.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10);
-              
-              for (const sentence of sentences) {
-                const normalizedSentence = sentence.toLowerCase().trim();
-                
+                // Cerca il topic per questa frase specifica
                 for (const segment of patientSegments) {
                   if (segment.topic_id === null) continue;
                   
                   const normalizedSegment = segment.text.toLowerCase().trim();
+                  const normalizedSentence = sentence.toLowerCase().trim();
                   
                   // Match esatto per frase
                   if (normalizedSentence === normalizedSegment) {
-                    if (segment.confidence > bestConfidence) {
-                      bestTopicId = segment.topic_id;
-                      bestConfidence = segment.confidence;
+                    sentenceTopicId = segment.topic_id;
+                    sentenceConfidence = segment.confidence;
+                    break;
+                  }
+                  
+                  // Match parziale (la frase contiene il segmento)
+                  if (normalizedSentence.includes(normalizedSegment) && normalizedSegment.length > 10) {
+                    if (segment.confidence > sentenceConfidence) {
+                      sentenceTopicId = segment.topic_id;
+                      sentenceConfidence = segment.confidence;
                     }
                   }
                   
-                  // Match parziale per frase
-                  if (normalizedSentence.includes(normalizedSegment) && normalizedSegment.length > 10) {
-                    if (segment.confidence > bestConfidence) {
-                      bestTopicId = segment.topic_id;
-                      bestConfidence = segment.confidence;
+                  // Match inverso (il segmento contiene la frase)
+                  if (normalizedSegment.includes(normalizedSentence) && normalizedSentence.length > 10) {
+                    if (segment.confidence > sentenceConfidence) {
+                      sentenceTopicId = segment.topic_id;
+                      sentenceConfidence = segment.confidence;
                     }
                   }
                 }
+                
+                // Aggiungi la frase con il suo topic
+                fullSegments.push({
+                  text: sentence + (j < sentences.length - 1 ? '. ' : ''),
+                  topic_id: sentenceTopicId,
+                  confidence: sentenceConfidence
+                });
               }
-            }
-            
-            // Aggiungi il contenuto con il topic trovato
-            fullSegments.push({
-              text: content,
-              topic_id: bestTopicId,
-              confidence: bestConfidence
-            });
-            
-            // Debug logging per il mapping
-            if (bestTopicId !== null) {
-              console.log('🎨 [Mapping] Topic assegnato:', bestTopicId, 'confidence:', bestConfidence, 'text:', content.substring(0, 50) + '...');
+            } else {
+              // Se non ci sono frasi valide, aggiungi il contenuto come unico segmento
+              fullSegments.push({
+                text: content,
+                topic_id: null,
+                confidence: 0
+              });
             }
           } else {
             // Contenuto del terapeuta o altro
