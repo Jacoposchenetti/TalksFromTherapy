@@ -52,6 +52,7 @@ function AnalysisPageInner() {
   const [currentSlide, setCurrentSlide] = useState(0) // 0: Trascrizioni, 1: Topic Modelling, 2: Sentiment Analysis, 3: Semantic Frame
   const [sidebarOpen, setSidebarOpen] = useState(true) // Sidebar visibility state
   const [notesOpen, setNotesOpen] = useState(true) // Notes tab visibility state
+  const [currentNoteSessionIndex, setCurrentNoteSessionIndex] = useState(0) // Current session index for notes navigation
   
   // Semantic Frame Analysis state
   const [targetWord, setTargetWord] = useState("")
@@ -732,6 +733,33 @@ function AnalysisPageInner() {
       return index;
     });
   }
+
+  // Navigation functions for notes
+  const goToPreviousNote = () => {
+    const selectedSessions = getSelectedSessionsData()
+    if (selectedSessions.length > 0) {
+      setCurrentNoteSessionIndex(prev => 
+        prev > 0 ? prev - 1 : selectedSessions.length - 1
+      )
+    }
+  }
+
+  const goToNextNote = () => {
+    const selectedSessions = getSelectedSessionsData()
+    if (selectedSessions.length > 0) {
+      setCurrentNoteSessionIndex(prev => 
+        prev < selectedSessions.length - 1 ? prev + 1 : 0
+      )
+    }
+  }
+
+  // Reset note session index when selected sessions change
+  useEffect(() => {
+    const selectedSessions = getSelectedSessionsData()
+    if (currentNoteSessionIndex >= selectedSessions.length) {
+      setCurrentNoteSessionIndex(0)
+    }
+  }, [selectedSessions, currentNoteSessionIndex])
 
   // Reset lastLoadedSlide quando cambia la selezione delle sessioni
   useEffect(() => {
@@ -1554,58 +1582,87 @@ function AnalysisPageInner() {
                   <CardContent className={`p-0 ${!notesOpen ? 'lg:hidden' : ''}`}>
                     <div className={`space-y-4 ${notesOpen ? 'block' : 'hidden lg:hidden'}`}>
                       {getSelectedSessionsData().length > 0 ? (
-                        getSelectedSessionsData().map((session) => (
-                          <Card 
-                            key={session.id} 
-                            className="flex-shrink-0"
-                            style={{ height: getNoteHeight(sessionNotes[session.id] || "") }}
-                          >
-                            <CardHeader className="flex-shrink-0">
-                              <CardTitle className="text-lg flex items-center gap-3">
-                                <MessageSquare className="h-5 w-5" />
-                                Note Terapeutiche - {session.title}
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="flex-1 min-h-0 flex flex-col">
-                              {editingNotes[session.id] ? (
-                                <div className="space-y-3 flex-1 flex flex-col">
-                                  <textarea
-                                    value={sessionNotes[session.id] || ""}
-                                    onChange={e => setSessionNotes(prev => ({ ...prev, [session.id]: e.target.value }))}
-                                    placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
-                                    className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                    autoFocus
-                                  />
-                                  <div className="flex gap-2 justify-end flex-shrink-0">
-                                    <Button size="sm" variant="outline" onClick={() => handleCancelEdit(session.id)}>
-                                      Annulla
-                                    </Button>
-                                    <Button size="sm" onClick={() => handleSaveSessionNote(session.id)} disabled={savingNotes[session.id]}>
-                                      <Save className="h-3 w-3 mr-1" />
-                                      {savingNotes[session.id] ? "Salvataggio..." : "Salva"}
-                                    </Button>
+                        (() => {
+                          const selectedSessions = getSelectedSessionsData()
+                          const currentSession = selectedSessions[currentNoteSessionIndex]
+                          
+                          return (
+                            <Card 
+                              key={currentSession.id} 
+                              className="flex-shrink-0"
+                              style={{ height: getNoteHeight(sessionNotes[currentSession.id] || "") }}
+                            >
+                              <CardHeader className="flex-shrink-0">
+                                <CardTitle className="text-lg flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <MessageSquare className="h-5 w-5" />
+                                    Note Terapeutiche - {currentSession.title}
                                   </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-3 flex-1 flex flex-col">
-                                  <div
-                                    className="flex-1 min-h-0 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
-                                    onClick={() => handleEnterEdit(session.id)}
-                                    tabIndex={0}
-                                    role="textbox"
-                                    title="Clicca per modificare la nota"
-                                  >
-                                    {sessionNotes[session.id] || (
-                                      <span className="text-gray-500 italic">
-                                        Qui il terapeuta può scrivere liberamente note e osservazioni
-                                      </span>
-                                    )}
+                                  {selectedSessions.length > 1 && (
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={goToPreviousNote}
+                                        className="h-8 w-8 p-0"
+                                        title="Sessione precedente"
+                                      >
+                                        <ChevronLeft className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={goToNextNote}
+                                        className="h-8 w-8 p-0"
+                                        title="Sessione successiva"
+                                      >
+                                        <ChevronRight className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  )}
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent className="flex-1 min-h-0 flex flex-col">
+                                {editingNotes[currentSession.id] ? (
+                                  <div className="space-y-3 flex-1 flex flex-col">
+                                    <textarea
+                                      value={sessionNotes[currentSession.id] || ""}
+                                      onChange={e => setSessionNotes(prev => ({ ...prev, [currentSession.id]: e.target.value }))}
+                                      placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
+                                      className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                      autoFocus
+                                    />
+                                    <div className="flex gap-2 justify-end flex-shrink-0">
+                                      <Button size="sm" variant="outline" onClick={() => handleCancelEdit(currentSession.id)}>
+                                        Annulla
+                                      </Button>
+                                      <Button size="sm" onClick={() => handleSaveSessionNote(currentSession.id)} disabled={savingNotes[currentSession.id]}>
+                                        <Save className="h-3 w-3 mr-1" />
+                                        {savingNotes[currentSession.id] ? "Salvataggio..." : "Salva"}
+                                      </Button>
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        ))
+                                ) : (
+                                  <div className="space-y-3 flex-1 flex flex-col">
+                                    <div
+                                      className="flex-1 min-h-0 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
+                                      onClick={() => handleEnterEdit(currentSession.id)}
+                                      tabIndex={0}
+                                      role="textbox"
+                                      title="Clicca per modificare la nota"
+                                    >
+                                      {sessionNotes[currentSession.id] || (
+                                        <span className="text-gray-500 italic">
+                                          Qui il terapeuta può scrivere liberamente note e osservazioni
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+                          )
+                        })()
                       ) : (
                         <div className="text-center text-gray-500 py-8">
                           <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
