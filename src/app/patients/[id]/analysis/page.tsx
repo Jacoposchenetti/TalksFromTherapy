@@ -53,7 +53,6 @@ function AnalysisPageInner() {
   const [sidebarOpen, setSidebarOpen] = useState(true) // Sidebar visibility state
   const [notesOpen, setNotesOpen] = useState(true) // Notes tab visibility state
   const [currentNoteSessionIndex, setCurrentNoteSessionIndex] = useState(0) // Current session index for notes navigation
-  const [summaryOpen, setSummaryOpen] = useState(true) // Summary tab visibility state
   
   // Semantic Frame Analysis state
   const [targetWord, setTargetWord] = useState("")
@@ -96,6 +95,9 @@ function AnalysisPageInner() {
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
   // Per gestire il revert, salvo il valore originale della nota quando si entra in modalità editing
   const [originalNotes, setOriginalNotes] = useState<Record<string, string>>({})
+  
+  // Stato per i riassunti di tutte le sessioni
+  const [sessionSummaries, setSessionSummaries] = useState<Record<string, string>>({})
 
   // Constants for adaptive height logic
   const MIN_NOTE_HEIGHT = 200 // Minimum height in pixels for notes with no text or short text
@@ -261,34 +263,41 @@ function AnalysisPageInner() {
   // Carica le note di tutte le sessioni selezionate ogni volta che cambia la selezione
   // Carica le note di tutte le sessioni quando vengono caricate le sessioni
   useEffect(() => {
-    if (sessions.length === 0) {
-      setSessionNotes({})
-      setEditingNotes({})
-      setSavingNotes({})
-      return
-    }
     const fetchAllNotes = async () => {
-      const notesObj: Record<string, string> = {}
-      await Promise.all(sessions.map(async (session) => {
-        try {
-          const response = await fetch(`/api/notes/${session.id}`)
-          if (response.ok) {
-            const result = await response.json()
-            const noteData = result.data || result
-            notesObj[session.id] = noteData.content || ""
-          } else {
-            notesObj[session.id] = ""
+      if (selectedSessions.size === 0) return
+
+      try {
+        const selectedSessionsData = getSelectedSessionsData()
+        const notesPromises = selectedSessionsData.map(async (session) => {
+          try {
+            const response = await fetch(`/api/notes/${session.id}`)
+            if (response.ok) {
+              const result = await response.json()
+              const noteData = result.data || result
+              return { sessionId: session.id, content: noteData.content || "" }
+            } else {
+              console.warn(`No note found for session ${session.id}`)
+              return { sessionId: session.id, content: "" }
+            }
+          } catch (error) {
+            console.error(`Error fetching note for session ${session.id}:`, error)
+            return { sessionId: session.id, content: "" }
           }
-        } catch {
-          notesObj[session.id] = ""
-        }
-      }))
-      setSessionNotes(notesObj)
-      setEditingNotes({})
-      setSavingNotes({})
+        })
+
+        const notesResults = await Promise.all(notesPromises)
+        const notesMap: Record<string, string> = {}
+        notesResults.forEach(result => {
+          notesMap[result.sessionId] = result.content
+        })
+        setSessionNotes(notesMap)
+      } catch (error) {
+        console.error('Error fetching notes:', error)
+      }
     }
     fetchAllNotes()
-  }, [sessions])
+    fetchAllSummaries()
+  }, [sessions, selectedSessions])
 
 
 
@@ -377,20 +386,23 @@ function AnalysisPageInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: sessionNotes[sessionId] })
       })
+      
       if (response.ok) {
+        const result = await response.json()
+        
         setEditingNotes(prev => ({ ...prev, [sessionId]: false }))
         // Ricarica la nota aggiornata
-        const result = await response.json()
         const noteData = result.data || result
         const updatedContent = noteData.content || ""
         setSessionNotes(prev => ({ ...prev, [sessionId]: updatedContent }))
       } else {
         // Gestione errore
-        console.error('Errore nel salvataggio della nota')
+        const errorText = await response.text()
+        console.error('Error saving note - status:', response.status, 'response:', errorText)
       }
     } catch (error) {
       // Gestione errore
-      console.error('Errore nel salvataggio della nota:', error)
+      console.error('Error saving note:', error)
     } finally {
       setSavingNotes(prev => ({ ...prev, [sessionId]: false }))
     }
@@ -847,6 +859,33 @@ function AnalysisPageInner() {
       }
     } catch (error) {
       console.error('[handleSentimentAnalysisComplete] Errore durante il salvataggio:', error)
+    }
+  }
+
+  // Funzione per caricare i riassunti di tutte le sessioni selezionate
+  const fetchAllSummaries = async () => {
+    if (selectedSessions.size === 0) return
+
+    try {
+      const selectedSessionsData = getSelectedSessionsData()
+      const summariesPromises = selectedSessionsData.map(async (session) => {
+        try {
+          // Per ora, restituiamo un placeholder. In futuro, qui chiameremo l'API per i riassunti
+          return { sessionId: session.id, content: "" }
+        } catch (error) {
+          console.error(`Error fetching summary for session ${session.id}:`, error)
+          return { sessionId: session.id, content: "" }
+        }
+      })
+
+      const summariesResults = await Promise.all(summariesPromises)
+      const summariesMap: Record<string, string> = {}
+      summariesResults.forEach(result => {
+        summariesMap[result.sessionId] = result.content
+      })
+      setSessionSummaries(summariesMap)
+    } catch (error) {
+      console.error('Error fetching summaries:', error)
     }
   }
 
@@ -1535,7 +1574,7 @@ function AnalysisPageInner() {
               notesOpen 
                 ? 'lg:col-span-3 xl:col-span-3' 
                 : 'lg:col-span-1'
-            } ${!notesOpen ? 'lg:mr-0 lg:pr-0 lg:relative' : ''}`}>
+            }`}>
               <div className={`transition-all duration-300 ease-in-out ${
                 notesOpen ? 'opacity-100' : 'opacity-0 lg:opacity-100'
               }`}>
@@ -1552,9 +1591,33 @@ function AnalysisPageInner() {
                         >
                           <ChevronRight className="h-4 w-4" />
                         </Button>
-                        <div className="flex items-center gap-2 flex-1 justify-start">
-                          <MessageSquare className="h-5 w-5" />
-                          <span>Note Terapeutiche</span>
+                        <div className="flex items-center gap-2 flex-1 justify-between">
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="h-5 w-5" />
+                            <span>Note e Riassunto - {getSelectedSessionsData().length > 0 ? getSelectedSessionsData()[currentNoteSessionIndex]?.title : ''}</span>
+                          </div>
+                          {getSelectedSessionsData().length > 1 && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={goToPreviousNote}
+                                className="h-6 w-6 p-0"
+                                title="Sessione precedente"
+                              >
+                                <ChevronLeft className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={goToNextNote}
+                                className="h-6 w-6 p-0"
+                                title="Sessione successiva"
+                              >
+                                <ChevronRight className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </CardTitle>
                     ) : (
@@ -1580,80 +1643,82 @@ function AnalysisPageInner() {
                           const currentSession = selectedSessions[currentNoteSessionIndex]
                           
                           return (
-                            <Card 
-                              key={currentSession.id} 
-                              className="flex-shrink-0"
-                              style={{ height: getNoteHeight(sessionNotes[currentSession.id] || "") }}
-                            >
-                              <CardHeader className="flex-shrink-0">
-                                <CardTitle className="text-lg flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <MessageSquare className="h-5 w-5" />
-                                    Note Terapeutiche - {currentSession.title}
-                                  </div>
-                                  {selectedSessions.length > 1 && (
-                                    <div className="flex items-center gap-2">
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={goToPreviousNote}
-                                        className="h-8 w-8 p-0"
-                                        title="Sessione precedente"
+                            <>
+                              <Card 
+                                key={currentSession.id} 
+                                className="flex-shrink-0"
+                                style={{ height: getNoteHeight(sessionNotes[currentSession.id] || "") }}
+                              >
+                                <CardHeader className="flex-shrink-0">
+                                  <CardTitle className="text-lg flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <MessageSquare className="h-5 w-5" />
+                                      Note
+                                    </div>
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex-1 min-h-0 flex flex-col">
+                                  {editingNotes[currentSession.id] ? (
+                                    <div className="space-y-3 flex-1 flex flex-col">
+                                      <textarea
+                                        value={sessionNotes[currentSession.id] || ""}
+                                        onChange={e => setSessionNotes(prev => ({ ...prev, [currentSession.id]: e.target.value }))}
+                                        placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
+                                        className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        autoFocus
+                                      />
+                                      <div className="flex gap-2 justify-end flex-shrink-0">
+                                        <Button size="sm" variant="outline" onClick={() => handleCancelEdit(currentSession.id)}>
+                                          Annulla
+                                        </Button>
+                                        <Button size="sm" onClick={() => handleSaveSessionNote(currentSession.id)} disabled={savingNotes[currentSession.id]}>
+                                          <Save className="h-3 w-3 mr-1" />
+                                          {savingNotes[currentSession.id] ? "Salvataggio..." : "Salva"}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3 flex-1 flex flex-col">
+                                      <div
+                                        className="flex-1 min-h-0 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
+                                        onClick={() => handleEnterEdit(currentSession.id)}
+                                        tabIndex={0}
+                                        role="textbox"
+                                        title="Clicca per modificare la nota"
                                       >
-                                        <ChevronLeft className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={goToNextNote}
-                                        className="h-8 w-8 p-0"
-                                        title="Sessione successiva"
-                                      >
-                                        <ChevronRight className="h-4 w-4" />
-                                      </Button>
+                                        {sessionNotes[currentSession.id] || (
+                                          <span className="text-gray-500 italic">
+                                            Qui il terapeuta può scrivere liberamente note e osservazioni
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   )}
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent className="flex-1 min-h-0 flex flex-col">
-                                {editingNotes[currentSession.id] ? (
+                                </CardContent>
+                              </Card>
+                              
+                              {/* Summary Module */}
+                              <Card className="flex-shrink-0">
+                                <CardHeader className="flex-shrink-0">
+                                  <CardTitle className="text-lg flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <FileText className="h-5 w-5" />
+                                      Riassunto
+                                    </div>
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex-1 min-h-0 flex flex-col">
                                   <div className="space-y-3 flex-1 flex flex-col">
                                     <textarea
-                                      value={sessionNotes[currentSession.id] || ""}
-                                      onChange={e => setSessionNotes(prev => ({ ...prev, [currentSession.id]: e.target.value }))}
-                                      placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
+                                      value={sessionSummaries[currentSession.id] || ""}
+                                      placeholder="Il riassunto della trascrizione apparirà qui..."
                                       className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                      autoFocus
+                                      readOnly
                                     />
-                                    <div className="flex gap-2 justify-end flex-shrink-0">
-                                      <Button size="sm" variant="outline" onClick={() => handleCancelEdit(currentSession.id)}>
-                                        Annulla
-                                      </Button>
-                                      <Button size="sm" onClick={() => handleSaveSessionNote(currentSession.id)} disabled={savingNotes[currentSession.id]}>
-                                        <Save className="h-3 w-3 mr-1" />
-                                        {savingNotes[currentSession.id] ? "Salvataggio..." : "Salva"}
-                                      </Button>
-                                    </div>
                                   </div>
-                                ) : (
-                                  <div className="space-y-3 flex-1 flex flex-col">
-                                    <div
-                                      className="flex-1 min-h-0 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
-                                      onClick={() => handleEnterEdit(currentSession.id)}
-                                      tabIndex={0}
-                                      role="textbox"
-                                      title="Clicca per modificare la nota"
-                                    >
-                                      {sessionNotes[currentSession.id] || (
-                                        <span className="text-gray-500 italic">
-                                          Qui il terapeuta può scrivere liberamente note e osservazioni
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              </CardContent>
-                            </Card>
+                                </CardContent>
+                              </Card>
+                            </>
                           )
                         })()
                       ) : (
@@ -1667,92 +1732,19 @@ function AnalysisPageInner() {
                 </Card>
               </div>
               
-              {/* Summary Section - below notes */}
-              <div className={`transition-all duration-300 ease-in-out ${
-                notesOpen 
-                  ? (summaryOpen ? 'mt-4 opacity-100' : 'mt-4 opacity-0 lg:opacity-100')
-                  : (summaryOpen ? 'mt-16 opacity-100' : 'mt-16 opacity-0 lg:opacity-100')
-              }`}>
-                <Card className={`${!summaryOpen ? 'lg:w-12 lg:min-w-12 lg:max-w-12 lg:py-0 lg:px-0 lg:absolute lg:right-0 lg:h-16' : ''}`}>
-                  <CardHeader className={!summaryOpen ? 'lg:p-2 lg:px-2' : ''}>
-                    {summaryOpen ? (
-                      <CardTitle className="flex items-center justify-between">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSummaryOpen(!summaryOpen)}
-                          className="hidden lg:flex h-8 w-8 p-0 mr-auto"
-                          title="Nascondi riassunto"
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                        <div className="flex items-center gap-2 flex-1 justify-start">
-                          <FileText className="h-5 w-5" />
-                          <span>Riassunto</span>
-                        </div>
-                      </CardTitle>
-                    ) : (
-                      <CardTitle className="flex flex-col items-center justify-center h-12 space-y-1 mt-0">
-                        <FileText className="h-5 w-5" />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSummaryOpen(!summaryOpen)}
-                          className="h-6 w-6 p-0 mr-auto"
-                          title="Mostra riassunto"
-                        >
-                          <ChevronLeft className="h-3 w-3" />
-                        </Button>
-                      </CardTitle>
-                    )}
-                  </CardHeader>
-                  <CardContent className={`p-0 ${!summaryOpen ? 'lg:hidden' : ''}`}>
-                    <div className={`space-y-4 ${summaryOpen ? 'block' : 'hidden lg:hidden'}`}>
-                      <Card className="flex-shrink-0">
-                        <CardHeader className="flex-shrink-0">
-                          <CardTitle className="text-lg flex items-center gap-3">
-                            <FileText className="h-5 w-5" />
-                            Riassunto Trascrizione
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex-1 min-h-0 flex flex-col">
-                          <div className="space-y-3 flex-1 flex flex-col">
-                            <textarea
-                              placeholder="Il riassunto della trascrizione apparirà qui..."
-                              className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              readOnly
-                            />
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+
               
-              {/* Mobile toggle buttons */}
-              <div className="lg:hidden space-y-2 mt-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setNotesOpen(!notesOpen)}
-                  className="w-full"
-                  title={notesOpen ? "Nascondi note" : "Mostra note"}
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  {notesOpen ? "Nascondi Note" : "Mostra Note"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSummaryOpen(!summaryOpen)}
-                  className="w-full"
-                  title={summaryOpen ? "Nascondi riassunto" : "Mostra riassunto"}
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  {summaryOpen ? "Nascondi Riassunto" : "Mostra Riassunto"}
-                </Button>
-              </div>
+              {/* Mobile toggle button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setNotesOpen(!notesOpen)}
+                className="lg:hidden w-full mt-2"
+                title={notesOpen ? "Nascondi note" : "Mostra note"}
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                {notesOpen ? "Nascondi Note e Riassunto" : "Mostra Note e Riassunto"}
+              </Button>
             </div>
           </div>
         )}
