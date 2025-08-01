@@ -401,18 +401,28 @@ function AnalysisPageInner() {
     // First, format the dialogue by adding line breaks before speaker markers
     // Handle Italian markers (Paziente:, Terapeuta:, P:, T:)
     let formattedText = text
-      .replace(/(\s+)(Paziente:|P:)/g, '<br/><br/><strong class="text-green-600">$2</strong>')
-      .replace(/(\s+)(Terapeuta:|T:)/g, '<br/><br/><strong class="text-blue-600">$2</strong>')
+      .replace(/(\s+)(Paziente:)/g, '<br/><br/><strong class="text-green-600">$2</strong>')
+      .replace(/(\s+)(Terapeuta:)/g, '<br/><br/><strong class="text-blue-600">$2</strong>')
+      .replace(/(\s+)(P:|T:)/g, '<br/><br/><strong class="text-green-600">$2</strong>')
       // Handle English markers (Patient:, Therapist:)
       .replace(/(\s+)(Patient:)/g, '<br/><br/><strong class="text-green-600">$2</strong>')
       .replace(/(\s+)(Therapist:)/g, '<br/><br/><strong class="text-blue-600">$2</strong>')
     
     // Handle the case where speaker markers appear at the beginning
     formattedText = formattedText
-      .replace(/^(Paziente:|P:)/g, '<strong class="text-green-600">$1</strong>')
-      .replace(/^(Terapeuta:|T:)/g, '<strong class="text-blue-600">$1</strong>')
+      .replace(/^(Paziente:)/g, '<strong class="text-green-600">$1</strong>')
+      .replace(/^(Terapeuta:)/g, '<strong class="text-blue-600">$1</strong>')
+      .replace(/^(P:|T:)/g, '<strong class="text-green-600">$1</strong>')
       .replace(/^(Patient:)/g, '<strong class="text-green-600">$1</strong>')
       .replace(/^(Therapist:)/g, '<strong class="text-blue-600">$1</strong>')
+    
+    // Ensure proper structure: each speaker marker should be followed by content on a new line
+    formattedText = formattedText
+      .replace(/(<strong[^>]*>Paziente:<\/strong>)([^<])/g, '$1<br/>$2')
+      .replace(/(<strong[^>]*>Terapeuta:<\/strong>)([^<])/g, '$1<br/>$2')
+      .replace(/(<strong[^>]*>P:|T:<\/strong>)([^<])/g, '$1<br/>$2')
+      .replace(/(<strong[^>]*>Patient:<\/strong>)([^<])/g, '$1<br/>$2')
+      .replace(/(<strong[^>]*>Therapist:<\/strong>)([^<])/g, '$1<br/>$2')
     
     // Then highlight search terms if provided
     if (!searchTerm.trim()) return formattedText
@@ -489,14 +499,25 @@ function AnalysisPageInner() {
     console.log('🔧 Normalizing transcript structure...');
     console.log('📝 Original transcript (first 200 chars):', transcript.substring(0, 200));
     
+    // Check if the transcript is already properly formatted
+    const hasProperStructure = /(Paziente:|Terapeuta:)\s*\n/.test(transcript);
+    
+    if (hasProperStructure) {
+      console.log('✅ Transcript already has proper structure, skipping normalization');
+      return transcript;
+    }
+    
     // Rimuovi tutti i newline e metti tutto su una riga
     let normalized = transcript.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
     
-    // Aggiungi newline prima e dopo ogni speaker marker
+    // Aggiungi newline prima e dopo ogni speaker marker per creare la struttura richiesta
+    // Formato: [interlocutore]\n[paragrafo]\n[interlocutore]\n etc
+    // Regex specifici per "Paziente:" e "Terapeuta:"
     normalized = normalized
-      .replace(/(PAZIENTE:|P:|Paziente:)/gi, '\n$1\n')
-      .replace(/(TERAPEUTA:|T:|Terapeuta:)/gi, '\n$1\n')
-      .replace(/(THERAPIST:|Therapist:)/gi, '\n$1\n');
+      .replace(/(Paziente:)/g, '\n$1\n')
+      .replace(/(Terapeuta:)/g, '\n$1\n')
+      // Fallback per altri marker
+      .replace(/(P:|T:|THERAPIST:|Therapist:)/gi, '\n$1\n');
     
     // Rimuovi newline multipli consecutivi e normalizza
     normalized = normalized
@@ -505,14 +526,27 @@ function AnalysisPageInner() {
       .trim();
     
     // Se non ci sono speaker markers, aggiungi un marker di default per il paziente
-    if (!/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi.test(normalized)) {
+    if (!/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi.test(normalized)) {
       normalized = `Paziente:\n${normalized}`;
     }
     
+    // Assicurati che la struttura sia corretta: ogni speaker marker deve essere seguito da un newline
+    // e ogni paragrafo deve essere separato da un newline
+    normalized = normalized
+      .replace(/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)([^\n])/gi, '$1\n$2')
+      .replace(/([^\n])(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi, '$1\n$2');
+    
     console.log('✅ Normalized transcript (first 200 chars):', normalized.substring(0, 200));
-    console.log('🔍 Speaker markers found:', (normalized.match(/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi) || []).length);
+    console.log('🔍 Speaker markers found:', (normalized.match(/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi) || []).length);
     
     return normalized;
+  };
+
+  // Funzione per formattare il transcript per la visualizzazione HTML
+  const formatTranscriptForDisplay = (transcript: string): string => {
+    const normalized = normalizeTranscriptStructure(transcript);
+    // Converti \n in <br/> per il rendering HTML
+    return normalized.replace(/\n/g, '<br/>');
   };
 
   // Get combined transcript
@@ -1097,8 +1131,9 @@ function AnalysisPageInner() {
                                 <div className="text-gray-700">
                                   {session.transcript ? (
                                     <div 
+                                      className="whitespace-pre-wrap"
                                       dangerouslySetInnerHTML={{
-                                        __html: highlightSearchTerm(normalizeTranscriptStructure(session.transcript), searchTerm)
+                                        __html: highlightSearchTerm(formatTranscriptForDisplay(session.transcript), searchTerm)
                                       }}
                                     />
                                   ) : (

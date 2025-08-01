@@ -917,10 +917,14 @@ Rispondi SOLO con JSON:
   const scrollToTopic = (topicId: number) => {
     console.log('🎯 scrollToTopic chiamata con topicId:', topicId)
     console.log('🎯 topicRefs.current:', topicRefs.current)
+    console.log('🎯 Chiavi disponibili in topicRefs:', Object.keys(topicRefs.current))
+    
     const el = topicRefs.current[topicId]
     console.log('🎯 Elemento trovato:', el)
+    
     if (el) {
       console.log('🎯 Scrolling to element...')
+      console.log('🎯 Elemento text content:', el.textContent?.substring(0, 100))
       
       // Trova il contenitore scrollabile
       const scrollContainer = el.closest('.overflow-y-auto')
@@ -947,6 +951,7 @@ Rispondi SOLO con JSON:
         })
       } else {
         // Fallback: usa scrollIntoView
+        console.log('🎯 Usando fallback scrollIntoView')
         el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
       
@@ -954,6 +959,7 @@ Rispondi SOLO con JSON:
       setTimeout(() => el.classList.remove('ring-2', 'ring-blue-400'), 1200)
     } else {
       console.log('❌ Nessun elemento trovato per topicId:', topicId)
+      console.log('❌ Controlla che il topic sia stato mappato correttamente nel testo')
     }
   }
 
@@ -1010,14 +1016,25 @@ Rispondi SOLO con JSON:
     console.log('🔧 [Topic Modeling] Normalizing transcript structure...');
     console.log('📝 [Topic Modeling] Original transcript (first 200 chars):', transcript.substring(0, 200));
     
+    // Check if the transcript is already properly formatted
+    const hasProperStructure = /(Paziente:|Terapeuta:)\s*\n/.test(transcript);
+    
+    if (hasProperStructure) {
+      console.log('✅ [Topic Modeling] Transcript already has proper structure, skipping normalization');
+      return transcript;
+    }
+    
     // Rimuovi tutti i newline e metti tutto su una riga
     let normalized = transcript.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
     
-    // Aggiungi newline prima e dopo ogni speaker marker
+    // Aggiungi newline prima e dopo ogni speaker marker per creare la struttura richiesta
+    // Formato: [interlocutore]\n[paragrafo]\n[interlocutore]\n etc
+    // Regex specifici per "Paziente:" e "Terapeuta:"
     normalized = normalized
-      .replace(/(PAZIENTE:|P:|Paziente:)/gi, '\n$1\n')
-      .replace(/(TERAPEUTA:|T:|Terapeuta:)/gi, '\n$1\n')
-      .replace(/(THERAPIST:|Therapist:)/gi, '\n$1\n');
+      .replace(/(Paziente:)/g, '\n$1\n')
+      .replace(/(Terapeuta:)/g, '\n$1\n')
+      // Fallback per altri marker
+      .replace(/(P:|T:|THERAPIST:|Therapist:)/gi, '\n$1\n');
     
     // Rimuovi newline multipli consecutivi e normalizza
     normalized = normalized
@@ -1026,14 +1043,27 @@ Rispondi SOLO con JSON:
       .trim();
     
     // Se non ci sono speaker markers, aggiungi un marker di default per il paziente
-    if (!/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi.test(normalized)) {
+    if (!/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi.test(normalized)) {
       normalized = `Paziente:\n${normalized}`;
     }
     
+    // Assicurati che la struttura sia corretta: ogni speaker marker deve essere seguito da un newline
+    // e ogni paragrafo deve essere separato da un newline
+    normalized = normalized
+      .replace(/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)([^\n])/gi, '$1\n$2')
+      .replace(/([^\n])(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi, '$1\n$2');
+    
     console.log('✅ [Topic Modeling] Normalized transcript (first 200 chars):', normalized.substring(0, 200));
-    console.log('🔍 [Topic Modeling] Speaker markers found:', (normalized.match(/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi) || []).length);
+    console.log('🔍 [Topic Modeling] Speaker markers found:', (normalized.match(/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi) || []).length);
     
     return normalized;
+  };
+
+  // Funzione per formattare il transcript per la visualizzazione HTML
+  const formatTranscriptForDisplay = (transcript: string): string => {
+    const normalized = normalizeTranscriptStructure(transcript);
+    // Converti \n in <br/> per il rendering HTML
+    return normalized.replace(/\n/g, '<br/>');
   };
 
   // Nuova funzione per mappare i risultati del topic modeling alla trascrizione completa
@@ -1064,7 +1094,7 @@ Rispondi SOLO con JSON:
       }];
     }
 
-    // APPROCCIO SEMPLICE: Dividi la trascrizione per speaker e cerca match esatti
+    // APPROCCIO MIGLIORATO: Dividi la trascrizione per speaker e cerca match più flessibili
     const fullSegments: TextSegment[] = [];
     
     // Pattern per identificare speaker
@@ -1093,47 +1123,55 @@ Rispondi SOLO con JSON:
           const isPatientContent = /^(PAZIENTE:|P:|Paziente:)/gi.test(part);
           
           if (isPatientContent && content) {
-            // CERCA MATCH ESATTI PRIMA
-            let foundMatch = false;
+            // CERCA MATCH PIÙ FLESSIBILI
             let bestTopicId: number | null = null;
             let bestConfidence = 0;
+            
+            // Normalizza il contenuto per il confronto
+            const normalizedContent = content.toLowerCase().trim();
             
             // Prima prova: ricerca esatta
             for (const segment of patientSegments) {
               if (segment.topic_id === null) continue;
               
-              // Normalizza i testi
-              const normalizedContent = content.toLowerCase().trim();
               const normalizedSegment = segment.text.toLowerCase().trim();
               
               // Match esatto
               if (normalizedContent === normalizedSegment) {
                 bestTopicId = segment.topic_id;
                 bestConfidence = segment.confidence;
-                foundMatch = true;
                 break;
               }
-              
-              // Match contenuto (il segmento è contenuto nel contenuto)
-              if (normalizedContent.includes(normalizedSegment) && normalizedSegment.length > 20) {
-                if (segment.confidence > bestConfidence) {
-                  bestTopicId = segment.topic_id;
-                  bestConfidence = segment.confidence;
-                  foundMatch = true;
+            }
+            
+            // Se non hai trovato match esatti, prova con match parziali
+            if (bestTopicId === null) {
+              for (const segment of patientSegments) {
+                if (segment.topic_id === null) continue;
+                
+                const normalizedSegment = segment.text.toLowerCase().trim();
+                
+                // Match contenuto (il segmento è contenuto nel contenuto)
+                if (normalizedContent.includes(normalizedSegment) && normalizedSegment.length > 15) {
+                  if (segment.confidence > bestConfidence) {
+                    bestTopicId = segment.topic_id;
+                    bestConfidence = segment.confidence;
+                  }
                 }
               }
             }
             
-            // Se non hai trovato match esatti, prova con frasi più piccole
-            if (!foundMatch) {
+            // Se ancora non hai trovato match, prova con frasi più piccole
+            if (bestTopicId === null) {
               // Dividi il contenuto in frasi più piccole
               const sentences = content.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10);
               
               for (const sentence of sentences) {
+                const normalizedSentence = sentence.toLowerCase().trim();
+                
                 for (const segment of patientSegments) {
                   if (segment.topic_id === null) continue;
                   
-                  const normalizedSentence = sentence.toLowerCase().trim();
                   const normalizedSegment = segment.text.toLowerCase().trim();
                   
                   // Match esatto per frase
@@ -1141,19 +1179,16 @@ Rispondi SOLO con JSON:
                     if (segment.confidence > bestConfidence) {
                       bestTopicId = segment.topic_id;
                       bestConfidence = segment.confidence;
-                      foundMatch = true;
                     }
                   }
                   
                   // Match parziale per frase
-                  if (normalizedSentence.includes(normalizedSegment) && normalizedSegment.length > 15) {
+                  if (normalizedSentence.includes(normalizedSegment) && normalizedSegment.length > 10) {
                     if (segment.confidence > bestConfidence) {
                       bestTopicId = segment.topic_id;
                       bestConfidence = segment.confidence;
-                      foundMatch = true;
                     }
                   }
-
                 }
               }
             }
@@ -1164,6 +1199,11 @@ Rispondi SOLO con JSON:
               topic_id: bestTopicId,
               confidence: bestConfidence
             });
+            
+            // Debug logging per il mapping
+            if (bestTopicId !== null) {
+              console.log('🎨 [Mapping] Topic assegnato:', bestTopicId, 'confidence:', bestConfidence, 'text:', content.substring(0, 50) + '...');
+            }
           } else {
             // Contenuto del terapeuta o altro
             fullSegments.push({
@@ -1184,6 +1224,16 @@ Rispondi SOLO con JSON:
         });
       }
     }
+    
+    // Debug: riassunto del mapping
+    const mappedTopics = fullSegments.filter(s => s.topic_id !== null).map(s => s.topic_id);
+    const uniqueTopics = Array.from(new Set(mappedTopics));
+    console.log('🎨 [Mapping] Riassunto:', {
+      totalSegments: fullSegments.length,
+      mappedSegments: mappedTopics.length,
+      uniqueTopics: uniqueTopics.length,
+      topics: uniqueTopics
+    });
     
     return fullSegments;
   };
@@ -1560,9 +1610,9 @@ Rispondi SOLO con JSON:
                                   key={index}
                                   ref={segment.topic_id ? (el) => {
                                     if (el && !topicRefs.current[segment.topic_id!]) {
-                                      // Salva solo il primo segmento per ogni topic_id
+                                      // Salva solo il primo segmento per ogni topic_id (prima occorrenza nel documento)
                                       topicRefs.current[segment.topic_id!] = el;
-                                      console.log('🔗 Ref assegnato per topicId:', segment.topic_id, 'elemento:', el)
+                                      console.log('🔗 Ref assegnato per topicId:', segment.topic_id, 'elemento:', el, 'indice:', index)
                                     }
                                   } : undefined}
                                   className={`inline-block p-1 rounded transition-all ${getTopicBackgroundColor(segment.topic_id)} ${segment.topic_id ? 'border-l-4 border-blue-400 font-semibold text-blue-900' : 'text-gray-800'}`}
