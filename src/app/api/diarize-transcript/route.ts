@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
 
     const { data: sessionRecord, error } = await supabase
       .from('sessions')
-      .select('id, userId, status, title, transcript')
+      .select('id, userId, status, title, transcript, patientId')
       .eq('id', sanitizedSessionId)
       .eq('userId', authResult.user!.id)
       .eq('isActive', true)
@@ -230,16 +230,18 @@ export async function POST(request: NextRequest) {
         const finalSummary = await combineSummaries(summaries)
         console.log(`✅ Riassunto finale generato: ${finalSummary.length} caratteri`)
 
-        // Save the summary to the database
+        // Save the summary to the analyses table
         const encryptedSummary = await encryptIfSensitive(finalSummary)
         const { error: summaryUpdateError } = await supabase
-          .from('sessions')
-          .update({ 
+          .from('analyses')
+          .upsert({ 
+            sessionId: sanitizedSessionId,
+            patientId: sessionRecord.patientId,
             summary: encryptedSummary,
             updatedAt: new Date().toISOString()
+          }, {
+            onConflict: 'sessionId'
           })
-          .eq('id', sanitizedSessionId)
-          .eq('userId', authResult.user!.id)
 
         if (summaryUpdateError) {
           console.warn(`⚠️ Errore nel salvataggio del riassunto:`, summaryUpdateError)

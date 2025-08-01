@@ -871,11 +871,11 @@ function AnalysisPageInner() {
       const selectedSessionsData = getSelectedSessionsData()
       const summariesPromises = selectedSessionsData.map(async (session) => {
         try {
-          // Carica il riassunto direttamente dalla sessione
-          const response = await fetch(`/api/sessions/${session.id}`)
+          // Carica il riassunto dalla tabella analyses
+          const response = await fetch(`/api/sessions/${session.id}/summary`)
           if (response.ok) {
-            const sessionData = await response.json()
-            return { sessionId: session.id, content: sessionData.data?.summary || "" }
+            const summaryData = await response.json()
+            return { sessionId: session.id, content: summaryData.data?.summary || "" }
           } else {
             console.warn(`No summary found for session ${session.id}`)
             return { sessionId: session.id, content: "" }

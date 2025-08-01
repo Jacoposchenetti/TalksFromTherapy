@@ -123,10 +123,10 @@ export async function POST(
     const sessionId = sanitizeInput(params.id)
     console.log(`🔍 Generating summary for session: ${sessionId}`)
 
-    // Fetch session transcript
+    // Fetch session transcript and patient info
     const { data: session, error: sessionError } = await supabaseAdmin
       .from('sessions')
-      .select('transcript, title, userId')
+      .select('transcript, title, userId, patientId')
       .eq('id', sessionId)
       .eq('userId', authResult.user!.id)
       .single()
@@ -176,15 +176,17 @@ export async function POST(
     // Encrypt summary if it's sensitive
     const encryptedSummary = await encryptIfSensitive(finalSummary)
 
-    // Save summary to database
+    // Save summary to analyses table
     const { error: updateError } = await supabaseAdmin
-      .from('sessions')
-      .update({ 
+      .from('analyses')
+      .upsert({ 
+        sessionId: sessionId,
+        patientId: session.patientId,
         summary: encryptedSummary,
         updatedAt: new Date().toISOString()
+      }, {
+        onConflict: 'sessionId'
       })
-      .eq('id', sessionId)
-      .eq('userId', authResult.user!.id)
 
     if (updateError) {
       console.error("Error saving summary:", updateError)
@@ -218,10 +220,10 @@ export async function GET(
 
     const sessionId = sanitizeInput(params.id)
 
-    // Fetch session summary
+    // Fetch session and analysis data
     const { data: session, error: sessionError } = await supabaseAdmin
       .from('sessions')
-      .select('summary, title, userId')
+      .select('title, userId')
       .eq('id', sessionId)
       .eq('userId', authResult.user!.id)
       .single()
@@ -235,12 +237,19 @@ export async function GET(
       return createErrorResponse("Accesso negato a questa risorsa", 403)
     }
 
-    const hasSummary = session.summary && session.summary.trim().length > 0
+    // Fetch summary from analyses table
+    const { data: analysis, error: analysisError } = await supabaseAdmin
+      .from('analyses')
+      .select('summary')
+      .eq('sessionId', sessionId)
+      .single()
+
+    const hasSummary = analysis?.summary && analysis.summary.trim().length > 0
 
     return createSuccessResponse({
       sessionId,
       hasSummary,
-      summary: hasSummary ? decryptIfEncrypted(session.summary) : null
+      summary: hasSummary ? decryptIfEncrypted(analysis.summary) : null
     })
 
   } catch (error) {
