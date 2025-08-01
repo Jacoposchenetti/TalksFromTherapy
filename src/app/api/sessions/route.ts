@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
     const audioFile = formData.get("audio") as File
     const patientId = formData.get("patientId") as string
     const title = formData.get("title") as string
+    const isRecording = formData.get("isRecording") as string // Flag per registrazioni da auto-eliminare
 
     // STEP 8: Validazione file upload
     if (!audioFile || !patientId || !title) {
@@ -179,6 +180,7 @@ export async function POST(request: NextRequest) {
     // STEP 9: Sanitizza input
     const sanitizedPatientId = sanitizeInput(patientId)
     const sanitizedTitle = sanitizeInput(title)
+    const isAutoDelete = isRecording === "true" // Converti in boolean
 
     // STEP 10: Verifica che il paziente appartenga all'utente
     const { data: patient, error: patientError } = await supabaseAdmin
@@ -234,6 +236,7 @@ export async function POST(request: NextRequest) {
           audioFileSize: audioFile.size,
           sessionDate: new Date(),
           status: "UPLOADED",
+          isAutoDelete: isAutoDelete, // Aggiungi il flag per auto-eliminazione
         }])
         .select()
         .single()
