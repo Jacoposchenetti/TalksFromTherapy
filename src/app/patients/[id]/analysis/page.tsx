@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, Network, Search, X, RefreshCw, Database, History } from "lucide-react"
+import { ChevronLeft, ChevronRight, MessageSquare, FileText, Save, Edit, ArrowLeft, BarChart3, Heart, Network, Search, X, RefreshCw, Database, History } from "lucide-react"
 import { SentimentAnalysis } from "@/components/sentiment-analysis"
 import TopicAnalysisComponent from "@/components/analysis/topic-modeling-gpt"
 import { useMultiSessionAnalysis } from "@/hooks/useMultiSessionAnalysis"
@@ -98,6 +98,7 @@ function AnalysisPageInner() {
   
   // Stato per i riassunti di tutte le sessioni
   const [sessionSummaries, setSessionSummaries] = useState<Record<string, string>>({})
+  const [generatingSummary, setGeneratingSummary] = useState<Record<string, boolean>>({})
 
   // Constants for adaptive height logic
   const MIN_NOTE_HEIGHT = 200 // Minimum height in pixels for notes with no text or short text
@@ -870,8 +871,15 @@ function AnalysisPageInner() {
       const selectedSessionsData = getSelectedSessionsData()
       const summariesPromises = selectedSessionsData.map(async (session) => {
         try {
-          // Per ora, restituiamo un placeholder. In futuro, qui chiameremo l'API per i riassunti
-          return { sessionId: session.id, content: "" }
+          // Carica il riassunto direttamente dalla sessione
+          const response = await fetch(`/api/sessions/${session.id}`)
+          if (response.ok) {
+            const sessionData = await response.json()
+            return { sessionId: session.id, content: sessionData.data?.summary || "" }
+          } else {
+            console.warn(`No summary found for session ${session.id}`)
+            return { sessionId: session.id, content: "" }
+          }
         } catch (error) {
           console.error(`Error fetching summary for session ${session.id}:`, error)
           return { sessionId: session.id, content: "" }
@@ -886,6 +894,37 @@ function AnalysisPageInner() {
       setSessionSummaries(summariesMap)
     } catch (error) {
       console.error('Error fetching summaries:', error)
+    }
+  }
+
+  // Funzione per generare manualmente il riassunto
+  const handleGenerateSummary = async (sessionId: string) => {
+    setGeneratingSummary(prev => ({ ...prev, [sessionId]: true }))
+    
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/summary`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        const summary = result.data?.summary || ""
+        
+        // Aggiorna lo stato locale
+        setSessionSummaries(prev => ({ ...prev, [sessionId]: summary }))
+        
+        console.log(`✅ Riassunto generato manualmente per sessione ${sessionId}`)
+      } else {
+        const errorText = await response.text()
+        console.error(`❌ Errore nella generazione del riassunto: ${response.status} - ${errorText}`)
+      }
+    } catch (error) {
+      console.error('Error generating summary:', error)
+    } finally {
+      setGeneratingSummary(prev => ({ ...prev, [sessionId]: false }))
     }
   }
 
@@ -1709,9 +1748,32 @@ function AnalysisPageInner() {
                                 </CardHeader>
                                 <CardContent className="flex-1 min-h-0 flex flex-col">
                                   <div className="space-y-3 flex-1 flex flex-col">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-sm text-gray-600">Riassunto della trascrizione</span>
+                                      {!sessionSummaries[currentSession.id] && (
+                                        <Button
+                                          size="sm"
+                                          onClick={() => handleGenerateSummary(currentSession.id)}
+                                          disabled={generatingSummary[currentSession.id]}
+                                          className="h-8 px-3"
+                                        >
+                                          {generatingSummary[currentSession.id] ? (
+                                            <>
+                                              <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                                              Generazione...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <FileText className="h-3 w-3 mr-1" />
+                                              Genera Riassunto
+                                            </>
+                                          )}
+                                        </Button>
+                                      )}
+                                    </div>
                                     <textarea
                                       value={sessionSummaries[currentSession.id] || ""}
-                                      placeholder="Il riassunto della trascrizione apparirà qui..."
+                                      placeholder={sessionSummaries[currentSession.id] ? "Il riassunto della trascrizione apparirà qui..." : "Nessun riassunto disponibile. Clicca 'Genera Riassunto' per crearlo."}
                                       className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                       readOnly
                                     />
