@@ -678,7 +678,7 @@ Rispondi SOLO con JSON:
         const allSentences = patientContent
           .split(/[.!?]+/)
           .map(s => s.trim())
-          .filter(s => s.length > 15)
+          .filter(s => s.length > 5)
 
         console.log(`Session ${i + 1}: ${allSentences.length} total sentences (patient content only)`)
 
