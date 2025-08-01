@@ -102,8 +102,10 @@ function AnalysisPageInner() {
 
   // Constants for adaptive height logic
   const MIN_NOTE_HEIGHT = 200 // Minimum height in pixels for notes with no text or short text
+  const MIN_SUMMARY_HEIGHT = 150 // Minimum height in pixels for summaries with no text or short text
   const TEXT_LENGTH_THRESHOLD = 300 // Character threshold for adaptive height
   const MAX_NOTE_HEIGHT = 600 // Maximum height for very long notes
+  const MAX_SUMMARY_HEIGHT = 800 // Maximum height for very long summaries
 
   // Function to calculate adaptive height for note tabs
   const getNoteHeight = (content: string): string => {
@@ -117,6 +119,23 @@ function AnalysisPageInner() {
       const adaptiveHeight = Math.min(
         MIN_NOTE_HEIGHT + (contentLength - TEXT_LENGTH_THRESHOLD) * 0.8,
         MAX_NOTE_HEIGHT
+      )
+      return `${adaptiveHeight}px`
+    }
+  }
+
+  // Function to calculate adaptive height for summary tabs
+  const getSummaryHeight = (content: string): string => {
+    const contentLength = content?.length || 0
+    
+    if (contentLength === 0 || contentLength < TEXT_LENGTH_THRESHOLD) {
+      return `${MIN_SUMMARY_HEIGHT}px`
+    } else {
+      // Calculate adaptive height based on content length
+      // More responsive scaling for summaries: base height + additional height for longer content
+      const adaptiveHeight = Math.min(
+        MIN_SUMMARY_HEIGHT + (contentLength - TEXT_LENGTH_THRESHOLD) * 0.6,
+        MAX_SUMMARY_HEIGHT
       )
       return `${adaptiveHeight}px`
     }
@@ -1674,8 +1693,8 @@ function AnalysisPageInner() {
                       </CardTitle>
                     )}
                   </CardHeader>
-                  <CardContent className={`p-0 ${!notesOpen ? 'lg:hidden' : ''}`}>
-                    <div className={`space-y-4 ${notesOpen ? 'block' : 'hidden lg:hidden'}`}>
+                  <CardContent className={`p-0 overflow-hidden ${!notesOpen ? 'lg:hidden' : ''}`}>
+                    <div className={`space-y-4 overflow-hidden ${notesOpen ? 'block' : 'hidden lg:hidden'}`}>
                       {getSelectedSessionsData().length > 0 ? (
                         (() => {
                           const selectedSessions = getSelectedSessionsData()
@@ -1696,14 +1715,14 @@ function AnalysisPageInner() {
                                     </div>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="flex-1 min-h-0 flex flex-col">
+                                <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden">
                                   {editingNotes[currentSession.id] ? (
                                     <div className="space-y-3 flex-1 flex flex-col">
                                       <textarea
                                         value={sessionNotes[currentSession.id] || ""}
                                         onChange={e => setSessionNotes(prev => ({ ...prev, [currentSession.id]: e.target.value }))}
                                         placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
-                                        className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        className="w-full flex-1 min-h-0 max-h-full p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 overflow-y-auto"
                                         autoFocus
                                       />
                                       <div className="flex gap-2 justify-end flex-shrink-0">
@@ -1719,7 +1738,7 @@ function AnalysisPageInner() {
                                   ) : (
                                     <div className="space-y-3 flex-1 flex flex-col">
                                       <div
-                                        className="flex-1 min-h-0 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
+                                        className="flex-1 min-h-0 max-h-full overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
                                         onClick={() => handleEnterEdit(currentSession.id)}
                                         tabIndex={0}
                                         role="textbox"
@@ -1737,7 +1756,10 @@ function AnalysisPageInner() {
                               </Card>
                               
                               {/* Summary Module */}
-                              <Card className="flex-shrink-0">
+                              <Card 
+                                className="flex-shrink-0"
+                                style={{ height: getSummaryHeight(sessionSummaries[currentSession.id] || "") }}
+                              >
                                 <CardHeader className="flex-shrink-0">
                                   <CardTitle className="text-lg flex items-center justify-between">
                                     <div className="flex items-center gap-3">
@@ -1746,8 +1768,8 @@ function AnalysisPageInner() {
                                     </div>
                                   </CardTitle>
                                 </CardHeader>
-                                <CardContent className="flex-1 min-h-0 flex flex-col">
-                                  <div className="space-y-3 flex-1 flex flex-col">
+                                <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                                  <div className="space-y-3 flex-1 flex flex-col overflow-hidden">
                                     <div className="flex justify-between items-center">
                                       <span className="text-sm text-gray-600">Riassunto della trascrizione</span>
                                       {!sessionSummaries[currentSession.id] && (
@@ -1774,7 +1796,7 @@ function AnalysisPageInner() {
                                     <textarea
                                       value={sessionSummaries[currentSession.id] || ""}
                                       placeholder={sessionSummaries[currentSession.id] ? "Il riassunto della trascrizione apparirà qui..." : "Nessun riassunto disponibile. Clicca 'Genera Riassunto' per crearlo."}
-                                      className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                      className="w-full flex-1 min-h-0 max-h-full p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 overflow-y-auto"
                                       readOnly
                                     />
                                   </div>

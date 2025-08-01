@@ -50,6 +50,7 @@ async function generateChunkSummary(chunk: string): Promise<string> {
           - Usa un linguaggio professionale ma accessibile
           - Non aggiungere interpretazioni o giudizi personali
           - Mantieni la cronologia degli eventi discussi
+          - Scrivi dal punto di vista del terapeuta, come se fosse un resoconto clinico
           - Limita il riassunto a ${MAX_SUMMARY_TOKENS} token massimo`
         },
         {
@@ -86,12 +87,16 @@ async function combineSummaries(summaries: string[]): Promise<string> {
           Il tuo compito è combinare più riassunti parziali in un unico riassunto coerente.
           
           Istruzioni:
-          - Crea una narrazione fluida e logica
+          - Crea una narrazione fluida e logica che rappresenti una singola sessione terapeutica
+          - I riassunti parziali rappresentano sezioni consecutive della stessa sessione, non sessioni separate
+          - Tratta i contenuti come momenti successivi di un'unica conversazione terapeutica
           - Mantieni TUTTE le informazioni dai riassunti parziali
           - Non aggiungere informazioni non presenti nei riassunti originali
           - Organizza le informazioni in modo cronologico e tematico
           - Elimina eventuali ripetizioni
           - Mantieni il focus sui contenuti terapeutici e relazionali
+          - Scrivi il riassunto dal punto di vista del terapeuta, come se fosse un resoconto clinico
+          - Usa un linguaggio professionale ma accessibile
           - Limita il riassunto finale a ${MAX_SUMMARY_TOKENS * 2} token massimo`
         },
         {
