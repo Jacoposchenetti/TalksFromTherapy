@@ -1,0 +1,32 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Development Server",
+			"type": "shell",
+			"command": "npm run dev",
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "Start Python Service",
+			"type": "shell",
+			"command": "python-service\\start.bat",
+			"group": "build",
+			"isBackground": true,
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new"
+			},
+			"problemMatcher": []
+		}
+	]
+}

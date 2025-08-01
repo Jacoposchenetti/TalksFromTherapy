@@ -1,0 +1,7 @@
+git+https://github.com/MassimoStel/emoatlas.git
+spacy>=3.4.0
+nltk>=3.8.0
+pandas>=1.5.0
+matplotlib>=3.6.0
+numpy>=1.24.0
+networkx>=2.8.0

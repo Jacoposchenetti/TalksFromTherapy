@@ -1,0 +1,114 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+.env.local
+.env.production
+.env.development
+
+# bitwarden backup files (just in case)
+bitwarden-*
+*.bw-backup
+
+# security keys and certificates
+*.key
+*.pem
+*.crt
+*.p12
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# local database
+*.db
+*.sqlite
+
+# uploads and temporary files
+/uploads
+/temp
+
+# audio files (these will be stored in cloud storage)
+*.mp3
+*.wav
+*.m4a
+*.flac
+
+# editor
+.vscode/settings.json
+
+# prisma
+prisma/.env
+
+/src/generated/prisma
+
+# Python virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+/python-service/venv/
+/python-service/env/
+/python-service/.venv/
+\.env.local
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.dll
+*.lib
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST

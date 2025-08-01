@@ -1,0 +1,194 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Schema principale
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String    // hashed with bcrypt
+  name            String
+  licenseNumber   String?   // numero ordine professionale
+  // GDPR Consent tracking
+  acceptedTermsAt DateTime? // When user accepted Terms of Service
+  acceptedPrivacyAt DateTime? // When user accepted Privacy Policy
+  consentVersion  String?   // Version of terms/privacy accepted
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  patients        Patient[]
+  sessions        Session[]
+
+  @@map("users")
+}
+
+model Patient {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  initials     String    // solo iniziali per privacy
+  dateOfBirth  DateTime?
+  notes        String?
+  isActive     Boolean   @default(true) // soft delete
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+  analyses     Analysis[]
+
+  @@index([userId])
+  @@map("patients")
+}
+
+model Session {
+  id               String        @id @default(cuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patientId        String
+  patient          Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title            String
+  audioUrl         String?       // URL del file audio
+  audioFileName    String?
+  audioFileSize    Int?          // dimensione file in bytes
+  transcript       String?       // Trascrizione completa
+  sessionDate      DateTime
+  duration         Int?          // durata in secondi
+  status           String        @default("UPLOADED") // UPLOADED, TRANSCRIBING, TRANSCRIBED, ANALYZING, ANALYZED, ERROR
+  errorMessage     String?       // messaggio di errore se status = ERROR
+  documentMetadata String?       // JSON metadati per documenti di testo (pagine, parole, formato)
+  isAutoDelete     Boolean       @default(false) // flag per auto-eliminazione dopo trascrizione (per registrazioni dal microfono)
+  isActive         Boolean       @default(true) // soft delete
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  analyses         Analysis[]
+  note             SessionNote?  // Relazione opzionale con SessionNote
+
+  @@index([userId])
+  @@index([patientId])
+  @@index([sessionDate])
+  @@index([status])
+  @@map("sessions")
+}
+
+model Analysis {
+  id               String    @id @default(cuid())
+  sessionId        String    @unique
+  session          Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  patientId        String
+  patient          Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  // Sentiment Analysis (EmoAtlas)
+  sentimentScore   Float?    // -1 to 1
+  emotions         String?   // JSON string di emozioni rilevate (z-scores)
+  emotionFlowerPlot String?  // Base64 string del grafico emotion flower
+  emotionalValence Float?   // Valenza emotiva generale
+  significantEmotions String? // JSON delle emozioni significative
+  
+  // Topic Analysis
+  keyTopics        String?   // JSON string di topic principali
+  topicAnalysisResult String? // JSON completo risultato topic modeling
+  topicAnalysisTimestamp DateTime? // Timestamp dell'analisi topic
+  topicAnalysisVersion String? // Versione dell'algoritmo topic
+  topicAnalysisLanguage String? // Lingua dell'analisi topic
+  customTopicAnalysisResults String? // JSON delle ricerche topic personalizzate
+  
+  // Semantic Frame Analysis
+  semanticFrameResults String? // JSON dei risultati semantic frame per diverse parole
+  
+  // General Analysis Fields
+  therapeuticGoals String?   // JSON string obiettivi terapeutici identificati
+  progressNotes    String?   // note automatiche su progressi
+  summary          String?   // riassunto della sessione
+  confidenceScore  Float?    // confidenza dell'analisi (0-1)
+  processingTime   Int?      // tempo di processing in ms
+  
+  // Metadata
+  analysisVersion  String?   // versione dell'algoritmo usato
+  language         String?   // lingua dell'analisi
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([patientId])
+  @@index([createdAt])
+  @@index([topicAnalysisTimestamp])
+  @@map("analyses")
+}
+
+// Tabella per tracking dei job di trascrizione
+model TranscriptionJob {
+  id          String                @id @default(cuid())
+  sessionId   String                @unique
+  jobId       String?               // ID del job esterno (es. OpenAI)
+  status      String                @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  provider    String                @default("openai") // openai, assemblyai, azure, etc.
+  startedAt   DateTime              @default(now())
+  completedAt DateTime?
+  errorMessage String?
+  retryCount  Int                   @default(0)
+  metadata    String?               // JSON string metadati specifici del provider
+
+  @@index([status])
+  @@index([startedAt])
+  @@map("transcription_jobs")
+}
+
+// Tabella per audit log delle operazioni sensibili
+model AuditLog {
+  id        String           @id @default(cuid())
+  userId    String?
+  action    String           // CREATE, UPDATE, DELETE, LOGIN, etc.
+  resource  String           // USER, PATIENT, SESSION, etc.
+  resourceId String?
+  oldValues String?          // JSON string
+  newValues String?          // JSON string
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// Tabella per le note del terapeuta sulle sessioni
+model SessionNote {
+  id        String   @id @default(cuid())
+  sessionId String   @unique
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  content   String   // Contenuto della nota del terapeuta
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId])
+  @@map("session_notes")
+}
+
+// Tabella per le ricerche di custom topics salvate
+model CustomTopicSearch {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String   // Nome dato dall'utente alla ricerca
+  topics        String   // JSON array dei topics cercati
+  sessionIds    String   // JSON array degli ID delle sessioni
+  results       String?  // JSON dei risultati (opzionale, per cache)
+  isBookmarked  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("custom_topic_searches")
+}
+
+
