@@ -53,6 +53,7 @@ function AnalysisPageInner() {
   const [sidebarOpen, setSidebarOpen] = useState(true) // Sidebar visibility state
   const [notesOpen, setNotesOpen] = useState(true) // Notes tab visibility state
   const [currentNoteSessionIndex, setCurrentNoteSessionIndex] = useState(0) // Current session index for notes navigation
+  const [summaryOpen, setSummaryOpen] = useState(true) // Summary tab visibility state
   
   // Semantic Frame Analysis state
   const [targetWord, setTargetWord] = useState("")
@@ -986,66 +987,58 @@ function AnalysisPageInner() {
                         onChange={handleSelectAll}
                         className="rounded border-gray-300"
                       />
-                      <label htmlFor="select-all" className="text-sm text-gray-600">
-                        Mark all
+                      <label htmlFor="select-all" className="text-sm font-medium text-gray-700">
+                        Seleziona tutto
                       </label>
                     </div>
                   </CardHeader>
                   <CardContent className={`p-0 ${!sidebarOpen ? 'lg:hidden' : ''}`}>
                     <div className={`space-y-1 max-h-[600px] overflow-y-auto ${sidebarOpen ? 'block' : 'hidden lg:hidden'}`}>
-                      {sessions.map((session, index) => (
-                        <div key={session.id} className="border-b last:border-b-0">
-                          <div className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
-                            <input
-                              type="checkbox"
-                              id={`session-${session.id}`}
-                              checked={selectedSessions.has(session.id)}
-                              onChange={() => handleSessionToggle(session.id)}
-                              className="rounded border-gray-300 flex-shrink-0"
-                            />
-                            <button
-                              onClick={() => {
-                                // Toggle selezione per analisi (checkbox)
-                                handleSessionToggle(session.id)
-                              }}
-                              className="flex-1 text-left p-2 rounded transition-colors hover:bg-gray-50 flex items-center gap-2 min-h-0"
-                              title="Click to select/deselect this session"
-                            >
-                              <div className="font-medium text-sm leading-tight">
-                                {session.title}
-                              </div>
-                              {hasSessionNote(session.id) && (
-                                <MessageSquare className="h-4 w-4 text-sky-500 flex-shrink-0" />
-                              )}
-                            </button>
+                      {sessions.map((session) => (
+                        <div
+                          key={session.id}
+                          className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
+                            selectedSessions.has(session.id)
+                              ? 'bg-blue-50 border-l-4 border-blue-500'
+                              : 'hover:bg-gray-50'
+                          }`}
+                          onClick={() => handleSessionToggle(session.id)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedSessions.has(session.id)}
+                            onChange={() => handleSessionToggle(session.id)}
+                            className="rounded border-gray-300"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {session.title}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(session.sessionDate).toLocaleDateString('it-IT')}
+                            </p>
                           </div>
+                          {hasSessionNote(session.id) && (
+                            <MessageSquare className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                          )}
                         </div>
                       ))}
                     </div>
                   </CardContent>
                 </Card>
               </div>
-              {/* Toggle Button - Always visible */}
-              <div className="lg:hidden mt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="w-full"
-                >
-                  {sidebarOpen ? (
-                    <>
-                      <ChevronLeft className="h-4 w-4 mr-2" />
-                      Nascondi Sessioni
-                    </>
-                  ) : (
-                    <>
-                      <ChevronRight className="h-4 w-4 mr-2" />
-                      Mostra Sessioni
-                    </>
-                  )}
-                </Button>
-              </div>
+              {/* Mobile toggle button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden w-full mt-2"
+                title={sidebarOpen ? "Nascondi sidebar" : "Mostra sidebar"}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                {sidebarOpen ? "Nascondi Sessioni" : "Mostra Sessioni"}
+              </Button>
             </div>
                                    {/* Main Sliding Analysis Panel */}
                        <div className={`transition-all duration-300 ease-in-out min-w-0 ${
@@ -1673,17 +1666,93 @@ function AnalysisPageInner() {
                   </CardContent>
                 </Card>
               </div>
-              {/* Mobile toggle button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setNotesOpen(!notesOpen)}
-                className="lg:hidden w-full mt-2"
-                title={notesOpen ? "Nascondi note" : "Mostra note"}
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                {notesOpen ? "Nascondi Note" : "Mostra Note"}
-              </Button>
+              
+              {/* Summary Section - below notes */}
+              <div className={`transition-all duration-300 ease-in-out ${
+                notesOpen 
+                  ? (summaryOpen ? 'mt-4 opacity-100' : 'mt-4 opacity-0 lg:opacity-100')
+                  : (summaryOpen ? 'mt-16 opacity-100' : 'mt-16 opacity-0 lg:opacity-100')
+              }`}>
+                <Card className={`${!summaryOpen ? 'lg:w-12 lg:min-w-12 lg:max-w-12 lg:py-0 lg:px-0 lg:absolute lg:right-0 lg:h-16' : ''}`}>
+                  <CardHeader className={!summaryOpen ? 'lg:p-2 lg:px-2' : ''}>
+                    {summaryOpen ? (
+                      <CardTitle className="flex items-center justify-between">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSummaryOpen(!summaryOpen)}
+                          className="hidden lg:flex h-8 w-8 p-0 mr-auto"
+                          title="Nascondi riassunto"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                        <div className="flex items-center gap-2 flex-1 justify-start">
+                          <FileText className="h-5 w-5" />
+                          <span>Riassunto</span>
+                        </div>
+                      </CardTitle>
+                    ) : (
+                      <CardTitle className="flex flex-col items-center justify-center h-12 space-y-1 mt-0">
+                        <FileText className="h-5 w-5" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSummaryOpen(!summaryOpen)}
+                          className="h-6 w-6 p-0 mr-auto"
+                          title="Mostra riassunto"
+                        >
+                          <ChevronLeft className="h-3 w-3" />
+                        </Button>
+                      </CardTitle>
+                    )}
+                  </CardHeader>
+                  <CardContent className={`p-0 ${!summaryOpen ? 'lg:hidden' : ''}`}>
+                    <div className={`space-y-4 ${summaryOpen ? 'block' : 'hidden lg:hidden'}`}>
+                      <Card className="flex-shrink-0">
+                        <CardHeader className="flex-shrink-0">
+                          <CardTitle className="text-lg flex items-center gap-3">
+                            <FileText className="h-5 w-5" />
+                            Riassunto Trascrizione
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex-1 min-h-0 flex flex-col">
+                          <div className="space-y-3 flex-1 flex flex-col">
+                            <textarea
+                              placeholder="Il riassunto della trascrizione apparirà qui..."
+                              className="w-full flex-1 min-h-0 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              readOnly
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              {/* Mobile toggle buttons */}
+              <div className="lg:hidden space-y-2 mt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setNotesOpen(!notesOpen)}
+                  className="w-full"
+                  title={notesOpen ? "Nascondi note" : "Mostra note"}
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  {notesOpen ? "Nascondi Note" : "Mostra Note"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSummaryOpen(!summaryOpen)}
+                  className="w-full"
+                  title={summaryOpen ? "Nascondi riassunto" : "Mostra riassunto"}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  {summaryOpen ? "Nascondi Riassunto" : "Mostra Riassunto"}
+                </Button>
+              </div>
             </div>
           </div>
         )}
