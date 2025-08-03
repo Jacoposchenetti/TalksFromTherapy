@@ -129,7 +129,7 @@ function AnalysisPageInner() {
     const contentLength = content?.length || 0
     
     if (contentLength === 0 || contentLength < TEXT_LENGTH_THRESHOLD) {
-      return `${MIN_SUMMARY_HEIGHT}px`
+      return `${MIN_SUMMARY_HEIGHT + 300}px`
     } else {
       // Calculate adaptive height based on content length
       // More responsive scaling for summaries: base height + additional height for longer content
@@ -137,7 +137,7 @@ function AnalysisPageInner() {
         MIN_SUMMARY_HEIGHT + (contentLength - TEXT_LENGTH_THRESHOLD) * 0.6,
         MAX_SUMMARY_HEIGHT
       )
-      return `${adaptiveHeight}px`
+      return `${adaptiveHeight + 200}px`
     }
   }
 
