@@ -65,6 +65,7 @@ model Session {
   status           String        @default("UPLOADED") // UPLOADED, TRANSCRIBING, TRANSCRIBED, ANALYZING, ANALYZED, ERROR
   errorMessage     String?       // messaggio di errore se status = ERROR
   documentMetadata String?       // JSON metadati per documenti di testo (pagine, parole, formato)
+  isAutoDelete     Boolean       @default(false) // flag per auto-eliminazione dopo trascrizione (per registrazioni dal microfono)
   isActive         Boolean       @default(true) // soft delete
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt

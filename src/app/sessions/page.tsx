@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp, Download } from "lucide-react"
+import { Upload, Play, FileText, BarChart3, ArrowLeft, Calendar, Clock, Trash2, ChevronDown, ChevronUp, Download, Mic, MicOff, Square } from "lucide-react"
 import { DocumentParser } from "@/lib/document-parser"
 import { NotificationManager } from "@/lib/notification-manager"
 import { useAudioPlayer } from "@/hooks/useAudioPlayer"
@@ -22,6 +22,7 @@ interface Session {
   duration?: number
   status: string
   documentMetadata?: string
+  isAutoDelete?: boolean
   patient: {
     id: string
     initials: string
@@ -124,6 +125,14 @@ function SessionsPageContent() {
   const { playSession, currentSession, isPlaying } = useAudioPlayer()
   const [originalTitles, setOriginalTitles] = useState<{ [id: string]: string }>({})
 
+  // Recording state
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingDuration, setRecordingDuration] = useState(0)
+  const [uploadingRecording, setUploadingRecording] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordingChunksRef = useRef<Blob[]>([])
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
   useEffect(() => {
     if (status === "loading") return
     if (!session) {      router.push("/login")
@@ -178,6 +187,138 @@ function SessionsPageContent() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [exportMenuOpen])
+
+  // Cleanup recording interval on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current)
+      }
+    }
+  }, [])
+
+  const startRecording = async () => {
+    try {
+      // Check if patient is selected
+      const targetPatientId = selectedPatientForUpload || patientId
+      if (!targetPatientId) {
+        NotificationManager.showWarning("Seleziona un paziente prima di iniziare la registrazione")
+        return
+      }
+
+      // Request microphone permission
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 44100
+        } 
+      })
+
+      // Create MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      })
+      
+      mediaRecorderRef.current = mediaRecorder
+      recordingChunksRef.current = []
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data)
+        }
+      }
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(recordingChunksRef.current, { type: 'audio/webm' })
+        await uploadRecording(audioBlob, targetPatientId)
+        
+        // Stop all tracks to release microphone
+        stream.getTracks().forEach(track => track.stop())
+      }
+
+      // Start recording
+      mediaRecorder.start(1000) // Collect data every second
+      setIsRecording(true)
+      setRecordingDuration(0)
+
+      // Start duration counter
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1)
+      }, 1000)
+
+      NotificationManager.showSuccess("Registrazione avviata")
+    } catch (error) {
+      console.error("Error starting recording:", error)
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        NotificationManager.showError("Permesso microfono negato. Abilita l'accesso al microfono per registrare.")
+      } else {
+        NotificationManager.showError("Errore durante l'avvio della registrazione")
+      }
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+      
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current)
+        recordingIntervalRef.current = null
+      }
+      
+      NotificationManager.showInfo("Registrazione terminata, caricamento in corso...")
+    }
+  }
+
+  const uploadRecording = async (audioBlob: Blob, targetPatientId: string) => {
+    setUploadingRecording(true)
+    
+    try {
+      // Convert blob to File
+      const audioFile = new File([audioBlob], `recording_${Date.now()}.webm`, {
+        type: 'audio/webm'
+      })
+
+      // Find patient name for title
+      const selectedPatient = patients.find(p => p.id === targetPatientId)
+      const patientName = selectedPatient?.initials || "Paziente"
+      
+      const formData = new FormData()
+      formData.append("audio", audioFile)
+      formData.append("patientId", targetPatientId)
+      formData.append("title", `Registrazione - ${patientName} - ${new Date().toLocaleDateString()}`)
+      formData.append("isRecording", "true") // Flag to indicate this is a recording that should be auto-deleted
+
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (response.ok) {
+        fetchSessions()
+        NotificationManager.showSuccess("Registrazione caricata con successo!")
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error || "Errore durante il caricamento della registrazione"
+        NotificationManager.showError(errorMessage)
+      }
+    } catch (error) {
+      console.error("Error uploading recording:", error)
+      NotificationManager.showError("Errore durante il caricamento della registrazione")
+    } finally {
+      setUploadingRecording(false)
+      setRecordingDuration(0)
+    }
+  }
+
+  const formatRecordingDuration = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
+  }
 
   const fetchSessions = async () => {
     try {
@@ -916,7 +1057,7 @@ function SessionsPageContent() {
             )}
             
             {/* Modern Upload Buttons */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Audio Upload Button */}
               <div className="group relative">
                 <label className="block">
@@ -924,13 +1065,13 @@ function SessionsPageContent() {
                     type="file"
                     accept="audio/*"
                     onChange={handleFileUpload}
-                    disabled={uploading || uploadingText || (!patientId && !selectedPatientForUpload)}
+                    disabled={uploading || uploadingText || uploadingRecording || isRecording || (!patientId && !selectedPatientForUpload)}
                     className="sr-only"
                   />
                   <div className={`
                     flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed cursor-pointer
                     transition-all duration-300 ease-in-out
-                    ${uploading || uploadingText || (!patientId && !selectedPatientForUpload) 
+                    ${uploading || uploadingText || uploadingRecording || isRecording || (!patientId && !selectedPatientForUpload) 
                       ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-50' 
                       : 'border-blue-300 bg-blue-50 hover:border-blue-400 hover:bg-blue-100 hover:shadow-lg group-hover:scale-105'
                     }
@@ -938,7 +1079,7 @@ function SessionsPageContent() {
                     <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4 group-hover:bg-blue-200 transition-colors">
                       <Play className="w-6 h-6 text-blue-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Audio</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">File Audio</h3>
                     <p className="text-sm text-gray-600 text-center">
                       {uploading ? 'Caricamento in corso...' : 'Clicca per selezionare un file audio'}
                     </p>
@@ -960,6 +1101,63 @@ function SessionsPageContent() {
                 </div>
               </div>
 
+              {/* Recording Button */}
+              <div className="group relative">
+                <div 
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={`
+                    flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed cursor-pointer
+                    transition-all duration-300 ease-in-out
+                    ${uploading || uploadingText || uploadingRecording || (!patientId && !selectedPatientForUpload)
+                      ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-50'
+                      : isRecording 
+                        ? 'border-red-300 bg-red-50 hover:border-red-400 hover:bg-red-100 animate-pulse'
+                        : 'border-orange-300 bg-orange-50 hover:border-orange-400 hover:bg-orange-100 hover:shadow-lg group-hover:scale-105'
+                    }
+                  `}
+                >
+                  <div className={`flex items-center justify-center w-12 h-12 rounded-full mb-4 transition-colors ${
+                    isRecording 
+                      ? 'bg-red-100 group-hover:bg-red-200' 
+                      : 'bg-orange-100 group-hover:bg-orange-200'
+                  }`}>
+                    {isRecording ? (
+                      <Square className="w-6 h-6 text-red-600" />
+                    ) : (
+                      <Mic className="w-6 h-6 text-orange-600" />
+                    )}
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {isRecording ? 'Ferma Registrazione' : 'Registra Audio'}
+                  </h3>
+                  <p className="text-sm text-gray-600 text-center">
+                    {uploadingRecording ? 'Caricamento registrazione...' : 
+                     isRecording ? `Registrando... ${formatRecordingDuration(recordingDuration)}` : 
+                     'Clicca per iniziare a registrare'}
+                  </p>
+                  {(isRecording || uploadingRecording) && (
+                    <div className="flex items-center gap-2 mt-3">
+                      <div className={`animate-spin rounded-full h-4 w-4 border-b-2 ${
+                        isRecording ? 'border-red-600' : 'border-orange-600'
+                      }`}></div>
+                      <span className={`text-sm ${
+                        isRecording ? 'text-red-600' : 'text-orange-600'
+                      }`}>
+                        {isRecording ? 'Recording...' : 'Uploading...'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Hover Tooltip for Recording */}
+                <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+                  <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap">
+                    {isRecording ? 'Clicca per fermare la registrazione' : 'Registra audio dal microfono • Auto-eliminazione'}
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+              </div>
+
               {/* Text Upload Button */}
               <div className="group relative">
                 <label className="block">
@@ -967,13 +1165,13 @@ function SessionsPageContent() {
                     type="file"
                     accept={DocumentParser.getAcceptString()}
                     onChange={handleTextFileUpload}
-                    disabled={uploading || uploadingText || (!patientId && !selectedPatientForUpload)}
+                    disabled={uploading || uploadingText || uploadingRecording || isRecording || (!patientId && !selectedPatientForUpload)}
                     className="sr-only"
                   />
                   <div className={`
                     flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed cursor-pointer
                     transition-all duration-300 ease-in-out
-                    ${uploading || uploadingText || (!patientId && !selectedPatientForUpload)
+                    ${uploading || uploadingText || uploadingRecording || isRecording || (!patientId && !selectedPatientForUpload)
                       ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-50'
                       : 'border-green-300 bg-green-50 hover:border-green-400 hover:bg-green-100 hover:shadow-lg group-hover:scale-105'
                     }
@@ -981,7 +1179,7 @@ function SessionsPageContent() {
                     <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-4 group-hover:bg-green-200 transition-colors">
                       <FileText className="w-6 h-6 text-green-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Text File</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">File di Testo</h3>
                     <p className="text-sm text-gray-600 text-center">
                       {uploadingText ? 'Elaborazione in corso...' : 'Clicca per selezionare un file di testo'}
                     </p>
@@ -1013,7 +1211,19 @@ function SessionsPageContent() {
                   </svg>
                 </div>
                 <p className="text-sm text-amber-800">
-                  Seleziona un paziente prima di caricare file
+                  Seleziona un paziente prima di caricare file o registrare audio
+                </p>
+              </div>
+            )}
+
+            {/* Recording warning */}
+            {isRecording && (
+              <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex-shrink-0">
+                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                </div>
+                <p className="text-sm text-red-800">
+                  🎙️ Registrazione in corso... Clicca su "Ferma Registrazione" per terminare. La registrazione verrà automaticamente eliminata dopo la trascrizione.
                 </p>
               </div>
             )}

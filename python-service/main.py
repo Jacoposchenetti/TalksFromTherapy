@@ -134,7 +134,7 @@ class DocumentAnalysisService:
     def __init__(self):
         # Configurazione OpenAI GPT-3.5
         self.client = openai.OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY", "sk-your-key-here")
+            api_key=os.getenv("OPENAI_API_KEY", "***REMOVED***your-key-here")
         )
     
     def extract_topics_gpt(self, text):

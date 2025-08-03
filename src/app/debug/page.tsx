@@ -245,7 +245,7 @@ export default function DebugPage() {
             <p><strong>Per configurare OpenAI:</strong></p>
             <ol className="list-decimal list-inside space-y-1 ml-4">
               <li>Ottieni una API key da OpenAI (https://platform.openai.com/api-keys)</li>
-              <li>Aggiungi la chiave nel file .env: <code className="bg-gray-100 px-1 rounded">OPENAI_API_KEY=sk-...</code></li>
+              <li>Aggiungi la chiave nel file .env: <code className="bg-gray-100 px-1 rounded">OPENAI_API_KEY=***REMOVED***...</code></li>
               <li>Riavvia il server di sviluppo</li>
               <li>Testa la trascrizione con il pulsante sopra</li>
             </ol>

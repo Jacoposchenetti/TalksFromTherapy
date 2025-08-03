@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     // STEP 4: Verifica accesso alla risorsa
     const { data: sessionRecord, error: sessionError } = await supabaseAdmin
       .from('sessions')
-      .select('id, userId, status, audioFileName, audioUrl, title')
+      .select('id, userId, status, audioFileName, audioUrl, title, isAutoDelete')
       .eq('id', sessionId)
       .eq('userId', authResult.user!.id)
       .eq('isActive', true)
@@ -240,10 +240,44 @@ export async function POST(request: NextRequest) {
         // Non bloccare la risposta, la trascrizione è già stata salvata
       }
 
+      // STEP 6: Auto-eliminazione se è una registrazione
+      if (sessionRecord.isAutoDelete) {
+        console.log(`🗑️ Auto-eliminazione avviata per sessione registrata: ${sessionId}`)
+        
+        try {
+          // Elimina il file audio da Supabase Storage
+          const filePath = `${sessionRecord.userId}/${sessionRecord.audioFileName}`
+          const { error: deleteFileError } = await supabaseAdmin.storage
+            .from('talksfromtherapy')
+            .remove([filePath])
+          
+          if (deleteFileError) {
+            console.error(`❌ Errore eliminazione file audio: ${deleteFileError.message}`)
+          } else {
+            console.log(`✅ File audio eliminato: ${filePath}`)
+          }
+
+          // Elimina il record della sessione dal database
+          const { error: deleteSessionError } = await supabaseAdmin
+            .from('sessions')
+            .delete()
+            .eq('id', sessionId)
+          
+          if (deleteSessionError) {
+            console.error(`❌ Errore eliminazione sessione: ${deleteSessionError.message}`)
+          } else {
+            console.log(`✅ Sessione eliminata automaticamente: ${sessionId}`)
+          }
+        } catch (deleteError) {
+          console.error(`❌ Errore durante auto-eliminazione:`, deleteError)
+          // Non bloccare la risposta anche se l'eliminazione fallisce
+        }
+      }
+
       console.log(`✅ Processo completo (trascrizione${finalTranscript === initialTranscript ? '' : ' + diarizzazione'}) completato per sessione ${sessionId}`)
 
       return NextResponse.json({
-        message: `Trascrizione${finalTranscript === initialTranscript ? '' : ' e diarizzazione'} completate con successo`,
+        message: `Trascrizione${finalTranscript === initialTranscript ? '' : ' e diarizzazione'} completate con successo${sessionRecord.isAutoDelete ? ' - Registrazione eliminata automaticamente' : ''}`,
         sessionId,
         status: "TRANSCRIBED",
         transcript: finalTranscript,
@@ -251,7 +285,8 @@ export async function POST(request: NextRequest) {
         finalTranscriptLength: finalTranscript.length,
         fileSize: fileData.size,
         fileName: sessionRecord.audioFileName,
-        diarizationSuccessful: finalTranscript !== initialTranscript
+        diarizationSuccessful: finalTranscript !== initialTranscript,
+        autoDeleted: sessionRecord.isAutoDelete
       })
 
     } catch (error) {

@@ -165,7 +165,7 @@ NEXTAUTH_SECRET="..."
 NEXTAUTH_URL="http://localhost:3000"
 
 # OpenAI
-OPENAI_API_KEY="sk-..."
+OPENAI_API_KEY="***REMOVED***..."
 
 # File Storage
 NEXT_PUBLIC_SUPABASE_URL="..."

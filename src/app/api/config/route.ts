@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     const config = {
       openai: {
-        configured: !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'sk-your-openai-api-key-here'),
+        configured: !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== '***REMOVED***your-openai-api-key-here'),
         apiKey: process.env.OPENAI_API_KEY ? 
           `${process.env.OPENAI_API_KEY.slice(0, 7)}...${process.env.OPENAI_API_KEY.slice(-4)}` : 
           'Non configurata'
