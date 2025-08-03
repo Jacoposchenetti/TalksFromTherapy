@@ -60,6 +60,7 @@ model Session {
   audioFileName    String?
   audioFileSize    Int?          // dimensione file in bytes
   transcript       String?       // Trascrizione completa
+  summary          String?       // Riassunto automatico della trascrizione
   sessionDate      DateTime
   duration         Int?          // durata in secondi
   status           String        @default("UPLOADED") // UPLOADED, TRANSCRIBING, TRANSCRIBED, ANALYZING, ANALYZED, ERROR

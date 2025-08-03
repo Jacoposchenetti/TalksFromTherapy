@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, Brain, Loader2, MessageCircle, FileText, Eye, EyeOff, Search, Plus, X, History, Database } from "lucide-react"
+import { AlertCircle, Brain, Loader2, MessageCircle, FileText, Eye, EyeOff, Search, Plus, X, History, Database, ChevronLeft, ChevronRight } from "lucide-react"
 import { extractPatientContent } from "@/lib/text-utils"
 
 interface Session {
@@ -24,19 +24,38 @@ interface Topic {
   description: string
 }
 
+// Aggiorna l'interfaccia AnalysisResult per includere opzionalmente session_title e title
 interface AnalysisResult {
-  session_id: string
-  topics: Topic[]
-  summary: string
-  analysis_timestamp: string
-  text_segments?: TextSegment[]
+  session_id: string;
+  topics: Topic[];
+  summary: string;
+  analysis_timestamp: string;
+  text_segments?: TextSegment[];
+  topicAnalysis?: {
+    topics: Topic[];
+    summary: string;
+    analysis_timestamp: string;
+    text_segments: TextSegment[];
+    patient_content_stats?: {
+      originalLength: number;
+      patientContentLength: number;
+      reductionPercentage: number;
+      originalTranscript: string;
+      patientContent: string;
+    };
+    session_id?: string;
+    language?: string;
+    version?: string;
+  };
   patient_content_stats?: {
-    originalLength: number
-    patientContentLength: number
-    reductionPercentage: number
-    originalTranscript: string
-    patientContent: string
-  }
+    originalLength: number;
+    patientContentLength: number;
+    reductionPercentage: number;
+    originalTranscript: string;
+    patientContent: string;
+  };
+  session_title?: string;
+  title?: string;
 }
 
 // Aggiorno l'interfaccia CustomTopicSearchResult
@@ -69,16 +88,19 @@ interface TopicAnalysisProps {
   combinedTranscript: string
   onAnalysisComplete?: (result: AnalysisResult | CustomTopicSearchResult) => void
   cachedData?: any // Dati topic analysis dalla cache
+  onRequestAnalysis?: (sessionId: string) => void; // Aggiunto per avviare l'analisi
 }
 
 export default function TopicAnalysisComponent({ 
   selectedSessions, 
   combinedTranscript, 
   onAnalysisComplete,
-  cachedData 
+  cachedData,
+  onRequestAnalysis
 }: TopicAnalysisProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
+  // Cambia il tipo di stato analysisResult per accettare anche array
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | AnalysisResult[] | null>(null);
   const [customSearchResult, setCustomSearchResult] = useState<CustomTopicSearchResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showTextView, setShowTextView] = useState(false)
@@ -172,27 +194,18 @@ export default function TopicAnalysisComponent({
     console.log('📦 Selected sessions:', selectedSessions.map(s => ({ id: s.id, title: s.title })))
     
     if (cachedData && selectedSessions.length > 0) {
-      // Carica topic analysis normale
-      if (
-        cachedData.topics && 
-        Array.isArray(cachedData.topics) &&
-        !isCustomMode &&
-        !isAnalyzing
-      ) {
-        // Verifica che i topic corrispondano alle sessioni selezionate
-        const selectedSessionIds = selectedSessions.map(s => s.id)
-        const cachedSessionId = cachedData.session_id
-        
-        if (selectedSessionIds.includes(cachedSessionId)) {
-          console.log('📦 Loading cached topic analysis data for matching session:', cachedData.session_id)
-          setAnalysisResult(cachedData)
-        } else {
-          console.log('⚠️ Cached topic analysis does not match selected sessions. Cached:', cachedSessionId, 'Selected:', selectedSessionIds)
-          // Non caricare topic che non corrispondono alle sessioni selezionate
-          setAnalysisResult(null)
-        }
+      // Caso 1: cachedData è un array di risultati (topicData)
+      if (Array.isArray(cachedData)) {
+        setAnalysisResult(cachedData);
       }
-      
+      // Caso 2: cachedData è un oggetto singolo con session_id e topics
+      else if (cachedData.session_id && cachedData.topics) {
+        setAnalysisResult(cachedData);
+      }
+      // Caso 3: fallback
+      else {
+        setAnalysisResult(null);
+      }
       // Carica custom topics - solo se siamo in modalità custom
       if (
         cachedData.customTopics &&
@@ -303,20 +316,22 @@ export default function TopicAnalysisComponent({
     setError(null)
 
     try {
+      console.log(`Starting topic analysis for ${selectedSessions.length} sessions`)
+
       let allTopics: Topic[] = []
       let allSummaries: string[] = []
 
-      // Se ci sono più sessioni, analizza ognuna separatamente per i topic
       if (selectedSessions.length > 1) {
-        console.log(`Analyzing ${selectedSessions.length} sessions separately for topics`)
+        // Multi-session analysis: analizza tutte le sessioni selezionate
+        console.log('Multi-session analysis mode')
         
+        // Analizza ogni sessione separatamente
         for (let i = 0; i < selectedSessions.length; i++) {
           const session = selectedSessions[i]
           console.log(`Analyzing session ${i + 1}/${selectedSessions.length}: ${session.title}`)
 
-          // Estrai il contenuto del paziente per questa sessione
-          const patientContent = extractPatientContent(session.transcript)
-          console.log(`📊 Sessione ${session.id}: ${session.transcript.length} → ${patientContent.length} caratteri`)
+          // Normalizza la struttura del transcript per l'analisi
+          const normalizedTranscript = normalizeTranscriptStructure(session.transcript);
 
           const response = await fetch('/api/single-session-analysis', {
             method: 'POST',
@@ -325,7 +340,8 @@ export default function TopicAnalysisComponent({
             },
             body: JSON.stringify({
               session_id: session.id,
-              transcript: session.transcript // L'API estrae automaticamente il contenuto del paziente
+              transcript: normalizedTranscript
+              // L'API estrae automaticamente il contenuto del paziente
             }),
           })
 
@@ -361,6 +377,9 @@ export default function TopicAnalysisComponent({
 
       } else {
         // Sessione singola: usa l'approccio originale
+        // Normalizza la struttura del transcript combinato
+        const normalizedCombinedTranscript = normalizeTranscriptStructure(combinedTranscript);
+        
         const response = await fetch('/api/single-session-analysis', {
           method: 'POST',
           headers: {
@@ -368,7 +387,7 @@ export default function TopicAnalysisComponent({
           },
           body: JSON.stringify({
             session_id: `combined_${Date.now()}`,
-            transcript: combinedTranscript
+            transcript: normalizedCombinedTranscript
           }),
         })
 
@@ -395,16 +414,20 @@ export default function TopicAnalysisComponent({
       onAnalysisComplete?.(result)
 
       // Classifica automaticamente il testo se l'analisi è riuscita
-      if (result.topics && result.topics.length > 0) {
+      if (allTopics.length > 0) {
         console.log('Starting text classification...')
-        const segments = await classifyTextToTopicsSeparately(selectedSessions, result.topics)
-        console.log('Classification completed, segments:', segments)
+        const textSegments = await classifyTextToTopicsSeparately(selectedSessions, allTopics)
         
-        // Aggiorna il risultato con i text_segments
-        const resultWithSegments = { ...result, text_segments: segments }
-        setAnalysisResult(resultWithSegments)
+        // Aggiorna il risultato con i segmenti classificati
+        const updatedResult = {
+          ...result,
+          text_segments: textSegments
+        }
         
-        // Salva il risultato completo per ogni sessione
+        setAnalysisResult(updatedResult)
+        onAnalysisComplete?.(updatedResult)
+        
+        // Salva il risultato per ogni sessione
         for (const session of selectedSessions) {
           try {
             const response = await fetch('/api/analyses', {
@@ -415,10 +438,10 @@ export default function TopicAnalysisComponent({
               body: JSON.stringify({
                 sessionId: session.id,
                 analysisType: 'topics',
-                analysisData: resultWithSegments
+                analysisData: updatedResult
               })
             })
-            
+
             if (response.ok) {
               console.log(`✅ Topic analysis saved for session: ${session.id}`)
             } else {
@@ -429,11 +452,93 @@ export default function TopicAnalysisComponent({
           }
         }
         
-        onAnalysisComplete?.(resultWithSegments)
+        console.log(`Classification completed: ${textSegments.length} segments`)
       }
 
     } catch (error) {
       console.error('Errore durante l\'analisi:', error)
+      setError(error instanceof Error ? error.message : 'Unknown error during analysis')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  // Nuova funzione per analizzare una singola sessione specifica
+  const runSingleSessionAnalysis = async (sessionId: string) => {
+    const targetSession = selectedSessions.find(s => s.id === sessionId)
+    if (!targetSession) {
+      setError("Sessione non trovata")
+      return
+    }
+
+    setIsAnalyzing(true)
+    setError(null)
+
+    try {
+      console.log(`Starting single session analysis for: ${targetSession.title}`)
+
+      // Normalizza la struttura del transcript per l'analisi
+      const normalizedTranscript = normalizeTranscriptStructure(targetSession.transcript);
+
+      const response = await fetch('/api/single-session-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: targetSession.id,
+          transcript: normalizedTranscript
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      
+      // Classifica il testo per questa sessione
+      console.log('Starting text classification for single session...')
+      const textSegments = await classifyTextToTopicsSeparately([targetSession], result.topics)
+      
+      const finalResult = {
+        ...result,
+        text_segments: textSegments,
+        session_title: targetSession.title
+      }
+
+      // Salva il risultato per questa sessione specifica
+      if (onAnalysisComplete) {
+        onAnalysisComplete(finalResult)
+      }
+
+      // Salva anche nel database
+      try {
+        const saveResponse = await fetch('/api/analyses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            sessionId: targetSession.id,
+            analysisType: 'topics',
+            analysisData: finalResult
+          })
+        })
+
+        if (saveResponse.ok) {
+          console.log(`✅ Topic analysis saved for session: ${targetSession.id}`)
+        } else {
+          console.error(`❌ Failed to save topic analysis for session: ${targetSession.id}`)
+        }
+      } catch (error) {
+        console.error(`❌ Error saving topic analysis for session ${targetSession.id}:`, error)
+      }
+
+      console.log(`Single session analysis completed: ${textSegments.length} segments`)
+
+    } catch (error) {
+      console.error('Errore durante l\'analisi della sessione singola:', error)
       setError(error instanceof Error ? error.message : 'Unknown error during analysis')
     } finally {
       setIsAnalyzing(false)
@@ -552,6 +657,7 @@ Rispondi SOLO con JSON:
 
     const topicList = topics.map(t => `${t.topic_id}: ${t.description} (parole chiave: ${t.keywords.join(', ')})`).join('\n')
     console.log(`Processing ${sessions.length} sessions separately`)
+    console.log('📋 Topics disponibili:', topics.map(t => `${t.topic_id}: ${t.description}`));
 
     let allSegments: TextSegment[] = []
 
@@ -561,15 +667,18 @@ Rispondi SOLO con JSON:
         const session = sessions[i]
         console.log(`Processing session ${i + 1}/${sessions.length}: ${session.title}`)
 
+        // Normalizza la struttura del transcript per l'analisi
+        const normalizedTranscript = normalizeTranscriptStructure(session.transcript);
+        
         // Estrai il contenuto del paziente per questa sessione
-        const patientContent = extractPatientContent(session.transcript)
-        console.log(`📊 Sessione ${session.id}: ${session.transcript.length} → ${patientContent.length} caratteri`)
+        const patientContent = extractPatientContent(normalizedTranscript)
+        console.log(`📊 Sessione ${session.id}: ${session.transcript.length} → ${normalizedTranscript.length} → ${patientContent.length} caratteri`)
 
         // Split patient text into sentences
         const allSentences = patientContent
           .split(/[.!?]+/)
           .map(s => s.trim())
-          .filter(s => s.length > 15)
+          .filter(s => s.length > 5)
 
         console.log(`Session ${i + 1}: ${allSentences.length} total sentences (patient content only)`)
 
@@ -806,22 +915,309 @@ Rispondi SOLO con JSON:
 
   // Funzione per scrollare al primo segmento del topic
   const scrollToTopic = (topicId: number) => {
+    console.log('🎯 scrollToTopic chiamata con topicId:', topicId)
+    console.log('🎯 topicRefs.current:', topicRefs.current)
+    console.log('🎯 Chiavi disponibili in topicRefs:', Object.keys(topicRefs.current))
+    
     const el = topicRefs.current[topicId]
+    console.log('🎯 Elemento trovato:', el)
+    
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      console.log('🎯 Scrolling to element...')
+      console.log('🎯 Elemento text content:', el.textContent?.substring(0, 100))
+      
+      // Trova il contenitore scrollabile
+      const scrollContainer = el.closest('.overflow-y-auto')
+      console.log('🎯 Scroll container:', scrollContainer)
+      
+      if (scrollContainer) {
+        // Calcola la posizione dell'elemento rispetto al contenitore
+        const containerRect = scrollContainer.getBoundingClientRect()
+        const elementRect = el.getBoundingClientRect()
+        
+        // Calcola la posizione relativa dell'elemento rispetto al contenitore
+        const relativeTop = elementRect.top - containerRect.top
+        const scrollTop = scrollContainer.scrollTop + relativeTop - 50
+        
+        console.log('🎯 Container rect:', containerRect)
+        console.log('🎯 Element rect:', elementRect)
+        console.log('🎯 Relative top:', relativeTop)
+        console.log('🎯 Current scrollTop:', scrollContainer.scrollTop)
+        console.log('🎯 Scrolling to position:', scrollTop)
+        
+        scrollContainer.scrollTo({
+          top: scrollTop,
+          behavior: 'smooth'
+        })
+      } else {
+        // Fallback: usa scrollIntoView
+        console.log('🎯 Usando fallback scrollIntoView')
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+      
       el.classList.add('ring-2', 'ring-blue-400')
       setTimeout(() => el.classList.remove('ring-2', 'ring-blue-400'), 1200)
+    } else {
+      console.log('❌ Nessun elemento trovato per topicId:', topicId)
+      console.log('❌ Controlla che il topic sia stato mappato correttamente nel testo')
     }
   }
 
   // Prima di mappare i segmenti nella modalità testo (dentro CardContent, showTextView true)
   let firstTopicSegmentRendered: Record<number, boolean> = {}
 
+  const [currentSessionIndex, setCurrentSessionIndex] = useState(0);
+
+  // Reset currentSessionIndex quando cambiano le sessioni selezionate
+  React.useEffect(() => {
+    if (currentSessionIndex >= selectedSessions.length) {
+      setCurrentSessionIndex(0);
+    }
+  }, [selectedSessions.length, currentSessionIndex]);
+
+  // topicSessions: array di AnalysisResult, uno per sessione selezionata
+  const topicSessions = React.useMemo(() => {
+    if (!analysisResult) return [];
+    if (Array.isArray(analysisResult)) return analysisResult;
+    // Se analysisResult è singolo, restituisci come array
+    return [analysisResult];
+  }, [analysisResult]);
+
+  const allTopicSessions = selectedSessions.map((s) => {
+    const found = topicSessions.find(ts => ts.session_id === s.id);
+    if (found) return found;
+    return { session_id: s.id, session_title: s.title, missing: true };
+  });
+
+  const goToPreviousSession = () => {
+    setCurrentSessionIndex(prev => prev > 0 ? prev - 1 : allTopicSessions.length - 1);
+  };
+  const goToNextSession = () => {
+    setCurrentSessionIndex(prev => prev < allTopicSessions.length - 1 ? prev + 1 : 0);
+  };
+
+  // DEBUG: logga lo stato delle variabili chiave
+  console.log('[DEBUG TopicModeling]', {
+    analysisResult,
+    isCustomMode,
+    topicSessionsLength: topicSessions.length,
+    selectedSessionsLength: selectedSessions.length
+  });
+
+  // Type guard per distinguere tra sessione con analisi e placeholder
+  function isTopicAnalysis(obj: any): obj is AnalysisResult {
+    return obj && Array.isArray(obj.topics);
+  }
+
+  // Funzione per normalizzare la struttura del transcript per il topic modeling
+  const normalizeTranscriptStructure = (transcript: string): string => {
+    if (!transcript) return transcript;
+    
+    console.log('🔧 [Topic Modeling] Normalizing transcript structure...');
+    console.log('📝 [Topic Modeling] Original transcript (first 200 chars):', transcript.substring(0, 200));
+    
+    // Check if the transcript is already properly formatted
+    const hasProperStructure = /(Paziente:|Terapeuta:)\s*\n/.test(transcript);
+    
+    if (hasProperStructure) {
+      console.log('✅ [Topic Modeling] Transcript already has proper structure, skipping normalization');
+      return transcript;
+    }
+    
+    // Rimuovi tutti i newline e metti tutto su una riga
+    let normalized = transcript.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+    
+    // Aggiungi newline prima e dopo ogni speaker marker per creare la struttura richiesta
+    // Formato: [interlocutore]\n[paragrafo]\n[interlocutore]\n etc
+    // Regex specifici per "Paziente:" e "Terapeuta:"
+    normalized = normalized
+      .replace(/(Paziente:)/g, '\n$1\n')
+      .replace(/(Terapeuta:)/g, '\n$1\n')
+      // Fallback per altri marker
+      .replace(/(P:|T:|THERAPIST:|Therapist:)/gi, '\n$1\n');
+    
+    // Rimuovi newline multipli consecutivi e normalizza
+    normalized = normalized
+      .replace(/\n\s*\n/g, '\n')
+      .replace(/\n\s+/g, '\n')
+      .trim();
+    
+    // Se non ci sono speaker markers, aggiungi un marker di default per il paziente
+    if (!/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi.test(normalized)) {
+      normalized = `Paziente:\n${normalized}`;
+    }
+    
+    // Assicurati che la struttura sia corretta: ogni speaker marker deve essere seguito da un newline
+    // e ogni paragrafo deve essere separato da un newline
+    normalized = normalized
+      .replace(/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)([^\n])/gi, '$1\n$2')
+      .replace(/([^\n])(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi, '$1\n$2');
+    
+    console.log('✅ [Topic Modeling] Normalized transcript (first 200 chars):', normalized.substring(0, 200));
+    console.log('🔍 [Topic Modeling] Speaker markers found:', (normalized.match(/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi) || []).length);
+    
+    return normalized;
+  };
+
+  // Funzione per formattare il transcript per la visualizzazione HTML
+  const formatTranscriptForDisplay = (transcript: string): string => {
+    const normalized = normalizeTranscriptStructure(transcript);
+    // Converti \n in <br/> per il rendering HTML
+    return normalized.replace(/\n/g, '<br/>');
+  };
+
+  // Nuova funzione per mappare i risultati del topic modeling alla trascrizione completa
+  // Approccio semplice e diretto: mapping basato su ricerca esatta e fuzzy
+  const mapTopicResultsToFullTranscript = (session: Session, patientSegments: TextSegment[]): TextSegment[] => {
+    // Normalizza la struttura del transcript per il topic modeling
+    const normalizedTranscript = normalizeTranscriptStructure(session.transcript);
+    const fullTranscript = normalizedTranscript;
+    
+    // Se non ci sono segmenti del paziente, restituisci la trascrizione completa senza evidenziazione
+    if (!patientSegments || patientSegments.length === 0) {
+      return [{
+        text: fullTranscript,
+        topic_id: null,
+        confidence: 0
+      }];
+    }
+
+    // Estrai il contenuto del paziente dalla trascrizione completa
+    const patientContent = extractPatientContent(fullTranscript);
+    
+    // Se non c'è contenuto del paziente, restituisci la trascrizione senza evidenziazione
+    if (!patientContent || patientContent.trim().length === 0) {
+      return [{
+        text: fullTranscript,
+        topic_id: null,
+        confidence: 0
+      }];
+    }
+
+    // APPROCCIO MIGLIORATO: Dividi la trascrizione per speaker e cerca match più flessibili
+    const fullSegments: TextSegment[] = [];
+    
+    // Pattern per identificare speaker
+    const speakerPattern = /(PAZIENTE:|P:|Terapeuta:|Paziente:)/gi;
+    
+    // Dividi la trascrizione mantenendo i separatori
+    const parts = fullTranscript.split(speakerPattern);
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      
+      // Se questa parte è un marker di speaker
+      if (speakerPattern.test(part)) {
+        // Aggiungi il marker senza evidenziazione
+        fullSegments.push({
+          text: part,
+          topic_id: null,
+          confidence: 0
+        });
+        
+        // La prossima parte sarà il contenuto dello speaker
+        if (i + 1 < parts.length) {
+          const content = parts[i + 1];
+          
+          // Determina se questo è contenuto del paziente
+          const isPatientContent = /^(PAZIENTE:|P:|Paziente:)/gi.test(part);
+          
+          if (isPatientContent && content) {
+            // MAPPING GRANULARE: Processa ogni frase individualmente
+            const sentences = content.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 5);
+            
+            if (sentences.length > 0) {
+              // Processa ogni frase individualmente
+              for (let j = 0; j < sentences.length; j++) {
+                const sentence = sentences[j];
+                let sentenceTopicId: number | null = null;
+                let sentenceConfidence = 0;
+                
+                // Cerca il topic per questa frase specifica
+                for (const segment of patientSegments) {
+                  if (segment.topic_id === null) continue;
+                  
+                  const normalizedSegment = segment.text.toLowerCase().trim();
+                  const normalizedSentence = sentence.toLowerCase().trim();
+                  
+                  // Match esatto per frase
+                  if (normalizedSentence === normalizedSegment) {
+                    sentenceTopicId = segment.topic_id;
+                    sentenceConfidence = segment.confidence;
+                    break;
+                  }
+                  
+                  // Match parziale (la frase contiene il segmento)
+                  if (normalizedSentence.includes(normalizedSegment) && normalizedSegment.length > 10) {
+                    if (segment.confidence > sentenceConfidence) {
+                      sentenceTopicId = segment.topic_id;
+                      sentenceConfidence = segment.confidence;
+                    }
+                  }
+                  
+                  // Match inverso (il segmento contiene la frase)
+                  if (normalizedSegment.includes(normalizedSentence) && normalizedSentence.length > 10) {
+                    if (segment.confidence > sentenceConfidence) {
+                      sentenceTopicId = segment.topic_id;
+                      sentenceConfidence = segment.confidence;
+                    }
+                  }
+                }
+                
+                // Aggiungi la frase con il suo topic
+                fullSegments.push({
+                  text: sentence + (j < sentences.length - 1 ? '. ' : ''),
+                  topic_id: sentenceTopicId,
+                  confidence: sentenceConfidence
+                });
+              }
+            } else {
+              // Se non ci sono frasi valide, aggiungi il contenuto come unico segmento
+              fullSegments.push({
+                text: content,
+                topic_id: null,
+                confidence: 0
+              });
+            }
+          } else {
+            // Contenuto del terapeuta o altro
+            fullSegments.push({
+              text: content,
+              topic_id: null,
+              confidence: 0
+            });
+          }
+          
+          i++; // Salta la prossima parte (contenuto)
+        }
+      } else {
+        // Questa è una parte normale (non un marker di speaker)
+        fullSegments.push({
+          text: part,
+          topic_id: null,
+          confidence: 0
+        });
+      }
+    }
+    
+    // Debug: riassunto del mapping
+    const mappedTopics = fullSegments.filter(s => s.topic_id !== null).map(s => s.topic_id);
+    const uniqueTopics = Array.from(new Set(mappedTopics));
+    console.log('🎨 [Mapping] Riassunto:', {
+      totalSegments: fullSegments.length,
+      mappedSegments: mappedTopics.length,
+      uniqueTopics: uniqueTopics.length,
+      topics: uniqueTopics
+    });
+    
+    return fullSegments;
+  };
+
   return (
-    <div className="h-full space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold flex items-center gap-2">
+    <div className="h-full space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex-1">
+          <h3 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
             Topic Analysis
             {cachedData && !isCustomMode && (
               <Badge variant="secondary" className="text-xs">
@@ -850,17 +1246,17 @@ Rispondi SOLO con JSON:
             setAnalysisResult(null);
             setError(null);
           }}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 w-full sm:w-auto"
         >
           {isCustomMode ? (
             <>
               <Search className="h-4 w-4" />
-              Auto Discovery
+              <span className="hidden sm:inline">Auto Discovery</span>
             </>
           ) : (
             <>
               <Search className="h-4 w-4" />
-              Custom Topics
+              <span className="hidden sm:inline">Custom Topics</span>
             </>
           )}
         </Button>
@@ -882,7 +1278,7 @@ Rispondi SOLO con JSON:
             </>
           ) : (
             <>
-              Avvia Analisi Topic
+              Avvia Analisi Topic (Tutte le Sessioni)
             </>
           )}
         </Button>
@@ -915,7 +1311,7 @@ Rispondi SOLO con JSON:
                 </Label>
                 
                 {/* Griglia delle analisi precedenti */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                   {uniqueSearches.map((search, index) => {
                     const key = search.id || search.timestamp || search.query || String(index);
                     return (
@@ -936,17 +1332,17 @@ Rispondi SOLO con JSON:
                           className="text-sm text-blue-800 font-medium hover:text-blue-600 hover:underline cursor-pointer flex-1 text-left"
                           title={`Carica analisi: ${search.query}`}
                         >
-                          <div className="flex flex-col">
+                          <div className="flex flex-col min-w-0">
                             <div className="flex items-center gap-2">
-                              <Search className="h-3 w-3" />
+                              <Search className="h-3 w-3 flex-shrink-0" />
                               <span className="truncate">{search.query}</span>
                             </div>
-                            <span className="text-xs text-gray-500 mt-1">
+                            <span className="text-xs text-gray-500 mt-1 truncate">
                               {new Date(search.timestamp).toLocaleDateString()} - {search.results.reduce((total, sessionResult) => total + sessionResult.topics.length, 0)} topic
                             </span>
                           </div>
                         </button>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           <span className={`text-xs px-1.5 py-0.5 rounded border ${
                             selectedCustomSearchId === key
                               ? 'bg-blue-100 text-blue-800 border-blue-300'
@@ -1003,34 +1399,35 @@ Rispondi SOLO con JSON:
               ))}
             </div>
             
-            <div className="flex items-center gap-2">
-                              <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={addCustomTopic}
-                  disabled={customTopics.length >= 5}
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Aggiungi Topic
-                </Button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addCustomTopic}
+                disabled={customTopics.length >= 5}
+                className="flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Aggiungi Topic</span>
+              </Button>
               
-                              <Button
-                  onClick={runCustomTopicSearch}
-                  disabled={isSearching || !combinedTranscript || customTopics.every(t => t.trim().length === 0)}
-                  className="flex items-center gap-2"
-                >
-                  {isSearching ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Ricerca in corso...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4" />
-                      Cerca Topics
-                    </>
-                  )}
-                </Button>
+              <Button
+                onClick={runCustomTopicSearch}
+                disabled={isSearching || !combinedTranscript || customTopics.every(t => t.trim().length === 0)}
+                className="flex items-center gap-2 flex-1 sm:flex-none"
+              >
+                {isSearching ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="hidden sm:inline">Ricerca in corso...</span>
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4" />
+                    <span className="hidden sm:inline">Cerca Topics</span>
+                  </>
+                )}
+              </Button>
             </div>
             
             {/* Progress indicator */}
@@ -1070,344 +1467,144 @@ Rispondi SOLO con JSON:
         </Card>
       ) : (
         <div className="grid gap-6">
-          {/* Risultati della ricerca personalizzata - solo in modalità custom */}
-          {customSearchResult && isCustomMode && selectedCustomSearchId && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Search className="h-5 w-5" />
-                      Risultati Ricerca Topic Personalizzati
-                    </CardTitle>
-                    <CardDescription>
-                      {customSearchResult.summary}
-                    </CardDescription>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowCustomTextView(!showCustomTextView)}
-                    className="flex items-center gap-2"
-                  >
-                    {showCustomTextView ? (
-                      <>
-                        <EyeOff className="h-3 w-3" />
-                        Hide Text
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="h-3 w-3" />
-                        View in Text
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {!showCustomTextView ? (
-                  <div className="space-y-6">
-                    {customSearchResult.results.map((sessionResult, sessionIndex) => (
-                      <div key={sessionIndex} className="border rounded-lg p-4">
-                        <h3 className="font-semibold text-lg mb-3">Session: {sessionResult.sessionTitle}</h3>
-                        {sessionResult.topics.map((topicResult, topicIdx) => (
-                          <div key={topicIdx} className="p-2 bg-blue-50 border-l-4 border-blue-400 rounded text-sm">
-                            <div className="flex justify-between items-start mb-1">
-                              <span className="text-xs text-gray-500">
-                                Confidence: {Math.round(topicResult.confidence * 100)}%
-                              </span>
-                            </div>
-                            <p className="text-gray-800">{topicResult.topic}</p>
-                            {topicResult.relevantSegments.length > 0 ? (
-                              topicResult.relevantSegments.map((segment, segIdx) => (
-                                <div key={segIdx} className="p-1 text-xs text-gray-600">
-                                  {segment.text} ({Math.round(segment.confidence * 100)}%)
-                                </div>
-                              ))
-                            ) : (
-                              <div className="text-gray-500 italic text-sm">Nessun segmento rilevante trovato per questo topic.</div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="max-h-96 overflow-y-auto pr-2">
-                    {/* Legenda topic (modalità testo) */}
-                    <div className="mb-4">
-                      <h4 className="font-medium mb-2">Legenda Topic:</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {Array.from(new Set(customSearchResult.results.flatMap(sessionResult => sessionResult.topics.map(t => t.topic)))).map((topic, index) => (
-                          <Badge key={index} className={getTopicColor(index + 1)}>
-                            {topic}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2 text-sm leading-relaxed">
-                      {(() => {
-                        // Creare una mappa di tutti i segmenti trovati con le loro posizioni nel testo
-                        const segmentMap = new Map();
-                        
-                        customSearchResult.results.forEach((sessionResult) => {
-                          sessionResult.topics.forEach((topicResult, topicIdx) => {
-                            topicResult.relevantSegments.forEach(segment => {
-                              const startIndex = combinedTranscript.indexOf(segment.text);
-                              if (startIndex !== -1) {
-                                segmentMap.set(startIndex, {
-                                  text: segment.text,
-                                  topicIndex: topicIdx + 1, // Usa l'indice come topicIndex
-                                  topic: topicResult.topic,
-                                  confidence: segment.confidence,
-                                  endIndex: startIndex + segment.text.length
-                                });
-                              }
-                            });
-                          });
-                        });
-
-                        // Ordinare i segmenti per posizione
-                        const sortedSegments = Array.from(segmentMap.entries())
-                          .sort(([a], [b]) => a - b);
-
-                        if (sortedSegments.length === 0) {
-                          return (
-                            <div className="text-gray-600 italic">
-                              Nessun segmento topic trovato nella trascrizione.
-                            </div>
-                          );
-                        }
-
-                        // Funzione helper per formattare il testo con interruzioni di riga
-                        const formatTextWithSpeakers = (text: string) => {
-                          // Pattern per riconoscere i cambi di interlocutore
-                          const speakerPattern = /(Therapist:|Patient:|Paziente:|Terapeuta:)/gi;
-                          return text.replace(speakerPattern, '\n\n$1');
-                        };
-
-                        // Funzione helper per creare elementi con formattazione
-                        const createFormattedElements = (text: string, className: string, title?: string) => {
-                          const formattedText = formatTextWithSpeakers(text);
-                          const lines = formattedText.split('\n');
-                          
-                          return lines.map((line, lineIndex) => {
-                            if (line.trim() === '') {
-                              return <br key={`${elementKey++}-br-${lineIndex}`} />;
-                            }
-                            
-                            // Controlla se la riga inizia con un interlocutore
-                            const speakerMatch = line.match(/^(Therapist:|Patient:|Paziente:|Terapeuta:)/i);
-                            if (speakerMatch) {
-                              const speaker = speakerMatch[1];
-                              const restOfLine = line.slice(speaker.length).trim();
-                              
-                              return (
-                                <div key={`${elementKey++}-line-${lineIndex}`} className="mb-2">
-                                  <span className="font-semibold text-gray-900">
-                                    {speaker}
-                                  </span>
-                                  {restOfLine && (
-                                    <span className={className} title={title}>
-                                      {' ' + restOfLine}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            }
-                            
-                            return (
-                              <span key={`${elementKey++}-line-${lineIndex}`} className={className} title={title}>
-                                {line}
-                              </span>
-                            );
-                          });
-                        };
-
-                        // Costruire il testo con evidenziazioni
-                        let currentIndex = 0;
-                        const elements = [];
-                        let elementKey = 0;
-
-                        sortedSegments.forEach(([startIndex, segment]) => {
-                          // Aggiungere il testo non evidenziato prima del segmento
-                          if (currentIndex < startIndex) {
-                            const beforeText = combinedTranscript.slice(currentIndex, startIndex);
-                            const beforeElements = createFormattedElements(beforeText, "text-gray-800");
-                            elements.push(...beforeElements);
-                          }
-
-                          // Aggiungere il segmento evidenziato
-                          const highlightedElements = createFormattedElements(
-                            segment.text,
-                            `inline-block p-1 rounded ${getTopicBackgroundColor(segment.topicIndex)} border-l-2 border-gray-400`,
-                            `"${segment.topic}" (${Math.round(segment.confidence * 100)}% confidence)`
-                          );
-                          elements.push(...highlightedElements);
-
-                          currentIndex = segment.endIndex;
-                        });
-
-                        // Aggiungere il resto del testo se c'è
-                        if (currentIndex < combinedTranscript.length) {
-                          const remainingText = combinedTranscript.slice(currentIndex);
-                          const remainingElements = createFormattedElements(remainingText, "text-gray-800");
-                          elements.push(...remainingElements);
-                        }
-
-                        return elements;
-                      })()}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Risultati dell'analisi automatica - solo in modalità normale */}
-          {analysisResult && !isCustomMode && (
+          {/* Freccette di navigazione per topic modeling standard - fuori dalla Card */}
+          {/* Overlay del titolo in alto a sinistra */}
+          {/* Rimuovi la box overlay con Brain e 'Identified Topics' */}
+          {selectedSessions.length > 0 && !isCustomMode && (
             <Card className="relative">
-              {/* Overlay del titolo in alto a sinistra */}
-              <div className="absolute top-4 left-4 z-10">
-                <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border shadow-sm">
-                  <Brain className="h-4 w-4" />
-                  <span className="text-sm font-medium">Identified Topics</span>
-                  {analysisResult.text_segments && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowTextView(!showTextView)}
-                      className="ml-2 h-7 px-2"
-                    >
-                      {showTextView ? (
-                        <>
-                          <EyeOff className="h-3 w-3 mr-1" />
-                          Hide
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="h-3 w-3 mr-1" />
-                          In Text
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Sezione statica per i badge dei topic */}
-              {/* Rimuovo la sezione statica dei badge dei topic sopra il CardHeader */}
-              {/* Mantengo solo la legenda topic nella modalità testo */}
-
-              <CardHeader className="pt-2">
-                <CardDescription>
-                  {analysisResult.summary}
+              <CardHeader className="pt-2 pb-0">
+                {/* RIMUOVI CardTitle con Macrotemi individuati */}
+                {/* <CardTitle className="text-xl font-bold mb-2 flex items-center gap-2">
+                  <Brain className="h-5 w-5" /> Macrotemi individuati
+                </CardTitle> */}
+                <CardDescription className="mb-2">
+                  {allTopicSessions[currentSessionIndex] && isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].summary : ''}
                 </CardDescription>
               </CardHeader>
-
+              {/* Barra di navigazione sessioni topic modeling standard - sempre visibile se più di una sessione selezionata */}
+              {allTopicSessions.length > 1 && (
+                <div className="flex justify-center mb-4 mt-2">
+                  <div className="flex flex-col w-full max-w-xl bg-gray-50 rounded-xl py-4 px-4 sm:px-6 items-center shadow-sm">
+                    <div className="flex w-full items-center justify-between mb-1">
+                      <Button variant="outline" size="sm" onClick={goToPreviousSession} className="flex items-center gap-1 text-xs sm:text-sm">
+                        <ChevronLeft className="h-4 w-4" />
+                        <span className="font-semibold hidden sm:inline">Precedente</span>
+                      </Button>
+                      <div className="flex flex-col items-center flex-1 px-2">
+                        <span className="font-semibold text-sm sm:text-lg text-center truncate max-w-full">{allTopicSessions[currentSessionIndex]?.session_title || (allTopicSessions[currentSessionIndex] && isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].title : '') || 'Sessione'}</span>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={goToNextSession} className="flex items-center gap-1 text-xs sm:text-sm">
+                        <span className="font-semibold hidden sm:inline">Successiva</span>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="text-center text-gray-600 text-xs sm:text-base mt-1 px-2">
+                      {/* Mostra solo il nome della sessione, non il codice */}
+                      <span className="truncate max-w-full block">{allTopicSessions[currentSessionIndex]?.session_title || (allTopicSessions[currentSessionIndex] && isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? allTopicSessions[currentSessionIndex].title : '') || 'Sessione'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {allTopicSessions.length === 1 && (
+                <div className="flex justify-center mb-4 mt-2">
+                  <div className="flex flex-col w-full max-w-xl bg-gray-50 rounded-xl py-4 px-4 sm:px-6 items-center shadow-sm">
+                    <div className="flex w-full items-center justify-center mb-1">
+                      {/* Mostra solo il nome della sessione, non il codice */}
+                      <span className="font-semibold text-sm sm:text-lg text-center truncate max-w-full px-2">{allTopicSessions[0]?.session_title || (allTopicSessions[0] && isTopicAnalysis(allTopicSessions[0]) ? allTopicSessions[0].title : '') || 'Sessione'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
               <CardContent>
-                {!showTextView ? (
-                  <div className="max-h-96 overflow-y-auto space-y-4 pr-2">
-                    {analysisResult.topics && Array.isArray(analysisResult.topics) ? (
-                      analysisResult.topics.map((topic, index) => (
-                        <div key={topic.topic_id} className="p-4 border rounded-lg">
-                          <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <h4 className="font-medium text-lg">
-                                {topic.description}
-                              </h4>
-                            </div>
-                            <Badge className={getTopicColor(topic.topic_id)}>
-                              {topic.description.replace(/\s*\([^)]*\)$/, '')}
-                            </Badge>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-gray-600 mb-2">Keywords:</p>
-                            <div className="flex flex-wrap gap-2">
-                              {topic.keywords && Array.isArray(topic.keywords) ? (
-                                topic.keywords.map((keyword, keywordIndex) => (
-                                  <Badge 
-                                    key={keywordIndex} 
-                                    variant="outline"
-                                    className="text-xs"
-                                  >
-                                    {keyword}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <p className="text-gray-500 italic">Nessuna parola chiave disponibile</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-gray-500 italic">Nessun topic disponibile</p>
-                    )}
+                {allTopicSessions[currentSessionIndex] && !isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <p className="text-lg font-medium text-gray-700 mb-4 text-center">
+                      L'analisi topic modeling per questa sessione non è ancora pronta.<br />
+                      Premi il pulsante qui sotto per avviarla.
+                    </p>
+                    <Button onClick={() => runSingleSessionAnalysis(allTopicSessions[currentSessionIndex].session_id)}>
+                      Avvia Analisi Topic
+                    </Button>
                   </div>
                 ) : (
-                  <div className="max-h-96 overflow-y-auto pr-2">
-                    {/* Legenda topic (modalità testo) */}
-                    <div className="mb-4">
-                      <h4 className="font-medium mb-2">Legenda Topic:</h4>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {analysisResult.topics && Array.isArray(analysisResult.topics) ? (
-                          analysisResult.topics.map((topic, index) => (
-                            <Badge
-                              key={topic.topic_id}
-                              className={getTopicColor(topic.topic_id) + ' cursor-pointer transition-all'}
-                              onClick={() => scrollToTopic(topic.topic_id)}
-                              title="Vai al topic nel testo"
-                            >
-                              {topic.description.replace(/\s*\([^)]*\)$/, '')}
-                            </Badge>
+                  <>
+                    <div className="mb-6">
+                      <h4 className="font-semibold text-lg mb-2">Elenco Macrotemi</h4>
+                      <div className="space-y-2">
+                        {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
+                          allTopicSessions[currentSessionIndex].topics.map((topic, index) => (
+                            <div key={topic.topic_id} className="mb-2">
+                              <Badge
+                                className={getTopicColor(topic.topic_id) + ' text-sm sm:text-base px-2 sm:px-3 py-1 cursor-pointer transition-all mb-2 break-words'}
+                                title={topic.description}
+                                onClick={() => scrollToTopic(topic.topic_id)}
+                              >
+                                {topic.description.replace(/\s*\([^)]*\)$/, '')}
+                              </Badge>
+                              <div className="ml-2">
+                                <span className="text-gray-700 text-xs sm:text-sm break-words">
+                                  {topic.keywords && Array.isArray(topic.keywords) ? topic.keywords.join(', ') : <span className="italic text-gray-400">Nessuna parola chiave</span>}
+                                </span>
+                              </div>
+                            </div>
                           ))
                         ) : (
                           <p className="text-gray-500 italic">Nessun topic disponibile</p>
                         )}
                       </div>
                     </div>
-                    
-                    <div className="space-y-2 text-sm leading-relaxed">
-                      {analysisResult.text_segments && Array.isArray(analysisResult.text_segments) ? (
-                        analysisResult.text_segments.map((segment, index) => {
-                          // Controlla se è un separatore di sessione
-                          const isSessionSeparator = segment.text.includes('---') && segment.topic_id === null
-                          
-                          if (isSessionSeparator) {
-                            return (
-                              <div
-                                key={index}
-                                className="py-3 my-4 text-center font-medium text-gray-700 border-t border-b border-gray-300 bg-gray-50"
-                              >
-                                {segment.text.replace(/\n/g, '').trim()}
-                              </div>
-                            )
-                          }
-                          
-                          return (
-                            <span
-                              key={index}
-                              ref={segment.topic_id && !firstTopicSegmentRenderedRef.current[segment.topic_id] ? (el) => {
-                                if (el) topicRefs.current[segment.topic_id!] = el
-                                firstTopicSegmentRenderedRef.current[segment.topic_id!] = true
-                              } : undefined}
-                              className={`inline-block p-1 rounded ${getTopicBackgroundColor(segment.topic_id)} ${segment.topic_id ? 'border-l-2 border-gray-400' : ''}`}
-                              title={segment.topic_id ? `${analysisResult.topics?.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '') || `Topic ${segment.topic_id}`} (${Math.round(segment.confidence * 100)}% confidence)` : 'Unclassified'}
-                            >
-                              {segment.text}
-                            </span>
-                          )
-                        })
-                      ) : (
+                    <div className="p-3 sm:p-4 bg-gray-50 rounded-lg border max-h-96 overflow-y-auto text-sm sm:text-base leading-relaxed">
+                        {isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (
+                          (() => {
+                            const currentSession = selectedSessions.find(s => s.id === allTopicSessions[currentSessionIndex].session_id);
+                            const analysisResult = allTopicSessions[currentSessionIndex] as AnalysisResult;
+                            
+
+                            
+                            // Usa i text_segments da topicAnalysis se disponibili, altrimenti da analysisResult direttamente
+                            const textSegments = analysisResult.topicAnalysis?.text_segments || analysisResult.text_segments || [];
+                            
+                            const fullSegments = currentSession ? 
+                              mapTopicResultsToFullTranscript(currentSession, textSegments) :
+                              textSegments;
+                            
+                            return fullSegments.map((segment, index) => {
+                              const isSessionSeparator = segment.text.includes('---') && segment.topic_id === null;
+                              if (isSessionSeparator) {
+                                return (
+                                  <div
+                                    key={index}
+                                    className="py-3 my-4 text-center font-medium text-gray-700 border-t border-b border-gray-300 bg-gray-100"
+                                  >
+                                    {segment.text.replace(/\n/g, '').trim()}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <span
+                                  key={index}
+                                  ref={segment.topic_id ? (el) => {
+                                    if (el && !topicRefs.current[segment.topic_id!]) {
+                                      // Salva solo il primo segmento per ogni topic_id (prima occorrenza nel documento)
+                                      topicRefs.current[segment.topic_id!] = el;
+                                      console.log('🔗 Ref assegnato per topicId:', segment.topic_id, 'elemento:', el, 'indice:', index)
+                                    }
+                                  } : undefined}
+                                  className={`inline-block p-1 rounded transition-all ${getTopicBackgroundColor(segment.topic_id)} ${segment.topic_id ? 'border-l-4 border-blue-400 font-semibold text-blue-900' : 'text-gray-800'}`}
+                                  title={segment.topic_id ? `${isTopicAnalysis(allTopicSessions[currentSessionIndex]) ? (allTopicSessions[currentSessionIndex].topics?.find(t => t.topic_id === segment.topic_id)?.description.replace(/\s*\([^)]*\)$/, '')) : ''} (${Math.round(segment.confidence * 100)}% confidence)` : 'Unclassified'}
+                                >
+                                  {segment.text}
+                                </span>
+                              );
+                            });
+                          })()
+                        ) : (
                         <p className="text-gray-500 italic">
                           Classificazione del testo in corso...
                         </p>
                       )}
                     </div>
-                  </div>
+                  </>
                 )}
               </CardContent>
             </Card>

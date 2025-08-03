@@ -141,7 +141,8 @@ export async function GET(
     // Decripta il transcript se presente
     const decryptedSessionData = {
       ...sessionData,
-      transcript: decryptIfEncrypted(sessionData.transcript)
+      transcript: decryptIfEncrypted(sessionData.transcript),
+      summary: decryptIfEncrypted(sessionData.summary)
     }
 
     return createSuccessResponse(decryptedSessionData)

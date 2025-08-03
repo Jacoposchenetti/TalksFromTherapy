@@ -252,11 +252,11 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
   }
 
   return (
-    <div className="flex flex-col items-center w-full max-w-2xl mx-auto py-8 gap-6">
+    <div className="flex flex-col items-center w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 gap-6">
       <div className="w-full text-center">
-        <Heart className="w-14 h-14 mx-auto text-pink-500 mb-2" />
-        <h2 className="text-2xl font-bold mb-1">Analisi delle Emozioni</h2>
-        <p className="text-gray-600 mb-4">Visualizza le emozioni principali rilevate nelle sessioni selezionate.</p>
+        <Heart className="w-10 h-10 sm:w-14 sm:h-14 mx-auto text-pink-500 mb-2" />
+        <h2 className="text-xl sm:text-2xl font-bold mb-1">Analisi delle Emozioni</h2>
+        <p className="text-gray-600 mb-4 text-sm sm:text-base">Visualizza le emozioni principali rilevate nelle sessioni selezionate.</p>
       </div>
       <div className="w-full flex flex-col items-center gap-4">
         {error && (
@@ -277,29 +277,29 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
             <CardContent className="py-6">
               {/* Controlli di navigazione */}
               {validSessions.length > 1 && (
-                <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg">
+                <div className="flex flex-col sm:flex-row items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg gap-4">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={goToPreviousSession}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 w-full sm:w-auto"
                   >
                     <ChevronLeft className="w-4 h-4" />
-                    Precedente
+                    <span className="hidden sm:inline">Precedente</span>
                   </Button>
-                  <div className="text-center">
-                    <span className="font-semibold text-gray-700">
+                  <div className="text-center flex-1">
+                    <span className="font-semibold text-gray-700 text-sm sm:text-base">
                       Sessione {currentSessionIndex + 1} di {validSessions.length}
                     </span>
-                    <p className="text-sm text-gray-500 mt-1">{currentSession?.session_title || 'Sessione senza titolo'}</p>
+                    <p className="text-xs sm:text-sm text-gray-500 mt-1 truncate max-w-full px-2">{currentSession?.session_title || 'Sessione senza titolo'}</p>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={goToNextSession}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 w-full sm:w-auto"
                   >
-                    Successiva
+                    <span className="hidden sm:inline">Successiva</span>
                     <ChevronRight className="w-4 h-4" />
                   </Button>
                 </div>
@@ -307,12 +307,27 @@ export function SentimentAnalysis({ selectedSessions, onAnalysisComplete, cached
               
               {/* Visualizzazione sessione corrente */}
               <div className="mb-8">
-                <div className="flex flex-wrap gap-6 mb-2 items-center text-base">
-                  <span className="font-bold text-red-800">Sessione:</span> <span className="text-red-900">{currentSession?.session_title || 'Sessione senza titolo'}</span>
-                  <span className="font-bold text-red-800">Parole:</span> <span className="text-red-900">{currentSession.analysis?.text_length || 0}</span>
-                  <span className="font-bold text-red-800">Valenza:</span> <span className="text-red-900">{Number(currentSession.analysis?.emotional_valence || 0).toFixed(2)}</span>
-                  <span className="font-bold text-red-800">Positive:</span> <span className="text-red-900">{Number(currentSession.analysis?.positive_score || 0).toFixed(2)}</span>
-                  <span className="font-bold text-red-800">Negative:</span> <span className="text-red-900">{Number(currentSession.analysis?.negative_score || 0).toFixed(2)}</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6 mb-4 items-center text-sm sm:text-base">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-red-800 text-xs sm:text-sm">Sessione:</span> 
+                    <span className="text-red-900 truncate">{currentSession?.session_title || 'Sessione senza titolo'}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-red-800 text-xs sm:text-sm">Parole:</span> 
+                    <span className="text-red-900">{currentSession.analysis?.text_length || 0}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-red-800 text-xs sm:text-sm">Valenza:</span> 
+                    <span className="text-red-900">{Number(currentSession.analysis?.emotional_valence || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-red-800 text-xs sm:text-sm">Positive:</span> 
+                    <span className="text-red-900">{Number(currentSession.analysis?.positive_score || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-red-800 text-xs sm:text-sm">Negative:</span> 
+                    <span className="text-red-900">{Number(currentSession.analysis?.negative_score || 0).toFixed(2)}</span>
+                  </div>
                 </div>
                 {currentSession.analysis ? (
                   <EmotionVisualizer data={currentSession.analysis} />

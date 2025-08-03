@@ -5,10 +5,11 @@ import { useSession } from "next-auth/react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, FileText, BarChart3, Heart, MessageSquare, Save, Edit, ChevronLeft, ChevronRight, Network, Search, X, RefreshCw, Database, History } from "lucide-react"
+import { ChevronLeft, ChevronRight, MessageSquare, FileText, Save, Edit, ArrowLeft, BarChart3, Heart, Network, Search, X, RefreshCw, Database, History } from "lucide-react"
 import { SentimentAnalysis } from "@/components/sentiment-analysis"
 import TopicAnalysisComponent from "@/components/analysis/topic-modeling-gpt"
 import { useMultiSessionAnalysis } from "@/hooks/useMultiSessionAnalysis"
+import { useRef } from "react"
 
 interface Session {
   id: string
@@ -49,6 +50,9 @@ function AnalysisPageInner() {
 
 
   const [currentSlide, setCurrentSlide] = useState(0) // 0: Trascrizioni, 1: Topic Modelling, 2: Sentiment Analysis, 3: Semantic Frame
+  const [sidebarOpen, setSidebarOpen] = useState(true) // Sidebar visibility state
+  const [notesOpen, setNotesOpen] = useState(true) // Notes tab visibility state
+  const [currentNoteSessionIndex, setCurrentNoteSessionIndex] = useState(0) // Current session index for notes navigation
   
   // Semantic Frame Analysis state
   const [targetWord, setTargetWord] = useState("")
@@ -82,7 +86,7 @@ function AnalysisPageInner() {
     deleteSemanticFrameAnalysis
   } = useMultiSessionAnalysis({ 
     sessionIds: Array.from(selectedSessions),
-    autoLoad: false
+    autoLoad: true // Cambiato da false a true
   })
 
   // Stato per le note di tutte le sessioni
@@ -91,6 +95,51 @@ function AnalysisPageInner() {
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
   // Per gestire il revert, salvo il valore originale della nota quando si entra in modalità editing
   const [originalNotes, setOriginalNotes] = useState<Record<string, string>>({})
+  
+  // Stato per i riassunti di tutte le sessioni
+  const [sessionSummaries, setSessionSummaries] = useState<Record<string, string>>({})
+  const [generatingSummary, setGeneratingSummary] = useState<Record<string, boolean>>({})
+
+  // Constants for adaptive height logic
+  const MIN_NOTE_HEIGHT = 200 // Minimum height in pixels for notes with no text or short text
+  const MIN_SUMMARY_HEIGHT = 150 // Minimum height in pixels for summaries with no text or short text
+  const TEXT_LENGTH_THRESHOLD = 300 // Character threshold for adaptive height
+  const MAX_NOTE_HEIGHT = 600 // Maximum height for very long notes
+  const MAX_SUMMARY_HEIGHT = 800 // Maximum height for very long summaries
+
+  // Function to calculate adaptive height for note tabs
+  const getNoteHeight = (content: string): string => {
+    const contentLength = content?.length || 0
+    
+    if (contentLength === 0 || contentLength < TEXT_LENGTH_THRESHOLD) {
+      return `${MIN_NOTE_HEIGHT}px`
+    } else {
+      // Calculate adaptive height based on content length
+      // More responsive scaling: base height + additional height for longer content
+      const adaptiveHeight = Math.min(
+        MIN_NOTE_HEIGHT + (contentLength - TEXT_LENGTH_THRESHOLD) * 0.8,
+        MAX_NOTE_HEIGHT
+      )
+      return `${adaptiveHeight}px`
+    }
+  }
+
+  // Function to calculate adaptive height for summary tabs
+  const getSummaryHeight = (content: string): string => {
+    const contentLength = content?.length || 0
+    
+    if (contentLength === 0 || contentLength < TEXT_LENGTH_THRESHOLD) {
+      return `${MIN_SUMMARY_HEIGHT}px`
+    } else {
+      // Calculate adaptive height based on content length
+      // More responsive scaling for summaries: base height + additional height for longer content
+      const adaptiveHeight = Math.min(
+        MIN_SUMMARY_HEIGHT + (contentLength - TEXT_LENGTH_THRESHOLD) * 0.6,
+        MAX_SUMMARY_HEIGHT
+      )
+      return `${adaptiveHeight}px`
+    }
+  }
 
   // Quando si entra in modalità editing, salvo il valore originale
   const handleEnterEdit = (sessionId: string) => {
@@ -106,6 +155,7 @@ function AnalysisPageInner() {
 
   const [fullscreenFlower, setFullscreenFlower] = useState<{ src: string, title: string } | null>(null)
   const [lastLoadedSlide, setLastLoadedSlide] = useState<number | null>(null);
+  const autoSelectedRef = useRef(false)
 
   // Gestione ESC per chiudere il fullscreen
   useEffect(() => {
@@ -233,34 +283,41 @@ function AnalysisPageInner() {
   // Carica le note di tutte le sessioni selezionate ogni volta che cambia la selezione
   // Carica le note di tutte le sessioni quando vengono caricate le sessioni
   useEffect(() => {
-    if (sessions.length === 0) {
-      setSessionNotes({})
-      setEditingNotes({})
-      setSavingNotes({})
-      return
-    }
     const fetchAllNotes = async () => {
-      const notesObj: Record<string, string> = {}
-      await Promise.all(sessions.map(async (session) => {
-        try {
-          const response = await fetch(`/api/notes/${session.id}`)
-          if (response.ok) {
-            const result = await response.json()
-            const noteData = result.data || result
-            notesObj[session.id] = noteData.content || ""
-          } else {
-            notesObj[session.id] = ""
+      if (selectedSessions.size === 0) return
+
+      try {
+        const selectedSessionsData = getSelectedSessionsData()
+        const notesPromises = selectedSessionsData.map(async (session) => {
+          try {
+            const response = await fetch(`/api/notes/${session.id}`)
+            if (response.ok) {
+              const result = await response.json()
+              const noteData = result.data || result
+              return { sessionId: session.id, content: noteData.content || "" }
+            } else {
+              console.warn(`No note found for session ${session.id}`)
+              return { sessionId: session.id, content: "" }
+            }
+          } catch (error) {
+            console.error(`Error fetching note for session ${session.id}:`, error)
+            return { sessionId: session.id, content: "" }
           }
-        } catch {
-          notesObj[session.id] = ""
-        }
-      }))
-      setSessionNotes(notesObj)
-      setEditingNotes({})
-      setSavingNotes({})
+        })
+
+        const notesResults = await Promise.all(notesPromises)
+        const notesMap: Record<string, string> = {}
+        notesResults.forEach(result => {
+          notesMap[result.sessionId] = result.content
+        })
+        setSessionNotes(notesMap)
+      } catch (error) {
+        console.error('Error fetching notes:', error)
+      }
     }
     fetchAllNotes()
-  }, [sessions])
+    fetchAllSummaries()
+  }, [sessions, selectedSessions])
 
 
 
@@ -272,16 +329,18 @@ function AnalysisPageInner() {
 
 
 
-  // Selezione automatica della sessione passata via query string
+  // Selezione automatica della sessione passata via query string SOLO al primo caricamento
   useEffect(() => {
     if (
       sessions.length > 0 &&
       searchParams &&
-      selectedSessions.size === 0 // solo se non c'è già una selezione
+      selectedSessions.size === 0 &&
+      !autoSelectedRef.current
     ) {
       const sessionIdFromQuery = searchParams.get('sessionId')
       if (sessionIdFromQuery && sessions.some(s => s.id === sessionIdFromQuery)) {
         setSelectedSessions(new Set([sessionIdFromQuery]))
+        autoSelectedRef.current = true
       }
     }
   }, [sessions, searchParams, selectedSessions])
@@ -347,20 +406,23 @@ function AnalysisPageInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: sessionNotes[sessionId] })
       })
+      
       if (response.ok) {
+        const result = await response.json()
+        
         setEditingNotes(prev => ({ ...prev, [sessionId]: false }))
         // Ricarica la nota aggiornata
-        const result = await response.json()
         const noteData = result.data || result
         const updatedContent = noteData.content || ""
         setSessionNotes(prev => ({ ...prev, [sessionId]: updatedContent }))
       } else {
         // Gestione errore
-        console.error('Errore nel salvataggio della nota')
+        const errorText = await response.text()
+        console.error('Error saving note - status:', response.status, 'response:', errorText)
       }
     } catch (error) {
       // Gestione errore
-      console.error('Errore nel salvataggio della nota:', error)
+      console.error('Error saving note:', error)
     } finally {
       setSavingNotes(prev => ({ ...prev, [sessionId]: false }))
     }
@@ -370,15 +432,31 @@ function AnalysisPageInner() {
   const highlightSearchTerm = (text: string, searchTerm: string) => {
     if (!text) return text
     
-    // First, format the dialogue by adding line breaks before "Therapist:" and "Patient:"
+    // First, format the dialogue by adding line breaks before speaker markers
+    // Handle Italian markers (Paziente:, Terapeuta:, P:, T:)
     let formattedText = text
-      .replace(/(\s+)(Therapist:)/g, '<br/><br/><strong class="text-blue-600">$2</strong>')
+      .replace(/(\s+)(Paziente:)/g, '<br/><br/><strong class="text-green-600">$2</strong>')
+      .replace(/(\s+)(Terapeuta:)/g, '<br/><br/><strong class="text-blue-600">$2</strong>')
+      .replace(/(\s+)(P:|T:)/g, '<br/><br/><strong class="text-green-600">$2</strong>')
+      // Handle English markers (Patient:, Therapist:)
       .replace(/(\s+)(Patient:)/g, '<br/><br/><strong class="text-green-600">$2</strong>')
+      .replace(/(\s+)(Therapist:)/g, '<br/><br/><strong class="text-blue-600">$2</strong>')
     
-    // Handle the case where Therapist: or Patient: appears at the beginning
+    // Handle the case where speaker markers appear at the beginning
     formattedText = formattedText
-      .replace(/^(Therapist:)/g, '<strong class="text-blue-600">$1</strong>')
+      .replace(/^(Paziente:)/g, '<strong class="text-green-600">$1</strong>')
+      .replace(/^(Terapeuta:)/g, '<strong class="text-blue-600">$1</strong>')
+      .replace(/^(P:|T:)/g, '<strong class="text-green-600">$1</strong>')
       .replace(/^(Patient:)/g, '<strong class="text-green-600">$1</strong>')
+      .replace(/^(Therapist:)/g, '<strong class="text-blue-600">$1</strong>')
+    
+    // Ensure proper structure: each speaker marker should be followed by content on a new line
+    formattedText = formattedText
+      .replace(/(<strong[^>]*>Paziente:<\/strong>)([^<])/g, '$1<br/>$2')
+      .replace(/(<strong[^>]*>Terapeuta:<\/strong>)([^<])/g, '$1<br/>$2')
+      .replace(/(<strong[^>]*>P:|T:<\/strong>)([^<])/g, '$1<br/>$2')
+      .replace(/(<strong[^>]*>Patient:<\/strong>)([^<])/g, '$1<br/>$2')
+      .replace(/(<strong[^>]*>Therapist:<\/strong>)([^<])/g, '$1<br/>$2')
     
     // Then highlight search terms if provided
     if (!searchTerm.trim()) return formattedText
@@ -420,11 +498,11 @@ function AnalysisPageInner() {
       newSelected.add(sessionId)
     }
     setSelectedSessions(newSelected)
-    
-    // Aggiorna automaticamente le analisi se ci sono sessioni selezionate
+    // Aggiorna automaticamente le analisi solo se ci sono sessioni selezionate
     if (newSelected.size > 0) {
       loadAllAnalyses()
     }
+    // NON selezionare mai automaticamente se newSelected.size === 0
   }
 
   // Handle select all checkbox
@@ -448,11 +526,68 @@ function AnalysisPageInner() {
   const getSelectedSessionsData = () => {
     return sessions.filter(s => selectedSessions.has(s.id))
   }
+  // Funzione per normalizzare la struttura del transcript per il topic modeling
+  const normalizeTranscriptStructure = (transcript: string): string => {
+    if (!transcript) return transcript;
+    
+    console.log('🔧 Normalizing transcript structure...');
+    console.log('📝 Original transcript (first 200 chars):', transcript.substring(0, 200));
+    
+    // Check if the transcript is already properly formatted
+    const hasProperStructure = /(Paziente:|Terapeuta:)\s*\n/.test(transcript);
+    
+    if (hasProperStructure) {
+      console.log('✅ Transcript already has proper structure, skipping normalization');
+      return transcript;
+    }
+    
+    // Rimuovi tutti i newline e metti tutto su una riga
+    let normalized = transcript.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+    
+    // Aggiungi newline prima e dopo ogni speaker marker per creare la struttura richiesta
+    // Formato: [interlocutore]\n[paragrafo]\n[interlocutore]\n etc
+    // Regex specifici per "Paziente:" e "Terapeuta:"
+    normalized = normalized
+      .replace(/(Paziente:)/g, '\n$1\n')
+      .replace(/(Terapeuta:)/g, '\n$1\n')
+      // Fallback per altri marker
+      .replace(/(P:|T:|THERAPIST:|Therapist:)/gi, '\n$1\n');
+    
+    // Rimuovi newline multipli consecutivi e normalizza
+    normalized = normalized
+      .replace(/\n\s*\n/g, '\n')
+      .replace(/\n\s+/g, '\n')
+      .trim();
+    
+    // Se non ci sono speaker markers, aggiungi un marker di default per il paziente
+    if (!/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi.test(normalized)) {
+      normalized = `Paziente:\n${normalized}`;
+    }
+    
+    // Assicurati che la struttura sia corretta: ogni speaker marker deve essere seguito da un newline
+    // e ogni paragrafo deve essere separato da un newline
+    normalized = normalized
+      .replace(/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)([^\n])/gi, '$1\n$2')
+      .replace(/([^\n])(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi, '$1\n$2');
+    
+    console.log('✅ Normalized transcript (first 200 chars):', normalized.substring(0, 200));
+    console.log('🔍 Speaker markers found:', (normalized.match(/(Paziente:|Terapeuta:|P:|T:|THERAPIST:|Therapist:)/gi) || []).length);
+    
+    return normalized;
+  };
+
+  // Funzione per formattare il transcript per la visualizzazione HTML
+  const formatTranscriptForDisplay = (transcript: string): string => {
+    const normalized = normalizeTranscriptStructure(transcript);
+    // Converti \n in <br/> per il rendering HTML
+    return normalized.replace(/\n/g, '<br/>');
+  };
+
   // Get combined transcript
   const getCombinedTranscript = () => {
     const selectedSessionsData = getSelectedSessionsData()
     return selectedSessionsData
-      .map(session => session.transcript || "")
+      .map(session => normalizeTranscriptStructure(session.transcript || ""))
       .filter(transcript => transcript.trim().length > 0)
       .join("\n\n--- SESSIONE SUCCESSIVA ---\n\n")
   }
@@ -632,6 +767,33 @@ function AnalysisPageInner() {
     });
   }
 
+  // Navigation functions for notes
+  const goToPreviousNote = () => {
+    const selectedSessions = getSelectedSessionsData()
+    if (selectedSessions.length > 0) {
+      setCurrentNoteSessionIndex(prev => 
+        prev > 0 ? prev - 1 : selectedSessions.length - 1
+      )
+    }
+  }
+
+  const goToNextNote = () => {
+    const selectedSessions = getSelectedSessionsData()
+    if (selectedSessions.length > 0) {
+      setCurrentNoteSessionIndex(prev => 
+        prev < selectedSessions.length - 1 ? prev + 1 : 0
+      )
+    }
+  }
+
+  // Reset note session index when selected sessions change
+  useEffect(() => {
+    const selectedSessions = getSelectedSessionsData()
+    if (currentNoteSessionIndex >= selectedSessions.length) {
+      setCurrentNoteSessionIndex(0)
+    }
+  }, [selectedSessions, currentNoteSessionIndex])
+
   // Reset lastLoadedSlide quando cambia la selezione delle sessioni
   useEffect(() => {
     setLastLoadedSlide(null);
@@ -720,6 +882,71 @@ function AnalysisPageInner() {
     }
   }
 
+  // Funzione per caricare i riassunti di tutte le sessioni selezionate
+  const fetchAllSummaries = async () => {
+    if (selectedSessions.size === 0) return
+
+    try {
+      const selectedSessionsData = getSelectedSessionsData()
+      const summariesPromises = selectedSessionsData.map(async (session) => {
+        try {
+          // Carica il riassunto dalla tabella analyses
+          const response = await fetch(`/api/sessions/${session.id}/summary`)
+          if (response.ok) {
+            const summaryData = await response.json()
+            return { sessionId: session.id, content: summaryData.data?.summary || "" }
+          } else {
+            console.warn(`No summary found for session ${session.id}`)
+            return { sessionId: session.id, content: "" }
+          }
+        } catch (error) {
+          console.error(`Error fetching summary for session ${session.id}:`, error)
+          return { sessionId: session.id, content: "" }
+        }
+      })
+
+      const summariesResults = await Promise.all(summariesPromises)
+      const summariesMap: Record<string, string> = {}
+      summariesResults.forEach(result => {
+        summariesMap[result.sessionId] = result.content
+      })
+      setSessionSummaries(summariesMap)
+    } catch (error) {
+      console.error('Error fetching summaries:', error)
+    }
+  }
+
+  // Funzione per generare manualmente il riassunto
+  const handleGenerateSummary = async (sessionId: string) => {
+    setGeneratingSummary(prev => ({ ...prev, [sessionId]: true }))
+    
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/summary`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        const summary = result.data?.summary || ""
+        
+        // Aggiorna lo stato locale
+        setSessionSummaries(prev => ({ ...prev, [sessionId]: summary }))
+        
+        console.log(`✅ Riassunto generato manualmente per sessione ${sessionId}`)
+      } else {
+        const errorText = await response.text()
+        console.error(`❌ Errore nella generazione del riassunto: ${response.status} - ${errorText}`)
+      }
+    } catch (error) {
+      console.error('Error generating summary:', error)
+    } finally {
+      setGeneratingSummary(prev => ({ ...prev, [sessionId]: false }))
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -757,6 +984,16 @@ function AnalysisPageInner() {
     )
   }
 
+  const selectedSessionsData = getSelectedSessionsData();
+  const topicData = hasAllTopicAnalyses ? getTopicData() : undefined;
+  const topicDataWithTitles = topicData?.map(result => {
+    const session = selectedSessionsData.find(s => s.id === result.session_id);
+    return {
+      ...result,
+      session_title: session?.title || result.session_title || `Sessione ${result.session_id}`,
+    };
+  });
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -781,8 +1018,8 @@ function AnalysisPageInner() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="w-full py-8 flex justify-start"> {/* RIMOSSO max-w-full e padding orizzontale */}
+              {/* Main Content */}
+        <div className={`w-full py-8 ${sidebarOpen ? 'px-0' : 'px-4 sm:px-6 lg:pl-0 lg:pr-8'} ${notesOpen ? 'lg:pr-0' : 'lg:pr-0'} ${!notesOpen ? 'lg:pr-0' : ''}`}>
         {sessions.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -797,85 +1034,134 @@ function AnalysisPageInner() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-12 gap-6 w-full items-start"> {/* grid ora w-full */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 w-full">
             {/* Sidebar - Sessions List */}
-            <div className="col-span-2">
-              <Card className="h-[900px]">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Transcribed sessions
-                  </CardTitle>
-                  <div className="flex items-center gap-2 pt-2">
-                    <input
-                      type="checkbox"
-                      id="select-all"
-                      checked={selectedSessions.size === sessions.length && sessions.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded border-gray-300"
-                    />
-                    <label htmlFor="select-all" className="text-sm text-gray-600">
-                      Mark all
-                    </label>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="space-y-1 max-h-[750px] overflow-y-auto">
-                    {sessions.map((session, index) => (
-                      <div key={session.id} className="border-b last:border-b-0">
-                        <div className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
+            <div className={`transition-all duration-300 ease-in-out min-w-0 ${
+              sidebarOpen 
+                ? 'lg:col-span-3 xl:col-span-2' 
+                : 'lg:col-span-1'
+            } ${!sidebarOpen ? 'lg:ml-0' : ''}`}>
+              <div className={`transition-all duration-300 ease-in-out ${
+                sidebarOpen ? 'opacity-100' : 'opacity-0 lg:opacity-100'
+              }`}>
+                <Card className={`${!sidebarOpen ? 'lg:w-12 lg:min-w-12 lg:max-w-12 lg:h-16' : ''}`}>
+                  <CardHeader className={!sidebarOpen ? 'lg:p-2 lg:px-2' : ''}>
+                    {sidebarOpen ? (
+                      <CardTitle className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-5 w-5" />
+                          <span>Transcribed sessions</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSidebarOpen(!sidebarOpen)}
+                          className="hidden lg:flex h-8 w-8 p-0 ml-auto"
+                          title="Nascondi sidebar"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                      </CardTitle>
+                    ) : (
+                                             <CardTitle className="flex flex-col items-center justify-center h-12 space-y-1 -mt-6">
+                         <FileText className="h-5 w-5" />
+                         <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSidebarOpen(!sidebarOpen)}
+                          className="h-6 w-6 p-0 ml-auto"
+                          title="Mostra sidebar"
+                        >
+                          <ChevronRight className="h-3 w-3" />
+                        </Button>
+                      </CardTitle>
+                    )}
+                    <div className={`flex items-center gap-2 pt-2 ${sidebarOpen ? 'block' : 'hidden lg:hidden'}`}>
+                      <input
+                        type="checkbox"
+                        id="select-all"
+                        checked={selectedSessions.size === sessions.length && sessions.length > 0}
+                        onChange={handleSelectAll}
+                        className="rounded border-gray-300"
+                      />
+                      <label htmlFor="select-all" className="text-sm font-medium text-gray-700">
+                        Seleziona tutto
+                      </label>
+                    </div>
+                  </CardHeader>
+                  <CardContent className={`p-0 ${!sidebarOpen ? 'lg:hidden' : ''}`}>
+                    <div className={`space-y-1 max-h-[600px] overflow-y-auto ${sidebarOpen ? 'block' : 'hidden lg:hidden'}`}>
+                      {sessions.map((session) => (
+                        <div
+                          key={session.id}
+                          className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
+                            selectedSessions.has(session.id)
+                              ? 'bg-blue-50 border-l-4 border-blue-500'
+                              : 'hover:bg-gray-50'
+                          }`}
+                          onClick={() => handleSessionToggle(session.id)}
+                        >
                           <input
                             type="checkbox"
-                            id={`session-${session.id}`}
                             checked={selectedSessions.has(session.id)}
                             onChange={() => handleSessionToggle(session.id)}
                             className="rounded border-gray-300"
+                            onClick={(e) => e.stopPropagation()}
                           />
-                          <button
-                            onClick={() => {
-                              // Toggle selezione per analisi (checkbox)
-                              handleSessionToggle(session.id)
-                            }}
-                            className="flex-1 text-left p-2 rounded transition-colors hover:bg-gray-50"
-                            title="Click to select/deselect this session"
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="font-medium text-sm">
-                                {session.title}
-                              </div>
-                              {hasSessionNote(session.id) && (
-                                <MessageSquare className="h-4 w-4 text-sky-500" />
-                              )}
-                            </div>
-                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {session.title}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(session.sessionDate).toLocaleDateString('it-IT')}
+                            </p>
+                          </div>
+                          {hasSessionNote(session.id) && (
+                            <MessageSquare className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                          )}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              {/* Mobile toggle button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden w-full mt-2"
+                title={sidebarOpen ? "Nascondi sidebar" : "Mostra sidebar"}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                {sidebarOpen ? "Nascondi Sessioni" : "Mostra Sessioni"}
+              </Button>
             </div>
-            {/* Main Sliding Analysis Panel */}
-            <div className="col-span-7">
-              <Card className="h-[900px]">
+                                   {/* Main Sliding Analysis Panel */}
+                       <div className={`transition-all duration-300 ease-in-out min-w-0 ${
+                         sidebarOpen
+                           ? notesOpen ? 'lg:col-span-6 xl:col-span-7' : 'lg:col-span-9 xl:col-span-9'
+                           : notesOpen ? 'lg:col-span-8 xl:col-span-8' : 'lg:col-span-10 xl:col-span-10'
+                       }`}>
+              <Card>
                 <CardHeader className="pb-4">
                   {/* Slide Navigation */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                       {slides.map((slide, index) => {
                         const Icon = slide.icon
                         return (
                           <button
                             key={index}
                             onClick={() => goToSlide(index)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all relative ${
+                            className={`flex items-center gap-2 px-2 sm:px-4 py-2 rounded-lg transition-all relative text-sm sm:text-base ${
                               currentSlide === index
                                 ? "bg-blue-100 text-blue-700 font-medium"
                                 : "text-gray-600 hover:bg-gray-100"
                             }`}
                           >
                             <Icon className="h-4 w-4" />
-                            {slide.title}
+                            <span className="hidden sm:inline">{slide.title}</span>
                           </button>
                         )
                       })}
@@ -912,7 +1198,7 @@ function AnalysisPageInner() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="h-[800px] overflow-y-auto">
+                <CardContent className="min-h-[600px] max-h-[800px] overflow-y-auto">
                   <div className="h-full">
                     {/* Slide 0: Trascrizioni */}
                     {currentSlide === 0 && (
@@ -934,7 +1220,7 @@ function AnalysisPageInner() {
                                   value={searchTerm}
                                   onChange={(e) => setSearchTerm(e.target.value)}
                                   className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                  placeholder="Search words in transcripts..."
+                                  placeholder="Cerca parole nelle trascrizioni..."
                                 />
                                 {searchTerm && (
                                   <button
@@ -947,7 +1233,7 @@ function AnalysisPageInner() {
                               </div>
                               {searchTerm && (
                                 <div className="mt-2 text-xs text-gray-500">
-                                  {countSearchOccurrences(searchTerm)} results found
+                                  {countSearchOccurrences(searchTerm)} risultati trovati
                                 </div>
                               )}
                             </div>
@@ -963,8 +1249,9 @@ function AnalysisPageInner() {
                                 <div className="text-gray-700">
                                   {session.transcript ? (
                                     <div 
+                                      className="whitespace-pre-wrap"
                                       dangerouslySetInnerHTML={{
-                                        __html: highlightSearchTerm(session.transcript, searchTerm)
+                                        __html: highlightSearchTerm(formatTranscriptForDisplay(session.transcript), searchTerm)
                                       }}
                                     />
                                   ) : (
@@ -1002,7 +1289,7 @@ function AnalysisPageInner() {
                         {/* Banner removed - topic analysis cache notification */}
 
                         <TopicAnalysisComponent 
-                          selectedSessions={getSelectedSessionsData().map(session => ({
+                          selectedSessions={selectedSessionsData.map(session => ({
                             id: session.id,
                             title: session.title,
                             transcript: session.transcript || ""
@@ -1013,52 +1300,7 @@ function AnalysisPageInner() {
                             // Il salvataggio ora viene gestito direttamente nel componente
                             // Non serve più salvare qui
                           }}
-                          cachedData={(() => {
-                            const topicData = hasAllTopicAnalyses ? getTopicData() : undefined
-                            const customTopicData = getCustomTopicData()
-                            const selectedSessionIds = Array.from(selectedSessions)
-                            
-                            console.log('🎯 Topic cached data being passed:', topicData)
-                            console.log('🎯 Custom topic cached data being passed:', customTopicData)
-                            console.log('🎯 hasAllTopicAnalyses:', hasAllTopicAnalyses)
-                            console.log('🎯 Selected session IDs:', selectedSessionIds)
-                            
-                            // Verifica che i topic siano correlati alle sessioni attualmente selezionate
-                            if (topicData && Array.isArray(topicData) && topicData.length > 0) {
-                              // Trova il risultato che corrisponde alle sessioni selezionate
-                              const matchingResult = topicData.find(result => 
-                                selectedSessionIds.includes(result.session_id)
-                              )
-                              
-                              if (matchingResult) {
-                                console.log('🎯 Found matching topic analysis for selected sessions:', matchingResult.session_id)
-                                return {
-                                  session_id: matchingResult.session_id,
-                                  topics: matchingResult.topics || [],
-                                  summary: matchingResult.summary || '',
-                                  analysis_timestamp: matchingResult.analysis_timestamp || '',
-                                  text_segments: matchingResult.text_segments || [],
-                                  patient_content_stats: matchingResult.patient_content_stats || null,
-                                  customTopics: customTopicData.length > 0 ? customTopicData[0].customTopics : undefined
-                                }
-                              } else {
-                                console.log('⚠️ No matching topic analysis found for selected sessions')
-                                // Non restituire topic se non corrispondono alle sessioni selezionate
-                                return {
-                                  customTopics: customTopicData.length > 0 ? customTopicData[0].customTopics : undefined
-                                }
-                              }
-                            }
-                            
-                            // Se non abbiamo topic normali ma abbiamo custom topics, restituisci solo quelli
-                            if (customTopicData.length > 0) {
-                              return {
-                                customTopics: customTopicData[0].customTopics
-                              }
-                            }
-                            
-                            return undefined
-                          })()}
+                          cachedData={topicDataWithTitles && topicDataWithTitles.length > 0 ? topicDataWithTitles : undefined}
                         />
                       </div>
                     )}                      {/* Slide 2: Sentiment Analysis */}
@@ -1116,7 +1358,7 @@ function AnalysisPageInner() {
                                   <Database className="h-4 w-4" />
                                   Analisi disponibili ({getAllSemanticFrameWords().length})
                                 </h5>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                                   {getAllSemanticFrameWords().map((word, index) => (
                                     <div key={word} className={`flex items-center justify-between rounded-lg px-3 py-2 hover:shadow-sm transition-all ${
                                       currentDisplayedWord === word 
@@ -1293,7 +1535,7 @@ function AnalysisPageInner() {
                                   <h5 className="text-lg font-semibold text-gray-700 mb-3">
                                     Profilo Emotivo
                                   </h5>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3 sm:gap-4">
                                     {Object.entries(semanticFrameResult.emotional_analysis.z_scores).map(([emotion, score]) => (
                                       <div key={emotion} className="bg-gray-50 rounded-lg p-3 text-center">
                                         <div className="text-sm font-medium text-gray-600 capitalize">
@@ -1321,7 +1563,7 @@ function AnalysisPageInner() {
                                   <h5 className="text-lg font-semibold text-gray-700 mb-3">
                                     Parole Connesse ({semanticFrameResult.semantic_frame.connected_words.length})
                                   </h5>
-                                  <div className="flex flex-wrap gap-2">
+                                  <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                                     {semanticFrameResult.semantic_frame.connected_words.map((word: string, index: number) => (
                                       <button
                                         key={index}
@@ -1385,57 +1627,208 @@ function AnalysisPageInner() {
                 </CardContent>
               </Card>
             </div>
-            {/* Notes Section - ora a destra */}
-            <div className="col-span-3 flex flex-col gap-4 h-[900px] overflow-y-auto">
-              {getSelectedSessionsData().length > 0 && getSelectedSessionsData().map((session) => (
-                <Card key={session.id} className="flex-0">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-3">
-                      <MessageSquare className="h-5 w-5" />
-                      Note Terapeutiche - {session.title}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {editingNotes[session.id] ? (
-                      <div className="space-y-3">
-                        <textarea
-                          value={sessionNotes[session.id] || ""}
-                          onChange={e => setSessionNotes(prev => ({ ...prev, [session.id]: e.target.value }))}
-                          placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
-                          className="w-full h-32 p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          autoFocus
-                        />
-                        <div className="flex gap-2 justify-end">
-                          <Button size="sm" variant="outline" onClick={() => handleCancelEdit(session.id)}>
-                            Annulla
-                          </Button>
-                          <Button size="sm" onClick={() => handleSaveSessionNote(session.id)} disabled={savingNotes[session.id]}>
-                            <Save className="h-3 w-3 mr-1" />
-                            {savingNotes[session.id] ? "Salvataggio..." : "Salva"}
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div
-                          className="h-32 overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
-                          onClick={() => handleEnterEdit(session.id)}
-                          tabIndex={0}
-                          role="textbox"
-                          title="Clicca per modificare la nota"
-                          style={{ minHeight: '8rem' }}
+            {/* Notes Section - minimizable */}
+            <div className={`transition-all duration-300 ease-in-out min-w-0 ${
+              notesOpen 
+                ? 'lg:col-span-3 xl:col-span-3' 
+                : 'lg:col-span-1'
+            }`}>
+              <div className={`transition-all duration-300 ease-in-out ${
+                notesOpen ? 'opacity-100' : 'opacity-0 lg:opacity-100'
+              }`}>
+                <Card className={`${!notesOpen ? 'lg:w-12 lg:min-w-12 lg:max-w-12 lg:py-0 lg:px-0 lg:absolute lg:right-0 lg:h-16' : ''}`}>
+                  <CardHeader className={!notesOpen ? 'lg:p-2 lg:px-2' : ''}>
+                    {notesOpen ? (
+                      <CardTitle className="flex items-center justify-between">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setNotesOpen(!notesOpen)}
+                          className="hidden lg:flex h-8 w-8 p-0 mr-auto"
+                          title="Nascondi note"
                         >
-                          {sessionNotes[session.id] || (
-                            <span className="text-gray-500 italic">
-                              Qui il terapeuta può scrivere liberamente note e osservazioni
-                            </span>
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                        <div className="flex items-center gap-2 flex-1 justify-between">
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="h-5 w-5" />
+                            <span>Note e Riassunto - {getSelectedSessionsData().length > 0 ? getSelectedSessionsData()[currentNoteSessionIndex]?.title : ''}</span>
+                          </div>
+                          {getSelectedSessionsData().length > 1 && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={goToPreviousNote}
+                                className="h-6 w-6 p-0"
+                                title="Sessione precedente"
+                              >
+                                <ChevronLeft className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={goToNextNote}
+                                className="h-6 w-6 p-0"
+                                title="Sessione successiva"
+                              >
+                                <ChevronRight className="h-3 w-3" />
+                              </Button>
+                            </div>
                           )}
                         </div>
-                      </div>
+                      </CardTitle>
+                    ) : (
+                                             <CardTitle className="flex flex-col items-center justify-center h-12 space-y-1 mt-0">
+                         <MessageSquare className="h-5 w-5" />
+                         <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setNotesOpen(!notesOpen)}
+                          className="h-6 w-6 p-0 mr-auto"
+                          title="Mostra note"
+                        >
+                          <ChevronLeft className="h-3 w-3" />
+                        </Button>
+                      </CardTitle>
                     )}
+                  </CardHeader>
+                  <CardContent className={`p-0 overflow-hidden ${!notesOpen ? 'lg:hidden' : ''}`}>
+                    <div className={`space-y-4 overflow-hidden ${notesOpen ? 'block' : 'hidden lg:hidden'}`}>
+                      {getSelectedSessionsData().length > 0 ? (
+                        (() => {
+                          const selectedSessions = getSelectedSessionsData()
+                          const currentSession = selectedSessions[currentNoteSessionIndex]
+                          
+                          return (
+                            <>
+                              <Card 
+                                key={currentSession.id} 
+                                className="flex-shrink-0"
+                                style={{ height: getNoteHeight(sessionNotes[currentSession.id] || "") }}
+                              >
+                                <CardHeader className="flex-shrink-0">
+                                  <CardTitle className="text-lg flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <MessageSquare className="h-5 w-5" />
+                                      Note
+                                    </div>
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                                  {editingNotes[currentSession.id] ? (
+                                    <div className="space-y-3 flex-1 flex flex-col">
+                                      <textarea
+                                        value={sessionNotes[currentSession.id] || ""}
+                                        onChange={e => setSessionNotes(prev => ({ ...prev, [currentSession.id]: e.target.value }))}
+                                        placeholder="Qui il terapeuta può scrivere liberamente note e osservazioni personali"
+                                        className="w-full flex-1 min-h-0 max-h-full p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 overflow-y-auto"
+                                        autoFocus
+                                      />
+                                      <div className="flex gap-2 justify-end flex-shrink-0">
+                                        <Button size="sm" variant="outline" onClick={() => handleCancelEdit(currentSession.id)}>
+                                          Annulla
+                                        </Button>
+                                        <Button size="sm" onClick={() => handleSaveSessionNote(currentSession.id)} disabled={savingNotes[currentSession.id]}>
+                                          <Save className="h-3 w-3 mr-1" />
+                                          {savingNotes[currentSession.id] ? "Salvataggio..." : "Salva"}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3 flex-1 flex flex-col">
+                                      <div
+                                        className="flex-1 min-h-0 max-h-full overflow-y-auto bg-gray-50 p-3 rounded text-sm cursor-pointer"
+                                        onClick={() => handleEnterEdit(currentSession.id)}
+                                        tabIndex={0}
+                                        role="textbox"
+                                        title="Clicca per modificare la nota"
+                                      >
+                                        {sessionNotes[currentSession.id] || (
+                                          <span className="text-gray-500 italic">
+                                            Qui il terapeuta può scrivere liberamente note e osservazioni
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </CardContent>
+                              </Card>
+                              
+                              {/* Summary Module */}
+                              <Card 
+                                className="flex-shrink-0"
+                                style={{ height: getSummaryHeight(sessionSummaries[currentSession.id] || "") }}
+                              >
+                                <CardHeader className="flex-shrink-0">
+                                  <CardTitle className="text-lg flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <FileText className="h-5 w-5" />
+                                      Riassunto
+                                    </div>
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                                  <div className="space-y-3 flex-1 flex flex-col overflow-hidden">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-sm text-gray-600">Riassunto della trascrizione</span>
+                                      {!sessionSummaries[currentSession.id] && (
+                                        <Button
+                                          size="sm"
+                                          onClick={() => handleGenerateSummary(currentSession.id)}
+                                          disabled={generatingSummary[currentSession.id]}
+                                          className="h-8 px-3"
+                                        >
+                                          {generatingSummary[currentSession.id] ? (
+                                            <>
+                                              <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                                              Generazione...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <FileText className="h-3 w-3 mr-1" />
+                                              Genera Riassunto
+                                            </>
+                                          )}
+                                        </Button>
+                                      )}
+                                    </div>
+                                    <textarea
+                                      value={sessionSummaries[currentSession.id] || ""}
+                                      placeholder={sessionSummaries[currentSession.id] ? "Il riassunto della trascrizione apparirà qui..." : "Nessun riassunto disponibile. Clicca 'Genera Riassunto' per crearlo."}
+                                      className="w-full flex-1 min-h-0 max-h-full p-3 border rounded text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 overflow-y-auto"
+                                      readOnly
+                                    />
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </>
+                          )
+                        })()
+                      ) : (
+                        <div className="text-center text-gray-500 py-8">
+                          <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Seleziona una sessione per vedere le sue note</p>
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
-              ))}
+              </div>
+              
+
+              
+              {/* Mobile toggle button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setNotesOpen(!notesOpen)}
+                className="lg:hidden w-full mt-2"
+                title={notesOpen ? "Nascondi note" : "Mostra note"}
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                {notesOpen ? "Nascondi Note e Riassunto" : "Mostra Note e Riassunto"}
+              </Button>
             </div>
           </div>
         )}

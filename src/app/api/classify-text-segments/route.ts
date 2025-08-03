@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     console.log('Topics received:', topics)
     console.log('First few sentences:', sentences.slice(0, 3))
 
-    const prompt = `Classifica ogni frase del testo ai topic identificati con massima precisione e selettività.
+    const prompt = `Classifica ogni frase del testo ai topic identificati con precisione.
 
 TOPIC DISPONIBILI:
 ${topics}
@@ -29,25 +29,21 @@ ${topics}
 FRASI DA CLASSIFICARE:
 ${sentences.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}
 
-ISTRUZIONI CRITICHE:
+ISTRUZIONI:
 1. Assegna ogni frase al topic più appropriato usando l'ID numerico del topic (1, 2, 3, ecc.)
-2. IMPORTANTE: Se una frase non appartiene CHIARAMENTE e SPECIFICAMENTE a un topic, usa null
-3. Fornisci una confidence da 0.0 a 1.0 (usa confidence alta solo se sei MOLTO sicuro)
-4. EVITA di classificare tutto nello stesso topic - sii molto selettivo
-5. Usa confidence bassa (< 0.5) per qualsiasi dubbio, anche minimo
-6. PREFERISCI null piuttosto che una classificazione incerta
-7. Una frase deve essere ESPLICITAMENTE e CHIARAMENTE collegata al topic per essere classificata
-8. Se hai anche il minimo dubbio, usa null
+2. Se una frase è chiaramente correlata a un topic, assegnale quel topic
+3. Se una frase non è chiaramente correlata a nessun topic, usa null
+4. Fornisci una confidence da 0.0 a 1.0
+5. Sii ragionevolmente selettivo ma non eccessivamente restrittivo
+6. Una frase deve essere correlata al topic per essere classificata, ma non deve essere perfettamente allineata
 
-REGOLA D'ORO: È meglio non classificare (null) che classificare erroneamente.
-
-ESEMPIO DI CLASSIFICAZIONE SELETTIVA:
+ESEMPIO DI CLASSIFICAZIONE:
 {"classifications": [
   {"sentence_id": 1, "topic_id": 1, "confidence": 0.9},
-  {"sentence_id": 2, "topic_id": null, "confidence": 0.1},
+  {"sentence_id": 2, "topic_id": 1, "confidence": 0.7},
   {"sentence_id": 3, "topic_id": null, "confidence": 0.3},
   {"sentence_id": 4, "topic_id": 2, "confidence": 0.8},
-  {"sentence_id": 5, "topic_id": null, "confidence": 0.2}
+  {"sentence_id": 5, "topic_id": 2, "confidence": 0.6}
 ]}
 
 Rispondi SOLO in formato JSON valido, nient'altro:`
@@ -62,15 +58,15 @@ Rispondi SOLO in formato JSON valido, nient'altro:`
       messages: [
         {
           role: "system",
-          content: "Sei un esperto nella classificazione di testi terapeutici. Rispondi sempre in formato JSON valido."
+          content: "Sei un esperto nella classificazione di testi terapeutici. Rispondi sempre in formato JSON valido. Classifica le frasi ai topic appropriati in modo ragionevole."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      temperature: 0.1,
-      max_tokens: 1000
+      temperature: 0.3,
+      max_tokens: 1500
     })
 
     const content = response.choices[0].message.content?.trim()
@@ -105,6 +101,8 @@ Rispondi SOLO in formato JSON valido, nient'altro:`
       })
 
       console.log('Final segments:', segments)
+      console.log('Segments with topic_id:', segments.filter(s => s.topic_id !== null).length)
+      console.log('Sample segments with topic_id:', segments.filter(s => s.topic_id !== null).slice(0, 3))
       console.log('Classification completed:', { segments_count: segments.length })
 
       return NextResponse.json({ segments })
@@ -118,6 +116,7 @@ Rispondi SOLO in formato JSON valido, nient'altro:`
         confidence: 0
       }))
       
+      console.log('Fallback segments (all null topic_id):', segments.length)
       return NextResponse.json({ segments })
     }
 

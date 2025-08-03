@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 
 // Inizializza il client OpenAI
-const openai = new OpenAI({
+export const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
@@ -202,7 +202,44 @@ Use professional and clinical language, respecting confidentiality and the sensi
 }
 
 /**
- * Diarizza una trascrizione utilizzando GPT-3.5-turbo per identificare i diversi interlocutori con retry logic
+ * Normalizza la struttura del transcript per garantire una formattazione consistente
+ * @param transcript - Il testo da normalizzare
+ * @returns string - Il testo normalizzato
+ */
+const normalizeTranscriptStructure = (transcript: string): string => {
+  if (!transcript) return transcript;
+  
+  console.log('🔧 [Diarization] Normalizing transcript structure...');
+  console.log('📝 [Diarization] Original transcript (first 200 chars):', transcript.substring(0, 200));
+  
+  // Rimuovi tutti i newline e metti tutto su una riga
+  let normalized = transcript.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  // Aggiungi newline prima e dopo ogni speaker marker
+  normalized = normalized
+    .replace(/(PAZIENTE:|P:|Paziente:)/gi, '\n$1\n')
+    .replace(/(TERAPEUTA:|T:|Terapeuta:)/gi, '\n$1\n')
+    .replace(/(THERAPIST:|Therapist:)/gi, '\n$1\n');
+  
+  // Rimuovi newline multipli consecutivi e normalizza
+  normalized = normalized
+    .replace(/\n\s*\n/g, '\n')
+    .replace(/\n\s+/g, '\n')
+    .trim();
+  
+  // Se non ci sono speaker markers, aggiungi un marker di default per il paziente
+  if (!/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi.test(normalized)) {
+    normalized = `Paziente:\n${normalized}`;
+  }
+  
+  console.log('✅ [Diarization] Normalized transcript (first 200 chars):', normalized.substring(0, 200));
+  console.log('🔍 [Diarization] Speaker markers found:', (normalized.match(/(PAZIENTE:|P:|Paziente:|TERAPEUTA:|T:|Terapeuta:|THERAPIST:|Therapist:)/gi) || []).length);
+  
+  return normalized;
+};
+
+/**
+ * Diarizza una trascrizione utilizzando GPT-3.5-turbo per identificare i diversi interlocutori
  * @param transcript - Il testo trascritto da diarizzare
  * @param sessionTitle - Titolo della sessione per contesto
  * @param maxRetries - Numero massimo di tentativi (default: 5)
@@ -255,8 +292,50 @@ export async function diarizeTranscript(transcript: string, sessionTitle: string
     chunks.push(transcript);
   }
 
-  // Prompt in italiano (come già impostato)
-  const promptBase = (chunk: string) => `
+    console.log(`Starting diarization for session: ${sessionTitle}`)
+    console.log(`Original transcript length: ${transcript.length} characters`)
+
+    // Limiti modello GPT-3.5-turbo: ~16k token, ma lasciamo margine per prompt e risposta
+    const MAX_CHARS_PER_CHUNK = 6000; // Sicuro per prompt + risposta
+    const chunks: string[] = [];
+    if (transcript.length > MAX_CHARS_PER_CHUNK) {
+      // Prova a spezzare su doppio newline (paragrafi), poi su frasi
+      let current = '';
+      for (const paragraph of transcript.split(/\n\n+/)) {
+        if ((current + '\n\n' + paragraph).length > MAX_CHARS_PER_CHUNK) {
+          if (current) chunks.push(current);
+          current = paragraph;
+        } else {
+          current = current ? current + '\n\n' + paragraph : paragraph;
+        }
+      }
+      if (current) chunks.push(current);
+      // Se ancora qualche chunk è troppo lungo, spezza su frasi
+      for (let i = 0; i < chunks.length; i++) {
+        if (chunks[i].length > MAX_CHARS_PER_CHUNK) {
+          const sentences = chunks[i].split(/(?<=[.!?])\s+/);
+          let subCurrent = '';
+          const subChunks: string[] = [];
+          for (const sentence of sentences) {
+            if ((subCurrent + ' ' + sentence).length > MAX_CHARS_PER_CHUNK) {
+              if (subCurrent) subChunks.push(subCurrent);
+              subCurrent = sentence;
+            } else {
+              subCurrent = subCurrent ? subCurrent + ' ' + sentence : sentence;
+            }
+          }
+          if (subCurrent) subChunks.push(subCurrent);
+          // Sostituisci il chunk troppo lungo con i subchunk
+          chunks.splice(i, 1, ...subChunks);
+          i += subChunks.length - 1;
+        }
+      }
+    } else {
+      chunks.push(transcript);
+    }
+
+    // Prompt migliorato per diarizzazione più solida e intelligente
+    const promptBase = (chunk: string) => `
 Analizza la seguente trascrizione di una sessione di terapia e identifica i diversi interlocutori.
 
 Titolo della sessione: ${sessionTitle}
@@ -268,60 +347,121 @@ Il tuo compito è identificare quanti interlocutori ci sono e chi dice cosa. Tip
 - Il terapeuta (che devi identificare sempre come "Terapeuta:")
 - Il paziente (che devi identificare sempre come "Paziente:")
 
-Istruzioni:
-1. Analizza il contenuto per individuare i cambi di interlocutore.
-2. Se la trascrizione contiene già etichette, nomi o ruoli (ad esempio "Dott.ssa Rossi:", "Mario:", "Psicologo:", "T:"), sostituiscili TUTTI con solo due ruoli: "Terapeuta:" e "Paziente:". Rimuovi ogni nome, iniziale o titolo originale.
-3. Se non ci sono etichette, deduci i cambi di interlocutore e assegna il ruolo corretto.
-4. Riformatta la trascrizione aggiungendo sempre e solo i prefissi "Terapeuta:" o "Paziente:" prima di ogni intervento.
-5. Mantieni tutto il contenuto originale, modifica solo i prefissi.
-6. Usa SEMPRE e SOLO il formato "Terapeuta:" o "Paziente:" prima di ogni intervento, in italiano.
-7. Ogni intervento deve essere separato da UNA SOLA riga vuota (un solo a capo tra una battuta e la successiva, senza righe doppie o triple).
+ISTRUZIONI DETTAGLIATE PER RICONOSCIMENTO E RIMOZIONE SIGLE/NOMINATIVI:
 
-Esempio di output desiderato:
-Terapeuta: Buongiorno, come si sente oggi?
+1. RICONOSCIMENTO SIGLE/NOMINATIVI: Prima di tutto, identifica TUTTE le sigle, iniziali, nomi o nominativi presenti nel testo che indicano gli attori, come:
+   - Sigle: "T:", "P:", "D:", "Dott:", "Dr:", "Dott.ssa:", "Psicologo:", "Psicologa:"
+   - Iniziali: "M.R.:", "D.R.:", "A.B.:", "C.M.:"
+   - Nomi completi: "Dottor Rossi:", "Dottoressa Bianchi:", "Mario:", "Anna:"
+   - Titoli: "Terapeuta:", "Paziente:", "Specialista:", "Consulente:"
+   - Varianti: "Il terapeuta:", "La paziente:", "Il dottore dice:", "Lei dice:"
 
-Paziente: Bene, grazie. Ho fatto il compito che mi ha dato.
+2. RIMOZIONE COMPLETA: Rimuovi COMPLETAMENTE tutte queste sigle/nominativi dall'inizio di ogni paragrafo/intervento. Non devono rimanere tracce nel testo finale.
 
-Terapeuta: Ottimo, mi racconti com'è andata?
+3. CLASSIFICAZIONE INTELLIGENTE DEI RUOLI: Quando non ci sono sigle/nominativi espliciti, usa questi criteri per identificare i cambi di interlocutore:
 
-Restituisci SOLO la trascrizione diarizzata, senza alcun commento aggiuntivo.
+   CRITERI PER IL TERAPEUTA:
+   - Fa domande dirette: "Come si sente?", "Mi racconti...", "Cosa ne pensa?"
+   - Usa linguaggio professionale e distaccato
+   - Fa commenti di supporto: "Capisco", "Interessante", "Ottimo"
+   - Chiede chiarimenti: "Nel senso...?", "Può spiegare meglio?"
+   - Fa riferimento a sessioni precedenti: "Come abbiamo detto ieri..."
+   - Usa "tu" quando si rivolge al paziente
+   - Fa osservazioni terapeutiche: "Vedo che...", "Noto che..."
+
+   CRITERI PER IL PAZIENTE:
+   - Racconta esperienze personali e problemi
+   - Usa "io", "me", "mio" frequentemente
+   - Risponde alle domande del terapeuta
+   - Usa linguaggio emotivo e personale
+   - Fa riferimento a persone della sua vita: "mia sorella", "mio marito"
+   - Racconta eventi specifici della sua vita
+   - Esprime sentimenti e stati d'animo
+
+4. RICONOSCIMENTO CAMBI DI SPEAKER: Presta particolare attenzione a:
+   - Cambi di tono e registro linguistico
+   - Passaggi da domande a risposte
+   - Cambi di argomento o focus
+   - Riferimenti diretti all'altro interlocutore ("tu", "lei", "dicevi")
+   - Pause o interruzioni nel discorso
+
+5. RIFORMATTAZIONE: Aggiungi SOLO i prefissi standardizzati:
+   - "Terapeuta:" per tutti gli interventi del terapeuta
+   - "Paziente:" per tutti gli interventi del paziente
+
+6. PULIZIA OUTPUT: Assicurati che nell'output finale:
+   - NON ci siano più sigle/nominativi originali
+   - NON ci siano iniziali o nomi degli attori
+   - NON ci siano riferimenti a "lui dice", "lei dice", "il dottore", ecc.
+   - Ogni intervento inizi SOLO con "Terapeuta:" o "Paziente:"
+   - Il contenuto sia pulito e privo di identificatori originali
+
+7. FORMATTAZIONE OBBLIGATORIA: 
+   - OGNI RIGA deve iniziare con "Terapeuta:" o "Paziente:" seguito da uno spazio
+   - NON inserire testo senza prefisso di speaker
+   - NON inserire righe vuote senza prefisso
+   - Ogni intervento deve essere separato da UNA SOLA riga vuota
+   - NON usare paragrafi o formattazione speciale
+   - OGNI RIGA DI TESTO deve avere il prefisso appropriato
+
+ESEMPIO DI FORMATTAZIONE CORRETTA:
+INPUT:
+Come si sente oggi? Ha fatto i compiti che le ho assegnato?
+Sì, ho provato a fare quello che mi ha detto. È stato difficile all'inizio.
+Capisco. Mi racconti come è andata?
+Beh, ho iniziato a pensare a quello che abbiamo discusso la volta scorsa...
+
+OUTPUT DESIDERATO (OGNI RIGA CON PREFISSO):
+Terapeuta: Come si sente oggi? Ha fatto i compiti che le ho assegnato?
+
+Paziente: Sì, ho provato a fare quello che mi ha detto. È stato difficile all'inizio.
+
+Terapeuta: Capisco. Mi racconti come è andata?
+
+Paziente: Beh, ho iniziato a pensare a quello che abbiamo discusso la volta scorsa...
+
+REGOLE STRETTE DI FORMATTAZIONE:
+- OGNI RIGA DI TESTO deve iniziare con "Terapeuta: " o "Paziente: "
+- NON ci devono essere righe di testo senza prefisso
+- NON ci devono essere paragrafi o blocchi di testo senza identificazione speaker
+- OGNI intervento deve essere su una riga separata con il proprio prefisso
+
+IMPORTANTE: Restituisci SOLO la trascrizione diarizzata pulita, senza alcun commento aggiuntivo. Rimuovi TUTTE le sigle/nominativi originali e assicurati che OGNI RIGA inizi con "Terapeuta: " o "Paziente: ".
 `;
 
-  let diarizedChunks: string[] = [];
-  
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    console.log(`🔄 Diarizing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
+    let diarizedChunks: string[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      console.log(`Diarizing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: 'Sei un assistente specializzato nella diarizzazione di trascrizioni di sessioni di terapia. Il tuo compito principale è RICONOSCERE e RIMUOVERE COMPLETAMENTE tutte le sigle, iniziali, nomi o nominativi degli attori presenti nel testo, sostituendoli con i prefissi standardizzati "Terapeuta:" e "Paziente:". È CRUCIALE che nell\'output finale non rimangano tracce degli identificatori originali, poiché questi alterano le analisi successive. Devi essere meticoloso nell\'identificazione e rimozione di tutti i possibili identificatori degli attori. Inoltre, quando non ci sono sigle esplicite, devi essere INTELLIGENTE nel riconoscere i cambi di interlocutore basandoti sul contenuto, sul tono, sul linguaggio e sul contesto della conversazione. Non assumere mai che tutto il testo sia di un solo speaker - analizza attentamente ogni passaggio per identificare i cambi di interlocutore. FORMATTAZIONE OBBLIGATORIA: OGNI RIGA DI TESTO deve iniziare con "Terapeuta: " o "Paziente: ". NON inserire mai testo senza prefisso di speaker. OGNI intervento deve essere su una riga separata con il proprio prefisso.'
+          },
+          {
+            role: 'user',
+            content: promptBase(chunk)
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 4000,
+      });
+      const diarized = completion.choices[0]?.message?.content;
+      if (!diarized) {
+        throw new Error('No diarized transcript generated by OpenAI for chunk ' + (i + 1));
+      }
+      diarizedChunks.push(diarized.trim());
+    }
+    const diarizedTranscript = diarizedChunks.join('\n');
     
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`📝 Diarization attempt ${attempt}/${maxRetries} for chunk ${i + 1}`);
-        
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: 'Sei un assistente specializzato nella diarizzazione di trascrizioni di sessioni di terapia. Il tuo compito è identificare i diversi interlocutori e riformattare la trascrizione aggiungendo prefissi chiari per ogni persona che parla.'
-            },
-            {
-              role: 'user',
-              content: promptBase(chunk)
-            }
-          ],
-          temperature: 0.1,
-          max_tokens: 4000,
-        });
-        
-        const diarized = completion.choices[0]?.message?.content;
-        if (!diarized) {
-          throw new Error('No diarized transcript generated by OpenAI for chunk ' + (i + 1));
-        }
-        
-        diarizedChunks.push(diarized.trim());
-        console.log(`✅ Chunk ${i + 1} diarized successfully`);
-        break; // Esci dal loop dei tentativi se ha successo
-        
+    // Applica la normalizzazione della struttura del transcript
+    const normalizedTranscript = normalizeTranscriptStructure(diarizedTranscript);
+    
+    console.log('Diarization completed successfully');
+    console.log(`Diarized transcript length: ${normalizedTranscript.length} characters`);
+    return normalizedTranscript;
       } catch (error) {
         console.error(`❌ Errore durante tentativo ${attempt} per chunk ${i + 1}:`, error);
         
