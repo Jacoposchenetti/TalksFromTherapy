@@ -7,11 +7,14 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024
 // Importazioni dinamiche per evitare problemi di bundling
 async function parseDocument(file: File) {
   // SECURITY: Validate file size
+  console.log(`🔍 Validating file: name="${file.name}", size=${file.size}, type="${file.type}"`)
+  
   if (file.size > MAX_FILE_SIZE) {
     throw new Error(`File troppo grande. Massimo consentito: ${MAX_FILE_SIZE / 1024 / 1024}MB`)
   }
   
   const fileExtension = file.name.split('.').pop()?.toLowerCase()
+  console.log(`📁 File extension: "${fileExtension}"`)
   
   // SECURITY: Strict validation del tipo di file basata su estensione e MIME type
   const supportedExtensions = ['txt', 'doc', 'docx', 'pdf', 'rtf']
@@ -25,13 +28,23 @@ async function parseDocument(file: File) {
   ]
   
   if (!fileExtension || !supportedExtensions.includes(fileExtension)) {
+    console.error(`❌ Unsupported file extension: "${fileExtension}"`)
     throw new Error(`Formato file non supportato: ${fileExtension}. Formati supportati: ${supportedExtensions.join(', ')}`)
   }
   
   // SECURITY: More strict MIME type validation
-  if (file.type && !supportedMimeTypes.includes(file.type)) {
+  console.log(`🔍 Checking MIME type: "${file.type}" against supported types: ${supportedMimeTypes.join(', ')}`)
+  if (file.type && file.type.trim() !== '' && !supportedMimeTypes.includes(file.type)) {
+    console.error(`❌ Unsupported MIME type: "${file.type}"`)
     throw new Error(`MIME type non valido: ${file.type}`)
   }
+  
+  // Se il MIME type è vuoto o non definito, ma l'estensione è supportata, procediamo
+  if (!file.type || file.type.trim() === '') {
+    console.log(`⚠️ MIME type is empty or undefined, proceeding based on file extension: ${fileExtension}`)
+  }
+  
+  console.log(`✅ File validation passed, proceeding with ${fileExtension} parser`)
   
   switch (fileExtension) {
     case 'txt':
@@ -50,16 +63,29 @@ async function parseDocument(file: File) {
 
 async function parseTxt(file: File) {
   console.log(`📝 Parsing TXT file: ${file.name}, size: ${file.size}, type: ${file.type}`)
-  const text = await file.text()
-  console.log(`📝 TXT parsing result: ${text.length} characters, first 100 chars: "${text.substring(0, 100)}"`)
-  const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')
-  return {
-    text,
-    metadata: {
-      wordCount: text.split(/\s+/).filter(word => word.length > 0).length,
-      format: 'txt',
-      fileName: sanitizedFileName
+  
+  try {
+    const text = await file.text()
+    console.log(`📝 TXT text extraction result: length=${text.length}`)
+    console.log(`📝 First 200 chars: "${text.substring(0, 200)}"`)
+    console.log(`📝 Text after trim: length=${text.trim().length}`)
+    
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_ ()]/g, '')
+    const wordCount = text.split(/\s+/).filter(word => word.length > 0).length
+    
+    console.log(`📝 TXT parsing completed: wordCount=${wordCount}, fileName=${sanitizedFileName}`)
+    
+    return {
+      text,
+      metadata: {
+        wordCount,
+        format: 'txt',
+        fileName: sanitizedFileName
+      }
     }
+  } catch (error) {
+    console.error(`❌ Error parsing TXT file:`, error)
+    throw new Error(`Errore durante la lettura del file TXT: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`)
   }
 }
 
@@ -120,7 +146,7 @@ async function parseWord(file: File) {
     
     console.log(`Word document parsed successfully: ${result.value.length} characters`)
     
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_ ()]/g, '')
     return {
       text: result.value,
       metadata: {
@@ -178,7 +204,7 @@ async function parsePdf(file: File) {
     
     console.log(`PDF parsed successfully: ${data.text.length} characters, ${data.numpages} pages`)
     
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_ ()]/g, '')
     return {
       text: data.text,
       metadata: {
@@ -214,7 +240,7 @@ async function parseRtf(file: File) {
       .replace(/\s+/g, ' ') // Normalize whitespace
       .trim()
     
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_ ()]/g, '')
     return {
       text: cleanText,
       metadata: {
@@ -242,16 +268,24 @@ export async function POST(request: NextRequest) {
     })
 
     // STEP 2: Validazione form data
+    console.log("🔍 Parsing FormData...")
     const formData = await request.formData()
+    console.log("📋 FormData entries:", Array.from(formData.entries()).map(([key, value]) => [key, value instanceof File ? `File: ${value.name} (${value.size} bytes, ${value.type})` : value]))
+    
     const file = formData.get("file") as File
 
     if (!file) {
+      console.error("❌ No file provided in FormData")
       return createErrorResponse("Nessun file fornito", 400)
     }
 
+    console.log(`📁 File details: name="${file.name}", type="${file.type}", size=${file.size} bytes`)
+
     // SECURITY: Validate file name (prevent path traversal)
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')
+    // Allow spaces, letters, numbers, dots, hyphens, underscores, and parentheses
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_ ()]/g, '')
     if (sanitizedFileName !== file.name) {
+      console.error(`❌ Invalid file name: "${file.name}" → "${sanitizedFileName}"`)
       return createErrorResponse("Nome file non valido", 400)
     }
 
@@ -273,7 +307,8 @@ export async function POST(request: NextRequest) {
 
     return createSuccessResponse(parsedDocument, "Documento analizzato con successo")
   } catch (error) {
-    console.error("Error parsing document:", error)
+    console.error("❌ Error parsing document:", error)
+    console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace')
     const errorMessage = error instanceof Error ? error.message : "Errore durante la lettura del documento"
     return createErrorResponse(errorMessage, 500)
   }

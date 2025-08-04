@@ -1,0 +1,9 @@
+Questo è un file di test per verificare l'upload dei file .txt.
+
+Contiene del testo semplice per testare la funzionalità di parsing.
+Include anche:
+- Alcuni elenchi puntati
+- Caratteri speciali: àèìòù é
+- Numeri: 123 456
+
+Il file dovrebbe essere elaborato correttamente dal sistema.

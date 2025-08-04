@@ -338,7 +338,46 @@ export async function POST(request: NextRequest) {
         throw new Error('Errore nel salvataggio della trascrizione su Supabase')
       }
 
-      // STEP 5: Deduci crediti dopo successo completamento
+      // STEP 5: Elimina l'audio dopo la trascrizione completata
+      console.log(`🗑️ Eliminazione audio post-trascrizione per sessione: ${sessionId}`)
+      
+      try {
+        // Elimina il file audio da Supabase Storage
+        if (sessionRecord.audioFileName) {
+          const filePath = `${sessionRecord.userId}/${sessionRecord.audioFileName}`
+          const { error: deleteFileError } = await supabaseAdmin.storage
+            .from('talksfromtherapy')
+            .remove([filePath])
+          
+          if (deleteFileError) {
+            console.error(`❌ Errore eliminazione file audio: ${deleteFileError.message}`)
+          } else {
+            console.log(`✅ File audio eliminato: ${filePath}`)
+          }
+
+          // Rimuovi i riferimenti al file audio dal database
+          const { error: removeAudioRefsError } = await supabaseAdmin
+            .from('sessions')
+            .update({
+              audioUrl: null,
+              audioFileName: null,
+              audioFileSize: null,
+              updatedAt: new Date()
+            })
+            .eq('id', sessionId)
+
+          if (removeAudioRefsError) {
+            console.error(`❌ Errore rimozione riferimenti audio: ${removeAudioRefsError.message}`)
+          } else {
+            console.log(`✅ Riferimenti audio rimossi dal database`)
+          }
+        }
+      } catch (audioDeleteError) {
+        console.error(`⚠️ Errore durante eliminazione audio (non bloccante):`, audioDeleteError)
+        // Non bloccare la risposta, la trascrizione è già stata salvata
+      }
+
+      // STEP 6: Deduci crediti dopo successo completamento
       try {
         const newBalance = await creditsService.deductCredits(
           authResult.user!.id,
