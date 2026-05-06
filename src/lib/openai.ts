@@ -74,10 +74,11 @@ export async function transcribeAudio(audioBuffer: Buffer, fileName: string, max
     try {
       console.log(`🔄 Transcription attempt ${attempt}/${maxRetries}`)
       
-      // Crea un File object dal buffer
-      const audioFile = new File([audioBuffer], fileName, { 
-        type: 'audio/mpeg' // Tipo generico per audio
-      })
+      // In Node.js convertiamo il Buffer in Uint8Array per compatibilità con le API
+      // L'SDK OpenAI accetta anche stream/Buffer; per evitare problemi di typing
+      // convertiamo e castiamo a any qui.
+      const audioUint8 = audioBuffer instanceof Buffer ? new Uint8Array(audioBuffer) : audioBuffer;
+      const audioFile: any = audioUint8;
       
       // Chiama l'API Whisper di OpenAI
       const transcription = await openai.audio.transcriptions.create({
